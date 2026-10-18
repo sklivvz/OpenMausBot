@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import test from 'node:test';
-import { audit, quote, searchCatalog, verifyDelivery } from './selver-bff.mjs';
+import { audit, cartAddScript, cartSetScript, quote, searchCatalog, verifyCartChange, verifyDelivery } from './selver-bff.mjs';
 
 test('catalog search follows pages and exposes the weight-step cost', async () => {
   const calls = [];
@@ -120,4 +121,68 @@ test('delivery accepts a fresh matching cart in the expected signed-in account',
   };
   assert.equal(verifyDelivery(spec, { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T18:59:59Z', totalEur: 2,
     cart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }] }, Date.parse('2026-10-18T19:00:00Z')).ok, true);
+});
+
+test('cart operation checks account and full baseline, then awaits Selver sync', async () => {
+  const before = { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T19:00:00Z',
+    cart: [{ sku: 'EGGS', quantity: 2 }, { sku: 'MILK', quantity: 1 }] };
+  let finish;
+  const synced = new Promise(resolve => { finish = resolve; });
+  const items = [{ sku: 'EGGS', qty: 2 }, { sku: 'MILK', qty: 1 }];
+  const calls = [];
+  const context = { document: { body: { innerText: 'Tere, Marco Cecconi!' }, querySelector: () => ({ __vue__: {
+    $store: { state: { cart: { cartItems: items } }, dispatch: async (action, input) => {
+      calls.push([action, input]);
+      await synced;
+      items[0].qty = input.qty;
+    } },
+  } }) } };
+  const operation = runInNewContext(cartSetScript(before, 'EGGS', 1), context);
+  let resolved = false;
+  operation.then(() => { resolved = true; });
+  await Promise.resolve();
+  assert.equal(resolved, false);
+  assert.equal(calls[0][0], 'cart/updateQuantity');
+  finish();
+  assert.equal(JSON.parse(await operation).serverActionResolved, true);
+  assert.equal(items[0].qty, 1);
+  context.document.body.innerText = 'LOGI SISSE E-SELVERISSE';
+  await assert.rejects(runInNewContext(cartSetScript(before, 'EGGS', 1), context), /account mismatch/);
+  assert.equal(calls.length, 1);
+});
+
+test('cart change verification rejects delayed or unrelated persisted changes', () => {
+  const before = { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T19:00:00Z',
+    cart: [{ sku: 'EGGS', quantity: 2 }, { sku: 'MILK', quantity: 1 }] };
+  const after = { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T19:00:05Z',
+    cart: [{ sku: 'EGGS', quantity: 1 }, { sku: 'MILK', quantity: 1 }] };
+  const now = Date.parse('2026-10-18T19:00:06Z');
+  assert.equal(verifyCartChange(before, after, 'EGGS', 1, now).ok, true);
+  assert(verifyCartChange(before, { ...after, cart: [{ sku: 'MILK', quantity: 1 }] }, 'EGGS', 1, now).errors.some(error => error.includes('EGGS: persisted quantity')));
+  assert(verifyCartChange(before, { ...after, cart: [{ sku: 'EGGS', quantity: 1 }, { sku: 'MILK', quantity: 0.5 }] }, 'EGGS', 1, now).errors.some(error => error.includes('MILK: persisted quantity')));
+  assert(verifyCartChange(before, { ...after, observedAt: before.observedAt }, 'EGGS', 1, now).errors.includes('after snapshot must follow before snapshot'));
+});
+
+test('cart addition requires the requested product page and awaits server action', async () => {
+  const before = { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T19:00:00Z', cart: [] };
+  const product = { sku: 'MILK', product_sales_unit: 1, qty: 1 };
+  let finish;
+  const synced = new Promise(resolve => { finish = resolve; });
+  const calls = [];
+  const context = { document: { body: { innerText: 'Tere, Marco Cecconi!' },
+    querySelector: () => ({ __vue__: { $store: { state: { cart: { cartItems: [] } }, dispatch: async (action, input) => {
+      calls.push([action, input]);
+      await synced;
+    } } } }),
+    querySelectorAll: () => [{ __vue__: { getCurrentProduct: product } }],
+  } };
+  const operation = runInNewContext(cartAddScript(before, 'MILK', 2), context);
+  await Promise.resolve();
+  assert.equal(calls[0][0], 'cart/addItem');
+  assert.equal(calls[0][1].productToAdd.qty, 2);
+  finish();
+  assert.equal(JSON.parse(await operation).serverActionResolved, true);
+  assert.equal(verifyCartChange(before, { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T19:00:05Z',
+    cart: [{ sku: 'MILK', quantity: 2 }] }, 'MILK', 2, Date.parse('2026-10-18T19:00:06Z')).ok, true);
+  await assert.rejects(runInNewContext(cartAddScript(before, 'OTHER', 1), context), /not the open product page/);
 });
