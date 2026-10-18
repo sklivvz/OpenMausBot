@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "../browser-engine.ts";
 import { CHROME_BROWSER_SYSTEM_PROMPT } from "../browser/prompt.ts";
 import { TOOL_LIST } from "../browser/tools.ts";
+import { SELVER_CONNECT_TOOL } from "../browser/selver-cart.ts";
 import type { AppConfig } from "../config.ts";
 import type { Store } from "../store.ts";
 import { createBrowserHost } from "./browser.ts";
@@ -59,7 +60,7 @@ describe("the bots' browser host with browserEngine.engine set to chrome", () =>
     const { host } = setup("chrome");
     const browser = await host.browserIntegration("scout", undefined, turn);
     const listed = await host.browserRuntime.agentRpc(browser!.session, browser!.spec as never, "tools/list", {}) as { tools: Array<{ name: string }> };
-    expect(listed.tools.map((tool) => tool.name)).toEqual(TOOL_LIST.map((tool) => tool.name));
+    expect(listed.tools.map((tool) => tool.name)).toEqual([...TOOL_LIST.map((tool) => tool.name), SELVER_CONNECT_TOOL.name]);
   });
 
   it("keeps a profile on the person's own Chrome on agent-browser: its prompt, and no sites list from either", () => {

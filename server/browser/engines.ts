@@ -1,7 +1,9 @@
 // The bots' browser runs on agent-browser or, with browserEngine.engine set to "chrome", on OpenMausBot's own Chrome
 // driver. A session's spec says which: the new engine's names the profile it drives. Everything that reaches a browser
 // goes through the two routers here, which keep the agent-browser engine's API.
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { BrowserLive } from "../browser-live.ts";
@@ -17,12 +19,15 @@ import { browserRoot } from "./chrome/profile.ts";
 import { browserLanguage, browserTimeZone } from "./chrome/wrapper.ts";
 import { displayScreen } from "./display.ts";
 import { BrowserService, type BrowserTarget } from "./service.ts";
+import { SELVER_CONNECT_TOOL, SELVER_SESSION_CAPTURE } from "./selver-cart.ts";
 import { LiveV1 } from "./viewers/live-v1.ts";
 
 /** A spec's command when the new engine runs the session; its one argument is the profile key. */
 export const CHROME_ENGINE = "omb-cdp";
 
 type Spec = Pick<BrowserSpawnSpec, "command" | "env"> & { args?: readonly string[] };
+
+function selverConnectError(message: string) { return { isError: true, content: [{ type: "text", text: message }] }; }
 
 export function chromeTarget(session: string, spec: { command: string; args?: readonly string[] } | undefined): BrowserTarget | null {
   const key = spec?.command === CHROME_ENGINE ? spec.args?.[0] : undefined;
@@ -179,14 +184,49 @@ export class ChromeEngine {
 export class RuntimeRouter {
   readonly #old: BrowserRuntime;
   readonly #chrome: ChromeEngine;
+  readonly #dataDir: string;
 
-  constructor(old: BrowserRuntime, chrome: ChromeEngine) {
+  constructor(old: BrowserRuntime, chrome: ChromeEngine, dataDir: string) {
     this.#old = old;
     this.#chrome = chrome;
+    this.#dataDir = dataDir;
   }
 
-  agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+  async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
     const target = chromeTarget(session, spec);
+    if (method === "tools/list") {
+      const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx));
+      const tools = (result as { tools?: unknown })?.tools;
+      return Array.isArray(tools) ? { ...result as object, tools: [...tools.filter((tool) => (tool as { name?: unknown })?.name !== SELVER_CONNECT_TOOL.name), SELVER_CONNECT_TOOL] } : result;
+    }
+    if ((params as { name?: unknown } | null)?.name === SELVER_CONNECT_TOOL.name) {
+      const args = (params as { arguments?: unknown }).arguments;
+      if (!ctx?.botId || (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args) || Object.keys(args).length !== 0))) return selverConnectError("Selver connection requires a bot and takes no arguments.");
+      const directory = join(this.#dataDir, "selver-sessions");
+      const path = join(directory, `${ctx.botId}.json`);
+      await unlink(path).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+      const evalCall = target
+        ? { name: "agent_browser_eval", arguments: { expression: SELVER_SESSION_CAPTURE, world: "page" } }
+        : { name: "agent_browser_eval", arguments: { script: SELVER_SESSION_CAPTURE } };
+      const result = await (target ? this.#chrome.service.agentRpc(target, "tools/call", evalCall, beforeDispatch) : this.#old.agentRpc(session, spec, "tools/call", evalCall, beforeDispatch));
+      if ((result as { isError?: unknown })?.isError === true) return selverConnectError("Selver is not signed in or account verification failed. Complete sign-in in the browser, then check again.");
+      const content = (result as { content?: unknown })?.content;
+      const raw = Array.isArray(content) ? content.find((part) => typeof (part as { text?: unknown })?.text === "string") as { text: string } | undefined : undefined;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw?.text ?? "");
+        if (typeof parsed === "string") parsed = JSON.parse(parsed);
+      } catch { return selverConnectError("Selver account verification returned an invalid result."); }
+      const { token, account } = (parsed && typeof parsed === "object" ? parsed : {}) as { token?: unknown; account?: unknown };
+      if (typeof token !== "string" || !token || typeof account !== "string" || !account) return selverConnectError("Selver account verification returned an invalid result.");
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const temporary = join(directory, `${ctx.botId}.${randomUUID()}.tmp`);
+      try {
+        await writeFile(temporary, JSON.stringify({ token, account, capturedAt: Date.now() }), { mode: 0o600 });
+        await rename(temporary, path);
+      } finally { await unlink(temporary).catch(() => undefined); }
+      return { content: [{ type: "text", text: JSON.stringify({ authenticated: true, account, sessionFile: path }) }] };
+    }
     return target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx);
   }
 

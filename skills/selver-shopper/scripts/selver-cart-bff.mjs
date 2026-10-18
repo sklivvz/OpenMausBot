@@ -25,6 +25,11 @@ export class SelverCartBff {
   }
 
   async request(path, { method = 'GET', body } = {}) {
+    if (path !== '/api/user/me') {
+      const identity = await this.request('/api/user/me');
+      const signedInAs = [identity?.firstname, identity?.lastname].filter(Boolean).join(' ').trim();
+      if (signedInAs !== this.account) throw new Error('Selver account differs from the configured account');
+    }
     const url = new URL(path, origin);
     url.searchParams.set('token', this.token);
     if (path.startsWith('/api/cart/')) {
@@ -35,6 +40,7 @@ export class SelverCartBff {
       method, headers: { 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+    if (response.status === 401) throw new Error('Selver session expired or signed out; sign in again and reconnect the browser');
     if (!response.ok) throw new Error(`Selver API returned HTTP ${response.status}`);
     const data = await response.json();
     if (data?.code !== 200) throw new Error('Selver API rejected the request');

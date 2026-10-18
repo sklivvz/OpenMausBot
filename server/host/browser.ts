@@ -81,7 +81,7 @@ export function createBrowserHost(deps: BrowserHostDeps) {
     idleMs: () => browserIdleMs(cfg),
     log: (line) => console.warn(line),
   });
-  const browserRuntime = new RuntimeRouter(agentBrowserRuntime, chromeEngine);
+  const browserRuntime = new RuntimeRouter(agentBrowserRuntime, chromeEngine, DATA_DIR);
   const browserLive = new LiveRouter(agentBrowserLive, chromeEngine);
   const usedBrowserSessions = new Map<string, Spec>();
   browserEgress.configure({ host: DESKTOP_MANAGED ? "desktop" : CLOUD_HOME ? "cloud" : "server", config: () => cfg.browserEngine?.egress });

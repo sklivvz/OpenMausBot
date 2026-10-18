@@ -48,8 +48,21 @@ test('direct BFF refuses another account before writing', async () => {
 
 test('direct BFF refuses a logged-out session before connecting or writing', async () => {
   const { client, state } = fixture({ signedIn: false });
-  await assert.rejects(client.change('MILK', 1), /HTTP 401/);
+  await assert.rejects(client.change('MILK', 1), /sign in again/);
   assert.equal(state.writes.length, 0);
+});
+
+test('direct BFF checks the token again immediately before a cart write', async () => {
+  const { client, state } = fixture();
+  const original = client.fetcher;
+  let accountChecks = 0;
+  client.fetcher = async (url, options) => {
+    if (url.pathname === '/api/user/me' && ++accountChecks === 6) return { ok: false, status: 401 };
+    return original(url, options);
+  };
+  await assert.rejects(client.change('MILK', 1), /sign in again/);
+  assert.equal(state.writes.length, 0);
+  assert.equal(accountChecks, 6);
 });
 
 test('direct BFF refuses a switched account cart', async () => {
