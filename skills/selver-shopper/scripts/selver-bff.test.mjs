@@ -130,7 +130,7 @@ test('cart operation checks account and full baseline, then awaits Selver sync',
   const synced = new Promise(resolve => { finish = resolve; });
   const items = [{ sku: 'EGGS', qty: 2 }, { sku: 'MILK', qty: 1 }];
   const calls = [];
-  const context = { document: { body: { innerText: 'Tere, Marco Cecconi!' }, querySelector: () => ({ __vue__: {
+  const context = { location: { origin: 'https://www.selver.ee' }, document: { body: { innerText: 'Tere, Marco Cecconi!' }, querySelector: () => ({ __vue__: {
     $store: { state: { cart: { cartItems: items } }, dispatch: async (action, input) => {
       calls.push([action, input]);
       await synced;
@@ -169,7 +169,7 @@ test('cart addition requires the requested product page and awaits server action
   let finish;
   const synced = new Promise(resolve => { finish = resolve; });
   const calls = [];
-  const context = { document: { body: { innerText: 'Tere, Marco Cecconi!' },
+  const context = { location: { origin: 'https://www.selver.ee' }, document: { body: { innerText: 'Tere, Marco Cecconi!' },
     querySelector: () => ({ __vue__: { $store: { state: { cart: { cartItems: [] } }, dispatch: async (action, input) => {
       calls.push([action, input]);
       await synced;
