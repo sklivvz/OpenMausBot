@@ -525,7 +525,7 @@ describe("server-owned browser MCP runtime", () => {
     expect(other.pid).not.toBe(list.pid);
     await value.take("one", "owner");
     await expect(value.agentRpc("one", spec(), "tools/call", { name: "echo" })).rejects.toThrow(/paused/);
-    await expect(value.agentRpc("one", spec(), "tools/list", {})).resolves.toMatchObject({ tools: [{ name: "echo" }, { name: BROWSER_UPLOAD_TOOL }, { name: BROWSER_HOVER_TOOL }, { name: "restart_browser" }] });
+    await expect(value.agentRpc("one", spec(), "tools/list", {})).resolves.toMatchObject({ tools: [{ name: "echo" }, { name: BROWSER_UPLOAD_TOOL }, { name: BROWSER_HOVER_TOOL }, { name: "restart_browser" }, { name: "agent_browser_selver_cart" }] });
   });
 
   it("runs upload and hover through the daemon's relay, with only their own fields", async () => {
@@ -580,7 +580,7 @@ describe("server-owned browser MCP runtime", () => {
         content: [{ text: expect.stringMatching(/restart_browser/) }],
       });
       const listed = await value.agentRpc("s", spec(), "tools/list", {}) as { tools: Array<{ name: string }> };
-      expect(listed.tools.map((tool) => tool.name)).toEqual(["echo", BROWSER_UPLOAD_TOOL, BROWSER_HOVER_TOOL, "restart_browser"]);
+      expect(listed.tools.map((tool) => tool.name)).toEqual(["echo", BROWSER_UPLOAD_TOOL, BROWSER_HOVER_TOOL, "restart_browser", "agent_browser_selver_cart"]);
       const check = vi.fn();
       await expect(value.agentRpc("s", spec(), "tools/call", { name: "restart_browser", arguments: {} }, check))
         .resolves.toMatchObject({ content: [{ text: expect.stringContaining("Browser restarted") }] });
@@ -589,6 +589,21 @@ describe("server-owned browser MCP runtime", () => {
       expect(value.heldBy("s")).toBeNull();
       await expect(value.agentRpc("s", spec(), "tools/call", { name: "echo", arguments: { text: "back" } }))
         .resolves.toMatchObject({ content: [{ text: expect.stringContaining("back") }] });
+    } finally {
+      daemon.cleanup();
+    }
+  });
+
+  it("runs the fixed Selver cart reader through the owned browser session", async () => {
+    const value = runtime();
+    const daemon = daemonSpec();
+    try {
+      await value.agentRpc("s", daemon.spec, "tools/list", {});
+      const listed = await value.agentRpc("s", daemon.spec, "tools/list", {}) as { tools: Array<{ name: string }> };
+      expect(listed.tools.some((tool) => tool.name === "agent_browser_selver_cart")).toBe(true);
+      await value.agentRpc("s", daemon.spec, "tools/call", { name: "agent_browser_selver_cart", arguments: {} });
+      expect(daemon.calls()).toContain("agent_browser_eval");
+      expect(daemon.calls()).not.toContain("agent_browser_selver_cart");
     } finally {
       daemon.cleanup();
     }

@@ -171,6 +171,7 @@ export function verifyDelivery(spec, target, now = Date.now()) {
   const errors = [...checked.errors];
   if (!spec?.targetAccount || typeof spec.targetAccount !== 'string') errors.push('targetAccount required');
   if (!target?.signedInAs || target.signedInAs !== spec?.targetAccount) errors.push('target account is not verified in the browser');
+  if (target?.authenticatedByStore !== true || target?.cartConnected !== true) errors.push('Selver authenticated cart session is not verified');
   const observedAt = Date.parse(target?.observedAt);
   if (!Number.isFinite(observedAt) || observedAt > now || now - observedAt > 120_000) errors.push('target cart snapshot is missing or stale');
   if (!Array.isArray(target?.cart)) errors.push('target cart lines required');
@@ -201,6 +202,7 @@ export function verifyDelivery(spec, target, now = Date.now()) {
   return { ok: errors.length === 0, targetTotalEur: target?.totalEur ?? null, errors };
 }
 
+
 function cartQuantities(cart) {
   if (!Array.isArray(cart)) throw new Error('cart lines required');
   const lines = new Map();
@@ -217,7 +219,7 @@ export function cartSetScript(before, sku, targetQuantity) {
   const lines = cartQuantities(before.cart);
   if (!lines.has(sku)) throw new Error('SKU is not in the observed cart');
   const expected = [...lines];
-  return `(async()=>{const expected=${JSON.stringify(expected)};const account=${JSON.stringify(before.signedInAs)};const sku=${JSON.stringify(sku)};const qty=${JSON.stringify(targetQuantity)};if(location.origin!=='https://www.selver.ee')throw Error('Not the Selver storefront');const name=document.body.innerText.match(/Tere,\\s*([^!]+)!/)?.[1]?.trim();if(name!==account)throw Error('Selver account mismatch');const store=document.querySelector('#app')?.__vue__?.$store;if(!store)throw Error('Selver cart store unavailable');const items=store.state.cart.cartItems;const actual=new Map(items.map(p=>[p.sku,p.qty]));if(actual.size!==expected.length||expected.some(([key,value])=>Math.abs((actual.get(key)??NaN)-value)>0.00001))throw Error('Cart changed since snapshot');const product=items.find(p=>p.sku===sku);if(qty===0)await store.dispatch('cart/removeItem',{product});else await store.dispatch('cart/updateQuantity',{product,qty});return JSON.stringify({signedInAs:name,sku,targetQuantity:qty,serverActionResolved:true,reloadAndVerifyRequired:true});})()`;
+  return `(async()=>{const expected=${JSON.stringify(expected)};const account=${JSON.stringify(before.signedInAs)};const sku=${JSON.stringify(sku)};const qty=${JSON.stringify(targetQuantity)};if(location.origin!=='https://www.selver.ee')throw Error('Not the Selver storefront');const name=document.body.innerText.match(/Tere,\\s*([^!]+)!/)?.[1]?.trim();if(name!==account)throw Error('Selver account mismatch');const store=document.querySelector('#app')?.__vue__?.$store;if(!store?.getters['user/isLoggedIn']||!store.getters['user/getUserToken']||!store.getters['cart/isCartConnected'])throw Error('Selver session is not authenticated and connected');const cartToken=store.getters['cart/getCartToken'];const items=store.state.cart.cartItems;const actual=new Map(items.map(p=>[p.sku,p.qty]));if(actual.size!==expected.length||expected.some(([key,value])=>Math.abs((actual.get(key)??NaN)-value)>0.00001))throw Error('Cart changed since snapshot');const product=items.find(p=>p.sku===sku);if(qty===0)await store.dispatch('cart/removeItem',{product});else await store.dispatch('cart/updateQuantity',{product,qty});if(!store.getters['user/isLoggedIn']||!store.getters['user/getUserToken']||store.getters['cart/getCartToken']!==cartToken)throw Error('Selver session changed during cart write');return JSON.stringify({signedInAs:name,sku,targetQuantity:qty,serverActionResolved:true,reloadAndVerifyRequired:true});})()`;
 }
 
 export function cartAddScript(before, sku, quantity) {
@@ -226,7 +228,7 @@ export function cartAddScript(before, sku, quantity) {
   const lines = cartQuantities(before.cart);
   if (lines.has(sku)) throw new Error('SKU already exists; use cart-set-script');
   const expected = [...lines];
-  return `(async()=>{const expected=${JSON.stringify(expected)};const account=${JSON.stringify(before.signedInAs)};const sku=${JSON.stringify(sku)};const qty=${JSON.stringify(quantity)};if(location.origin!=='https://www.selver.ee')throw Error('Not the Selver storefront');const name=document.body.innerText.match(/Tere,\\s*([^!]+)!/)?.[1]?.trim();if(name!==account)throw Error('Selver account mismatch');const store=document.querySelector('#app')?.__vue__?.$store;if(!store)throw Error('Selver cart store unavailable');const actual=new Map(store.state.cart.cartItems.map(p=>[p.sku,p.qty]));if(actual.size!==expected.length||expected.some(([key,value])=>Math.abs((actual.get(key)??NaN)-value)>0.00001))throw Error('Cart changed since snapshot');const product=[...document.querySelectorAll('*')].map(e=>e.__vue__?.getCurrentProduct).find(p=>p?.sku===sku);if(!product)throw Error('Requested SKU is not the open product page');const step=Number(product.product_weight_step);if(Number(product.product_sales_unit)===1797?!(step>0)||Math.abs(qty/step-Math.round(qty/step))>0.00001:!Number.isInteger(qty))throw Error('Quantity violates product step');await store.dispatch('cart/addItem',{productToAdd:{...product,qty}});return JSON.stringify({signedInAs:name,sku,targetQuantity:qty,serverActionResolved:true,reloadAndVerifyRequired:true});})()`;
+  return `(async()=>{const expected=${JSON.stringify(expected)};const account=${JSON.stringify(before.signedInAs)};const sku=${JSON.stringify(sku)};const qty=${JSON.stringify(quantity)};if(location.origin!=='https://www.selver.ee')throw Error('Not the Selver storefront');const name=document.body.innerText.match(/Tere,\\s*([^!]+)!/)?.[1]?.trim();if(name!==account)throw Error('Selver account mismatch');const store=document.querySelector('#app')?.__vue__?.$store;if(!store?.getters['user/isLoggedIn']||!store.getters['user/getUserToken']||!store.getters['cart/isCartConnected'])throw Error('Selver session is not authenticated and connected');const cartToken=store.getters['cart/getCartToken'];const actual=new Map(store.state.cart.cartItems.map(p=>[p.sku,p.qty]));if(actual.size!==expected.length||expected.some(([key,value])=>Math.abs((actual.get(key)??NaN)-value)>0.00001))throw Error('Cart changed since snapshot');const product=[...document.querySelectorAll('*')].map(e=>e.__vue__?.getCurrentProduct).find(p=>p?.sku===sku);if(!product)throw Error('Requested SKU is not the open product page');const step=Number(product.product_weight_step);if(Number(product.product_sales_unit)===1797?!(step>0)||Math.abs(qty/step-Math.round(qty/step))>0.00001:!Number.isInteger(qty))throw Error('Quantity violates product step');await store.dispatch('cart/addItem',{productToAdd:{...product,qty}});if(!store.getters['user/isLoggedIn']||!store.getters['user/getUserToken']||store.getters['cart/getCartToken']!==cartToken)throw Error('Selver session changed during cart write');return JSON.stringify({signedInAs:name,sku,targetQuantity:qty,serverActionResolved:true,reloadAndVerifyRequired:true});})()`;
 }
 
 export function verifyCartChange(before, after, sku, targetQuantity, now = Date.now()) {
@@ -262,11 +264,7 @@ async function main(args) {
     return;
   }
   if (command === 'verify-delivery') {
-    if (!value || !rest[0]) throw new Error('audit JSON and target cart JSON paths required');
-    const result = verifyDelivery(JSON.parse(readFileSync(value, 'utf8')), JSON.parse(readFileSync(rest[0], 'utf8')));
-    console.log(JSON.stringify(result, null, 2));
-    if (!result.ok) process.exitCode = 1;
-    return;
+    throw new Error('delivery verification requires a server-observed authenticated cart; a bot-authored cart file is not proof');
   }
   if (command === 'cart-set-script') {
     if (!value || !rest[0] || rest[1] === undefined) throw new Error('before cart JSON, SKU and target quantity required');
@@ -307,7 +305,7 @@ async function main(args) {
       matched: result.length, products: result }, null, 2));
     return;
   }
-  throw new Error('use search QUERY [--grams N] [--contains TEXT] [--category TEXT], audit FILE, cart-set-script BEFORE SKU QTY, cart-add-script BEFORE SKU QTY, verify-cart-change BEFORE AFTER SKU QTY, verify-delivery AUDIT TARGET, or schema');
+  throw new Error('use search QUERY [--grams N] [--contains TEXT] [--category TEXT], audit FILE, cart-set-script BEFORE SKU QTY, cart-add-script BEFORE SKU QTY, verify-cart-change BEFORE AFTER SKU QTY, or schema');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

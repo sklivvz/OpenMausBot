@@ -119,8 +119,11 @@ test('delivery accepts a fresh matching cart in the expected signed-in account',
     cart: [{ sku: 'R', name: 'Rice 500 g', quantity: 1, unit: 'packs', netGramsPerPack: 500, unitPriceEur: 2, for: ['rice'] }],
     physicalCart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }],
   };
-  assert.equal(verifyDelivery(spec, { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T18:59:59Z', totalEur: 2,
+  assert.equal(verifyDelivery(spec, { signedInAs: 'Marco Cecconi', authenticatedByStore: true, cartConnected: true,
+    observedAt: '2026-10-18T18:59:59Z', totalEur: 2,
     cart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }] }, Date.parse('2026-10-18T19:00:00Z')).ok, true);
+  assert.equal(verifyDelivery(spec, { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T18:59:59Z', totalEur: 2,
+    cart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }] }, Date.parse('2026-10-18T19:00:00Z')).ok, false);
 });
 
 test('cart operation checks account and full baseline, then awaits Selver sync', async () => {
@@ -130,8 +133,10 @@ test('cart operation checks account and full baseline, then awaits Selver sync',
   const synced = new Promise(resolve => { finish = resolve; });
   const items = [{ sku: 'EGGS', qty: 2 }, { sku: 'MILK', qty: 1 }];
   const calls = [];
+  const getters = { 'user/isLoggedIn': true, 'user/getUserToken': 'token', 'cart/isCartConnected': true, 'cart/getCartToken': 'cart' };
   const context = { location: { origin: 'https://www.selver.ee' }, document: { body: { innerText: 'Tere, Marco Cecconi!' }, querySelector: () => ({ __vue__: {
-    $store: { state: { cart: { cartItems: items } }, dispatch: async (action, input) => {
+    $store: { getters,
+      state: { cart: { cartItems: items } }, dispatch: async (action, input) => {
       calls.push([action, input]);
       await synced;
       items[0].qty = input.qty;
@@ -146,6 +151,8 @@ test('cart operation checks account and full baseline, then awaits Selver sync',
   finish();
   assert.equal(JSON.parse(await operation).serverActionResolved, true);
   assert.equal(items[0].qty, 1);
+  getters['user/isLoggedIn'] = false;
+  await assert.rejects(runInNewContext(cartSetScript({ ...before, cart: [{ sku: 'EGGS', quantity: 1 }, { sku: 'MILK', quantity: 1 }] }, 'EGGS', 2), context), /not authenticated/);
   context.document.body.innerText = 'LOGI SISSE E-SELVERISSE';
   await assert.rejects(runInNewContext(cartSetScript(before, 'EGGS', 1), context), /account mismatch/);
   assert.equal(calls.length, 1);
@@ -170,7 +177,8 @@ test('cart addition requires the requested product page and awaits server action
   const synced = new Promise(resolve => { finish = resolve; });
   const calls = [];
   const context = { location: { origin: 'https://www.selver.ee' }, document: { body: { innerText: 'Tere, Marco Cecconi!' },
-    querySelector: () => ({ __vue__: { $store: { state: { cart: { cartItems: [] } }, dispatch: async (action, input) => {
+    querySelector: () => ({ __vue__: { $store: { getters: { 'user/isLoggedIn': true, 'user/getUserToken': 'token',
+      'cart/isCartConnected': true, 'cart/getCartToken': 'cart' }, state: { cart: { cartItems: [] } }, dispatch: async (action, input) => {
       calls.push([action, input]);
       await synced;
     } } } }),

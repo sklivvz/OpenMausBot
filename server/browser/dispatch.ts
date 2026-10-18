@@ -18,6 +18,7 @@ import { BrowserControlInterrupted } from "./session-control.ts";
 import { errorResult, pageLabel, snapshotText, textResult, withParts, type ToolResult } from "./shape.ts";
 import type { Tab, TabRegistry } from "./tabs.ts";
 import { targetOf, type ToolCall, type ToolInput } from "./tools.ts";
+import { SELVER_CART_SNAPSHOT } from "./selver-cart.ts";
 
 export const DEFAULT_ACTION_MS = 15_000;
 /** Kept back from a call's budget for the reads after its action. */
@@ -369,6 +370,14 @@ export async function executeTool(context: ToolContext, call: ToolCall): Promise
         if (await context.secretOnPage(tab)) return errorResult(SECRET_ON_PAGE_EVAL);
         const value = await tab.page.evaluate(call.input.expression, { world: call.input.world ?? "isolated", timeoutMs: remaining(context) });
         return textResult(value === undefined ? "undefined" : JSON.stringify(value));
+      });
+    }
+    case "agent_browser_selver_cart": {
+      const tab = tabOf(context, call.input.tab);
+      return act(context, tab, async () => {
+        if (await context.secretOnPage(tab)) return errorResult(SECRET_ON_PAGE_EVAL);
+        const cart = await tab.page.evaluate(SELVER_CART_SNAPSHOT, { world: "page", timeoutMs: remaining(context) });
+        return textResult(JSON.stringify(cart));
       });
     }
     case "agent_browser_dialog": {

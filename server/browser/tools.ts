@@ -113,6 +113,7 @@ export const TOOL_INPUTS = {
     world: z.enum(["isolated", "page"]).optional().describe("isolated (the default) sees the DOM but not the page's own variables, and the page cannot see it. page runs among the page's scripts, which can observe it."),
     tab: actTab.optional(),
   }),
+  agent_browser_selver_cart: z.object({ tab: actTab.optional() }),
   agent_browser_dialog: z.object({
     accept: z.boolean().describe("true accepts the open alert, confirm or prompt; false dismisses it."),
     promptText: z.string().max(4_000).optional().describe("The answer to a prompt, when accepting."),
@@ -149,6 +150,7 @@ const DESCRIPTIONS: Record<ToolName, string> = {
   agent_browser_upload: "Put files into a file input (ref or selector), or answer the file picker the page opened. Then submit its form as usual.",
   agent_browser_wait: "Wait until every condition given holds: a time, text on the page, an element appearing or going, the address, or a load state. 60 s at most.",
   agent_browser_eval: "Run JavaScript in the page and return its value. It needs the same control as clicking, and is refused while a filled password is still on the page.",
+  agent_browser_selver_cart: "Read the current Selver cart and total through this browser. Requires an authenticated, connected Selver account and reads persisted cart data twice. Use its account and total before claiming the person's cart changed.",
   agent_browser_dialog: "Accept or dismiss the alert, confirm or prompt dialog the page opened (agent_browser_status shows it). Nothing else works on the tab until it is answered.",
   agent_browser_tabs: "List, open, switch between or close your browser's tabs.",
   agent_browser_close: "Close a tab, or with no tab the whole browser. Saved sign-ins are kept.",
