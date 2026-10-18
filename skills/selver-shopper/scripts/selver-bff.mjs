@@ -77,9 +77,28 @@ export function audit(spec) {
   if (spec.fixedSourceIngredientCount !== undefined && spec.fixedSourceIngredientCount !== spec.requirements.length) {
     errors.push(`source count ${spec.fixedSourceIngredientCount} differs from ${spec.requirements.length} requirements`);
   }
+  if (spec.sourceFile) {
+    try {
+      const sourceRows = readFileSync(spec.sourceFile, 'utf8').trim().split(/\r?\n/).slice(1).map(line => {
+        const match = line.match(/^"((?:[^"]|"")*)","((?:[^"]|"")*)","((?:[^"]|"")*)"(?:,|$)/);
+        return match ? match.slice(1).map(value => value.replaceAll('""', '"')) : null;
+      });
+      if (sourceRows.some(row => !row)) errors.push('source CSV could not be parsed');
+      if (sourceRows.length !== spec.requirements.length) errors.push(`source CSV has ${sourceRows.length} items, audit has ${spec.requirements.length}`);
+      for (let index = 0; index < Math.min(sourceRows.length, spec.requirements.length); index++) {
+        const row = sourceRows[index];
+        const item = spec.requirements[index];
+        if (row && (item.source?.Item !== row[0] || Number(item.source?.Quantity) !== Number(row[1]) || item.source?.Unit !== row[2])) {
+          errors.push(`source item ${index + 1} differs from audit requirement`);
+        }
+      }
+    } catch (error) {
+      errors.push(`source CSV unavailable: ${error.message}`);
+    }
+  }
   if (spec.manualFailures !== undefined) {
     if (!Array.isArray(spec.manualFailures)) errors.push('manualFailures must be an array');
-    else errors.push(...spec.manualFailures.map(failure => `unresolved: ${String(failure)}`));
+    else errors.push(...spec.manualFailures.map(failure => `unresolved: ${typeof failure === 'string' ? failure : JSON.stringify(failure)}`));
   }
 
   const requirements = new Map();
@@ -134,6 +153,15 @@ export function audit(spec) {
     if ((coverage.get(id) || 0) < item.grams - 0.001) errors.push(`${id}: missing ${round(item.grams - (coverage.get(id) || 0), 1)} g`);
   }
   totalEur = round(totalEur + Number(spec.feesEur || 0));
+  if (Array.isArray(spec.physicalCart)) {
+    const physical = new Map();
+    const mapped = new Map();
+    for (const line of spec.physicalCart) physical.set(line.sku, (physical.get(line.sku) || 0) + line.quantity * line.unitPriceEur);
+    for (const line of spec.cart) mapped.set(line.sku, (mapped.get(line.sku) || 0) + line.quantity * line.unitPriceEur);
+    for (const sku of new Set([...physical.keys(), ...mapped.keys()])) {
+      if (Math.abs((physical.get(sku) || 0) - (mapped.get(sku) || 0)) > 0.02) errors.push(`${sku}: audit cost does not match physical cart`);
+    }
+  }
   if (totalEur > spec.ceilingEur) errors.push(`cart EUR ${totalEur} exceeds ceiling EUR ${spec.ceilingEur}`);
   return { ok: errors.length === 0, totalEur, errors, detail };
 }

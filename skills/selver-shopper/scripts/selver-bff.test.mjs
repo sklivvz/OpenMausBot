@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { audit, quote, searchCatalog } from './selver-bff.mjs';
 
@@ -60,4 +63,30 @@ test('audit never drops unresolved manual findings', () => {
   });
   assert.equal(result.ok, false);
   assert(result.errors.includes('unresolved: farro remains unmatched'));
+});
+
+test('audit rejects invented requirements and a cart mapping that hides a line', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'selver-audit-'));
+  try {
+    const sourceFile = join(dir, 'source.csv');
+    writeFileSync(sourceFile, 'Item,Quantity,Unit,Notes\n"Rice","60","g",""\n');
+    const result = audit({
+      ceilingEur: 20,
+      sourceFile,
+      requirements: [
+        { id: 'rice', name: 'Rice', grams: 60, identityTerms: ['rice'], source: { Item: 'Rice', Quantity: '60', Unit: 'g' } },
+        { id: 'extra', name: 'Extra snack', grams: 1, identityTerms: ['snack'] },
+      ],
+      cart: [{ sku: 'R', name: 'Rice 500 g', quantity: 1, unit: 'packs', netGramsPerPack: 500, unitPriceEur: 2, for: ['rice'] }],
+      physicalCart: [
+        { sku: 'R', quantity: 1, unitPriceEur: 2 },
+        { sku: 'X', quantity: 1, unitPriceEur: 1 },
+      ],
+    });
+    assert.equal(result.ok, false);
+    assert(result.errors.some(error => error.includes('source CSV has 1 items')));
+    assert(result.errors.some(error => error.includes('X: audit cost does not match physical cart')));
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
 });
