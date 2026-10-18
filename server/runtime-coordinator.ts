@@ -287,9 +287,15 @@ export class RuntimeCoordinator implements Coordinator {
 
   endTurn(id: string, result: HostTurnResult): void {
     this.ready();
+    const node = this.node(id);
+    const personInputAllowed = node ? this.host.personInputAllowed?.(node) !== false : true;
     const cards = result.cards && result.cards.ids.length > 0 ? result.cards : undefined;
-    const end: EndResult = { ok: result.ok, text: result.text, ...(result.evidence ? { evidence: result.evidence } : {}),
-      ...(cards ? { needsInput: { question: cards.question, cards: cards.ids } } : {}),
+    const question = result.ok && !cards ? needsInputQuestion(result.text) : undefined;
+    const deniedInput = !personInputAllowed && (cards?.question ?? question);
+    const end: EndResult = { ok: deniedInput ? false : result.ok,
+      text: deniedInput ? `Person input is unavailable for this bot: ${deniedInput}` : result.text,
+      ...(result.evidence ? { evidence: result.evidence } : {}),
+      ...(cards && personInputAllowed ? { needsInput: { question: cards.question, cards: cards.ids } } : {}),
       ...(result.cap ? { continue: { note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}) } } : {}) };
     this.runtime.end(id, end);
   }
@@ -435,7 +441,11 @@ export class RuntimeCoordinator implements Coordinator {
   private runner(): TurnRunner {
     const host = this.host;
     return {
-      validate: (a, parent) => host.validate(view(a, parent), parent && this.project(parent)),
+      validate: (a, parent) => a.status === "needs_input" && host.personInputAllowed?.(view(a, parent)) === false
+        ? "Person input is unavailable for this bot"
+        : a.status === "needs_input" && a.parentId !== undefined && !a.cards?.length
+          ? `Question for requesting bot: ${a.question ?? "unspecified question"}`
+          : host.validate(view(a, parent), parent && this.project(parent)),
       canStart: a => !host.busy(this.project(a)),
       run: (a, input, signal) => this.run(a, input, signal),
       park: (a, question, restored) => host.park(this.project(a), question, restored),
@@ -473,10 +483,13 @@ export class RuntimeCoordinator implements Coordinator {
       { text: `${input.restartNote}${body}`, note: `${input.restartNote}${note}`, restartNote: input.restartNote, turn: input.turn });
     if (signal.aborted) return { kind: "failed", outcome: "stopped", text: result.text };
     if (result.cap) return { kind: "continue", text: result.text, note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}), ...evidence(result) };
-    if (result.cards) return { kind: "needs_input", question: result.cards.question, cards: result.cards.ids, ...evidence(result) };
+    if (result.cards) return this.host.personInputAllowed?.(node) === false
+      ? { kind: "failed", outcome: "denied", text: `Person input is unavailable for this bot: ${result.cards.question}`, ...evidence(result) }
+      : { kind: "needs_input", question: result.cards.question, cards: result.cards.ids, ...evidence(result) };
     if (!result.ok) return { kind: "failed", outcome: "provider_error", text: result.text, ...evidence(result) };
-    const question = root ? undefined : needsInputQuestion(result.text);
-    if (question !== undefined) return { kind: "needs_input", question, ...evidence(result) };
+    const question = !root || this.host.personInputAllowed?.(node) === false ? needsInputQuestion(result.text) : undefined;
+    if (question !== undefined) return { kind: "failed", outcome: "denied",
+      text: root ? `Person input is unavailable for this bot: ${question}` : `Question for requesting bot: ${question}`, ...evidence(result) };
     return { kind: "completed", text: result.text, ...evidence(result) };
   }
 

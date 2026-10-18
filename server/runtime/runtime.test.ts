@@ -813,6 +813,24 @@ describe("Runtime: a root's later executions (every turn a root)", () => {
     invariants(v);
   });
 
+  it("expires a child's unanswered sign-in card and wakes its waiting parent", async () => {
+    const w = world((a) => a.assignee.botId === "builder"
+      ? { kind: "needs_input", question: "Sign in", cards: ["card-1"] }
+      : { kind: "completed", text: "handled" }, { inputWaitMs: 1_000 });
+    const root = w.runtime.begin(beginReq());
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.tick(); await flush();
+    w.runtime.end(root.id, { ok: true, text: "" });
+    expect(w.store.get(child.id)).toMatchObject({ status: "needs_input", cards: ["card-1"] });
+    expect(w.store.get(root.id)?.status).toBe("waiting");
+    w.clock.advance(1_001);
+    w.runtime.tick(); await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    w.runtime.tick(); await flush();
+    expect(w.store.get(root.id)?.status).toBe("completed");
+    invariants(w);
+  });
+
   it("open() re-parks a root on its cards without a new item, and reruns a cut root once before failing it interrupted", async () => {
     const store = openRuntimeStore(":memory:");
     const first = world(undefined, {}, store);

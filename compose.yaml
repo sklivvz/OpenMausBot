@@ -14,8 +14,10 @@ services:
     restart: unless-stopped
     volumes:
       - data:/data
-    ports:
-      - "${OMB_BIND_ADDRESS:-127.0.0.1}:${OMB_HTTP_PORT:-8080}:80"
+    network_mode: service:caddy
+    depends_on:
+      caddy:
+        condition: service_started
     environment:
       OMB_PORT: "8799"
       OMB_WEBHOOK_PORT: "8800"
@@ -34,7 +36,8 @@ services:
   caddy:
     image: ${CADDY_IMAGE:-caddy:2}
     restart: unless-stopped
-    network_mode: service:omb
+    ports:
+      - "${OMB_BIND_ADDRESS:-127.0.0.1}:${OMB_HTTP_PORT:-8080}:80"
     environment:
       OMB_HTTPS_HOST: ${OMB_HTTPS_HOST:-}
       OMB_BIND_ADDRESS: ${OMB_BIND_ADDRESS:-127.0.0.1}
@@ -51,9 +54,6 @@ services:
           export OMB_UPSTREAM_SCHEME=https
         fi
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
-    depends_on:
-      omb:
-        condition: service_healthy
     volumes:
       - ./deploy/local/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

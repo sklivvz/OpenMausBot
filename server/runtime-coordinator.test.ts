@@ -398,27 +398,41 @@ describe("RuntimeCoordinator: refusals in the legacy words", () => {
 });
 
 describe("RuntimeCoordinator: the run adapter", () => {
-  it("parks a turn that ends on NEEDS INPUT, takes the person's answer, and carries it into the next turn", async () => {
-    let turns = 0;
-    const w = world((node) => node.botId === "builder" && turns++ === 0 ? { ok: true, text: "Did the first half.\nneeds input: Which account should I use?" } : undefined);
+  it("returns person-input requests to an internal-only bot's requester as failed work", async () => {
+    const w = world(node => node.botId === "builder"
+      ? { ok: true, text: "NEEDS INPUT: Can Chief provide the source?" }
+      : undefined);
+    w.host.personInputAllowed = node => node.botId !== "builder";
+    const { node } = send(w, chief, "gen-1", undefined, builder, "Check the source");
+    w.coordinator.tick(); await flush();
+    expect(w.coordinator.node(node.id)).toMatchObject({
+      status: "failed", outcome: "denied", result: "Question for requesting bot: Can Chief provide the source?",
+    });
+    expect(w.host.parks).toEqual([]);
+    expect(w.host.reports.map(report => report.child.id)).toEqual([node.id]);
+    expect(w.coordinator.awaitingAnswer("builder-work")).toBe(false);
+  });
+
+  it("fails an internal-only bot's approval card without parking it on the person", async () => {
+    const w = world(node => node.botId === "builder"
+      ? { ok: true, text: "Approval required", cards: { question: "Approve deployment?", ids: ["card-1"] } }
+      : undefined);
+    w.host.personInputAllowed = node => node.botId !== "builder";
+    const { node } = send(w, chief, "gen-1", undefined, builder, "Deploy");
+    w.coordinator.tick(); await flush();
+    expect(w.coordinator.node(node.id)).toMatchObject({ status: "failed", outcome: "denied" });
+    expect(w.host.parks).toEqual([]);
+    expect(w.host.reports.map(report => report.child.id)).toEqual([node.id]);
+  });
+
+  it("returns a teammate's NEEDS INPUT question to its requester without parking", async () => {
+    const w = world((node) => node.botId === "builder" ? { ok: true, text: "Did the first half.\nneeds input: Which account should I use?" } : undefined);
     const { node } = send(w, chief, "gen-1", undefined, builder, "Build it");
     w.coordinator.tick(); await flush();
-    expect(w.host.parks).toHaveLength(1);
-    expect(w.host.parks[0]).toMatchObject({ node: { id: node.id, status: "waiting" }, question: "Which account should I use?" });
-    expect(w.coordinator.node(node.id)?.status).toBe("waiting");
-    expect(w.coordinator.liveEdges()).toEqual([{ sourceBotId: "chief", targetBotId: "builder", state: "running", threadId: "builder-work" }]);
-    expect(w.host.reports).toHaveLength(0);
-    expect(w.coordinator.answer("tester-work", "no one is parked here")).toBe(false);
-    expect(w.coordinator.answer("builder-work", "Use the staging account")).toBe(true);
-    expect(w.coordinator.answer("builder-work", "again")).toBe(false);
-    expect(w.coordinator.node(node.id)?.status).toBe("queued");
-    w.coordinator.tick();
-    expect(w.host.runs).toHaveLength(2);
-    const next = w.host.runs[1]!.text;
-    expect(next).toContain(ENVELOPE_MARK);
-    expect(next).toContain('The person answered: "Use the staging account".');
-    await flush();
-    expect(w.coordinator.node(node.id)).toMatchObject({ status: "completed", result: "builder done" });
+    expect(w.host.parks).toEqual([]);
+    expect(w.coordinator.node(node.id)).toMatchObject({ status: "failed", outcome: "denied", result: "Question for requesting bot: Which account should I use?" });
+    expect(w.host.reports.map(report => report.child.id)).toEqual([node.id]);
+    expect(w.coordinator.answer("builder-work", "Use the staging account")).toBe(false);
   });
 
   it("reads a provider failure as a failed turn, and a stop as stopped", async () => {
@@ -985,6 +999,27 @@ describe("RuntimeCoordinator: every turn a root (beginTurn, endTurn, answerRoot,
     }
   });
 
+  it("an internal-only root settles a sign-in card instead of parking", () => {
+    const w = world();
+    w.host.personInputAllowed = () => false;
+    begun(w, chief, "gen-1");
+    w.coordinator.endTurn("gen-1", { ok: true, text: "", cards: { question: "Connect GitHub", ids: ["msg-1"] } });
+    expect(w.coordinator.node("gen-1")).toMatchObject({ status: "failed", outcome: "provider_error" });
+    expect(w.coordinator.parkedDirect("chief-chat")).toBeUndefined();
+    expect(w.host.parks).toEqual([]);
+  });
+
+  it("settles a previously parked root when person input is disabled", () => {
+    const w = world();
+    begun(w, chief, "gen-1");
+    w.coordinator.endTurn("gen-1", { ok: true, text: "", cards: { question: "Connect GitHub", ids: ["msg-1"] } });
+    expect(w.coordinator.parkedDirect("chief-chat")).toBeDefined();
+    w.host.personInputAllowed = () => false;
+    w.coordinator.tick();
+    expect(w.coordinator.node("gen-1")).toMatchObject({ status: "failed", outcome: "refused" });
+    expect(w.coordinator.parkedDirect("chief-chat")).toBeUndefined();
+  });
+
   it("a child's cap continues it in place: no failure to the requester, the continued turn opens with the note then its assignment, and the resume carries the final result once", async () => {
     let caps = 0;
     const w = world((node) => node.botId === "builder" && caps++ === 0 ? { ok: true, text: "half built", cap: { note: "Step cap: 64 rounds.", handoffPath: "/handoffs/builder-1.md" } } : undefined);
@@ -1037,20 +1072,16 @@ describe("RuntimeCoordinator: every turn a root (beginTurn, endTurn, answerRoot,
     expect(w.coordinator.outstandingDirect("chief-chat").map(n => n.id)).toEqual([b.id]);
     expect(w.coordinator.assignerOf("builder-work")).toMatchObject({ id: "gen-1", status: "waiting" });
     await w.host.release(b.id, { ok: true, text: "NEEDS INPUT: Which key?" });
-    expect(w.coordinator.node(b.id)).toMatchObject({ status: "waiting", question: "Which key?" });
+    expect(w.coordinator.node(b.id)).toMatchObject({ status: "failed", outcome: "denied" });
     expect(w.coordinator.parkedDirect("builder-work")).toBeUndefined();
-    expect(w.coordinator.outstandingDirect("chief-chat").map(n => n.id)).toEqual([b.id]);
-    expect(w.coordinator.answer("builder-work", "the staging key")).toBe(true);
+    expect(w.coordinator.outstandingDirect("chief-chat")).toEqual([]);
+    expect(w.coordinator.answer("builder-work", "the staging key")).toBe(false);
     expect(w.coordinator.answerRoot("gen-1", "The user approved the key.")).toBe(true);
     expect(w.coordinator.parkedDirect("chief-chat")).toBeUndefined();
     expect(w.coordinator.activeDirect("chief-chat")).toBe(true);
     w.coordinator.tick(); await flush();
-    expect(w.host.runs.map(r => [r.node.id, r.composed.turn]).sort()).toEqual([[b.id, "first"], [b.id, "answered"], ["gen-1", "answered"]].sort());
-    expect(w.coordinator.node("gen-1")).toMatchObject({ status: "waiting", executions: 2 });
-    expect(w.coordinator.activeDirect("chief-chat")).toBe(true);
-    await w.host.release(b.id, { ok: true, text: "done with the key" });
-    w.coordinator.tick(); await flush();
-    expect(w.coordinator.node("gen-1")).toMatchObject({ status: "completed", executions: 3 });
+    expect(w.host.runs.map(r => [r.node.id, r.composed.turn]).sort()).toEqual([[b.id, "first"], ["gen-1", "answered"]].sort());
+    expect(w.coordinator.node("gen-1")).toMatchObject({ status: "completed", executions: 2 });
     expect(w.coordinator.activeDirect("chief-chat")).toBe(false);
     expect(w.coordinator.outstandingDirect("chief-chat")).toEqual([]);
   });

@@ -4554,6 +4554,7 @@ const coordinator: Coordinator = createCoordinator({
       return { level: approvalModeForTurn(running, true, target.threadId), driverKind };
     },
     chiefOf: address => Boolean(store.bot(address.botId)?.chiefOfStaff),
+    personInputAllowed: node => store.bot(node.botId)?.internalEscalationOnly !== true,
     // A person's cut root never reruns after a follow-up in its thread: that would hand the person's words to a model again, or redo an older request.
     outward: node => {
       const followup = node.parentId || node.groupId ? undefined : followupAtBoot(node.threadId);

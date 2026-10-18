@@ -163,6 +163,31 @@ test("a standalone contender cannot enter the same directory as the Electron par
   }
 });
 
+test("a recycled pid does not pass for the lease owner within one boot", { skip: process.platform !== "linux" }, () => {
+  const { dataDir } = temporaryDirectory();
+  const stat = readFileSync(`/proc/${process.pid}/stat`, "utf8");
+  const procStart = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]);
+  assert.ok(Number.isSafeInteger(procStart) && procStart > 0);
+  // A replacement server sees this exact shape after a crash: the lease names a live pid that
+  // now belongs to a process started at a different time.
+  writeFileSync(path.join(dataDir, LEASE_NAME), `${JSON.stringify({
+    version: 1,
+    pid: process.pid,
+    host: hostname(),
+    token: randomUUID(),
+    createdAt: Date.now(),
+    boot: readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(),
+    uptime: Math.floor(osUptime() * 1000),
+    procStart: procStart + 1,
+  })}\n`);
+  const lease = acquireDataDirLease(dataDir);
+  try {
+    assert.equal(lease.ownerPid, process.pid);
+  } finally {
+    assert.equal(lease.release(), true);
+  }
+});
+
 test("fallback children serialize and recover a predecessor that exited without release", async () => {
   const { dataDir } = temporaryDirectory();
   const parent = acquireDataDirLease(dataDir);

@@ -81,6 +81,28 @@ function ownerIsAlive(owner) {
   return !ownerPredatesThisBoot(owner) && processIsAlive(owner.pid) && ownerIdentityMatches(owner);
 }
 
+/**
+ * Linux records each process's start time as clock ticks since boot (/proc/<pid>/stat field 22).
+ * With the pid it names one process for a boot, so a pid recycled after a crash or a container
+ * restart cannot pass for the lease owner.
+ */
+function processStartTicks(pid) {
+  if (process.platform !== "linux") return null;
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    const ticks = Number(fields[19]);
+    return Number.isSafeInteger(ticks) && ticks >= 0 ? ticks : null;
+  } catch {
+    return null;
+  }
+}
+
+function processIdentity(pid) {
+  const procStart = processStartTicks(pid);
+  return procStart === null ? {} : { procStart };
+}
+
 /** macOS renames the host on another network, so the same boot session (random per boot) also proves this machine. */
 function sameMachine(record) {
   if (record.host === hostname()) return true;
@@ -107,7 +129,8 @@ function isLeaseOwner(value) {
     && value.createdAt > 0
     // Optional so an older build's lease stays readable during an upgrade.
     && (value.boot === undefined || isBootIdentity(value.boot))
-    && (value.uptime === undefined || (Number.isInteger(value.uptime) && value.uptime >= 0));
+    && (value.uptime === undefined || (Number.isInteger(value.uptime) && value.uptime >= 0))
+    && (value.procStart === undefined || (Number.isSafeInteger(value.procStart) && value.procStart >= 0));
 }
 
 function isReaperOwner(value, targetToken) {
@@ -202,8 +225,13 @@ function processCreationTimeMs(pid) {
   return null;
 }
 
-/** Windows reuses pids within a boot: a process created after the lease cannot be its original owner. */
+/** Linux and Windows reuse pids within a boot: a process started after the lease cannot be its original owner. */
 function ownerIdentityMatches(owner) {
+  if (typeof owner.procStart === "number") {
+    const started = processStartTicks(owner.pid);
+    // A live pid with a different kernel start time belongs to a replacement process.
+    if (started !== null) return started === owner.procStart;
+  }
   if (process.platform !== "win32") return true;
   const created = processCreationTimeMs(owner.pid);
   if (created === null) return true;
@@ -255,6 +283,7 @@ function claimReaperAuthority(leasePath, expected) {
       createdAt: Date.now(),
       boot: bootSession(),
       uptime: uptimeMs(),
+      ...processIdentity(process.pid),
       targetToken: expected.token,
     };
     if (publishRecord(
@@ -402,6 +431,7 @@ function acquireDataDirLeaseInternal(dataDir, options = {}) {
     createdAt: Date.now(),
     boot: bootSession(),
     uptime: uptimeMs(),
+    ...processIdentity(process.pid),
   };
   const candidatePath = `${leasePath}.candidate-${owner.pid}-${owner.token}`;
   try {

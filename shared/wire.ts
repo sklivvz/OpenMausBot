@@ -307,6 +307,8 @@ export interface WireBot {
   memoryEnabled?: boolean;
   /** Queue direct-chat messages behind outstanding delegated work. */
   parkDirectMessages?: boolean;
+  /** End person-input requests as failed work so the bot's chain can handle them. */
+  internalEscalationOnly?: boolean;
   /** true after an edit/branch-switch rewound the visible conversation. */
   rewound?: boolean;
   pinned?: boolean;

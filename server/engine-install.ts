@@ -1,7 +1,7 @@
 // No sudo, no shell, no terminal: the package name comes from the driver's own install descriptor, never a request, and
 // npm runs with a fixed argument list as this process's user into an app-owned prefix.
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import type { EngineInstall } from "./contracts.ts";
 import { DATA_DIR, stripWorkspaceCredentialEnv } from "./config.ts";
@@ -72,6 +72,10 @@ async function installOnce(pkg: string, options: InstallOptions): Promise<void> 
     npm_config_update_notifier: "false",
     npm_config_fund: "false",
     npm_config_audit: "false",
+    // npm caches under the running user's home, which on a server is the data directory. That directory can already
+    // hold a root-owned `.npm` from an earlier run (a root supervisor, or a volume made before this process dropped
+    // privileges), and then every install fails with EACCES on the cache. Keep the cache in the app's own tree.
+    npm_config_cache: join(dirname(prefix), "npm-cache"),
   };
   // Workspace credentials (xai/box/voice keys) are not npm's to see.
   stripWorkspaceCredentialEnv(env as Record<string, string | undefined>);
