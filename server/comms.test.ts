@@ -782,6 +782,33 @@ describe("routine comms e2e on the job runtime (fake ACP fleet)", () => {
         expect(read.assignment).toMatchObject({ id: taskId, botId: helper.id, botName: "Gatekeeper", status: "running", mode: "work" });
         expect(read.deprecation).toBeUndefined();
 
+        const otherThread = await api("POST", `/api/bots/${chief.id}/tasks`, { title: "Later recovery run" });
+        expect(otherThread.status).toBe(201);
+        const otherCapability = await fetch(`${BASE}/api/testing/internal-capability`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
+          body: JSON.stringify({ botId: chief.id, threadId: otherThread.body.task.threadId, kind: "agents" }),
+        });
+        expect(otherCapability.status).toBe(201);
+        const otherToken = (await otherCapability.json() as { token: string }).token;
+        const recovered = await fetch(`${BASE}/api/internal/assignment-status?id=${taskId}`, {
+          headers: { authorization: `Bearer ${otherToken}` },
+        });
+        expect(recovered.status).toBe(200);
+        expect((await recovered.json() as any).assignment.id).toBe(taskId);
+
+        const foreignCapability = await fetch(`${BASE}/api/testing/internal-capability`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
+          body: JSON.stringify({ botId: helper.id, threadId: waitingThreadId, kind: "agents" }),
+        });
+        expect(foreignCapability.status).toBe(201);
+        const foreignToken = (await foreignCapability.json() as { token: string }).token;
+        const refused = await fetch(`${BASE}/api/internal/assignment-status?id=${taskId}`, {
+          headers: { authorization: `Bearer ${foreignToken}` },
+        });
+        expect(refused.status).toBe(403);
+
         const card = (await api("POST", `/api/bots/${helper.id}/tasks/${waitingThreadId}`)).body.bot.messages
           .find((message: any) => message.kind === "options" && message.card?.requestId && !message.card.answered);
         expect(card).toBeTruthy();
