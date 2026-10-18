@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { audit, quote, searchCatalog } from './selver-bff.mjs';
+import { audit, quote, searchCatalog, verifyDelivery } from './selver-bff.mjs';
 
 test('catalog search follows pages and exposes the weight-step cost', async () => {
   const calls = [];
@@ -89,4 +89,35 @@ test('audit rejects invented requirements and a cart mapping that hides a line',
   } finally {
     rmSync(dir, { recursive: true });
   }
+});
+
+test('delivery rejects a guest or different cart even when the proposed cart passes its audit', () => {
+  const spec = {
+    targetAccount: 'Marco Cecconi', ceilingEur: 20,
+    requirements: [{ id: 'rice', name: 'Rice', grams: 60, identityTerms: ['Rice'] }],
+    cart: [{ sku: 'R', name: 'Rice 500 g', quantity: 1, unit: 'packs', netGramsPerPack: 500, unitPriceEur: 2, for: ['rice'] }],
+    physicalCart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }],
+  };
+  const now = Date.parse('2026-10-18T19:00:00Z');
+  const guest = verifyDelivery(spec, { signedInAs: null, observedAt: '2026-10-18T18:59:59Z', totalEur: 2,
+    cart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }] }, now);
+  assert.equal(guest.ok, false);
+  assert(guest.errors.includes('target account is not verified in the browser'));
+  const old = verifyDelivery(spec, { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T18:55:00Z', totalEur: 209.94,
+    cart: [{ sku: 'OLD', quantity: 1, unitPriceEur: 209.94 }] }, now);
+  assert.equal(old.ok, false);
+  assert(old.errors.includes('target cart snapshot is missing or stale'));
+  assert(old.errors.some(error => error.includes('target cart differs')));
+  assert(old.errors.some(error => error.includes('target total EUR 209.94')));
+});
+
+test('delivery accepts a fresh matching cart in the expected signed-in account', () => {
+  const spec = {
+    targetAccount: 'Marco Cecconi', ceilingEur: 20,
+    requirements: [{ id: 'rice', name: 'Rice', grams: 60, identityTerms: ['Rice'] }],
+    cart: [{ sku: 'R', name: 'Rice 500 g', quantity: 1, unit: 'packs', netGramsPerPack: 500, unitPriceEur: 2, for: ['rice'] }],
+    physicalCart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }],
+  };
+  assert.equal(verifyDelivery(spec, { signedInAs: 'Marco Cecconi', observedAt: '2026-10-18T18:59:59Z', totalEur: 2,
+    cart: [{ sku: 'R', quantity: 1, unitPriceEur: 2 }] }, Date.parse('2026-10-18T19:00:00Z')).ok, true);
 });
