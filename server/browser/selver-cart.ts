@@ -67,6 +67,6 @@ export const SELVER_SESSION_CAPTURE = `(async()=>{
 
 export const SELVER_CONNECT_TOOL = {
   name: "agent_browser_selver_connect",
-  description: "Check whether this Selver browser is signed in. Verify the account with Selver and provision a private cart session. Returns the account and session file path, never the token. If signed out, open sign-in and use request_sign_in for the person's mobile confirmation.",
+  description: "Check whether this Selver browser is signed in. Verify the account with Selver and provision a private cart session. Returns the account and session file path, never the token. If signed out, complete the Smart-ID form with the user's supplied personal number, submit it, wait for mobile approval, then reconnect.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 } as const;
