@@ -3,6 +3,7 @@ import { scrubHeldSecrets } from "../shared/redact.ts";
 import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
 import { BrowserLanes } from "./browser-lane.ts";
 import { SECRET_ON_PAGE, SecretHolds, type SecretHold } from "./browser-secret-hold.ts";
+import { SELVER_CART_SNAPSHOT, SELVER_CART_TOOL } from "./browser/selver-cart.ts";
 import type { BrowserSteps, StepCall, StepContext } from "./browser-steps.ts";
 import { HARNESS_CALL_BUDGET_MS } from "./harness-budget.ts";
 
@@ -445,6 +446,13 @@ export class BrowserRuntime {
   /** Every tool result, recovery notes included, is scrubbed of held secrets. */
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
     if (method === "tools/call" && readsAroundBrowser(params)) return { isError: true, content: [{ type: "text", text: READ_OPEN_PAGE_ONLY }] };
+    if (method === "tools/call" && toolNameOf(params) === SELVER_CART_TOOL.name) {
+      const args = (params as { arguments?: unknown }).arguments;
+      if (!args || typeof args !== "object" || Array.isArray(args) || Object.keys(args).length !== 0) {
+        return { isError: true, content: [{ type: "text", text: "The Selver cart reader takes no arguments." }] };
+      }
+      params = { name: "agent_browser_eval", arguments: { script: SELVER_CART_SNAPSHOT } };
+    }
     // Counted in the same event-loop turn, so no idle close can start under a call.
     for (let closing = this.gates.get(session)?.idleClose; closing; closing = this.gates.get(session)?.idleClose) await closing;
     const gate = this.gate(session);
@@ -969,7 +977,7 @@ function firstText(result: unknown): string {
 
 function withOmbTools(result: unknown): unknown {
   if (!result || typeof result !== "object" || !Array.isArray((result as { tools?: unknown }).tools)) return result;
-  const own = [...RELAYED_TOOL_SPECS, BROWSER_RESTART_TOOL_SPEC];
+  const own = [...RELAYED_TOOL_SPECS, BROWSER_RESTART_TOOL_SPEC, SELVER_CART_TOOL];
   const tools = ((result as { tools: unknown[] }).tools).filter((tool) => !own.some((spec) => spec.name === (tool as { name?: unknown } | null)?.name));
   return { ...result, tools: [...tools, ...own] };
 }
