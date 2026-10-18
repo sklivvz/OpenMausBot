@@ -166,12 +166,54 @@ export function audit(spec) {
   return { ok: errors.length === 0, totalEur, errors, detail };
 }
 
+export function verifyDelivery(spec, target, now = Date.now()) {
+  const checked = audit(spec);
+  const errors = [...checked.errors];
+  if (!spec?.targetAccount || typeof spec.targetAccount !== 'string') errors.push('targetAccount required');
+  if (!target?.signedInAs || target.signedInAs !== spec?.targetAccount) errors.push('target account is not verified in the browser');
+  const observedAt = Date.parse(target?.observedAt);
+  if (!Number.isFinite(observedAt) || observedAt > now || now - observedAt > 120_000) errors.push('target cart snapshot is missing or stale');
+  if (!Array.isArray(target?.cart)) errors.push('target cart lines required');
+  if (!Number.isFinite(target?.totalEur)) errors.push('target displayed total required');
+  if (Array.isArray(target?.cart)) {
+    const actual = new Map();
+    const expected = new Map();
+    for (const line of target.cart) {
+      if (!line?.sku || !(line.quantity > 0) || !(line.unitPriceEur >= 0)) errors.push('invalid target cart line');
+      else actual.set(line.sku, { quantity: line.quantity, cost: line.quantity * line.unitPriceEur });
+    }
+    for (const line of spec?.physicalCart || []) {
+      if (!line?.sku || !(line.quantity > 0) || !(line.unitPriceEur >= 0)) errors.push('invalid audited physical cart line');
+      else expected.set(line.sku, { quantity: line.quantity, cost: line.quantity * line.unitPriceEur });
+    }
+    if (!Array.isArray(spec?.physicalCart)) errors.push('audited physical cart required');
+    for (const sku of new Set([...actual.keys(), ...expected.keys()])) {
+      const a = actual.get(sku);
+      const e = expected.get(sku);
+      if (!a || !e || Math.abs(a.quantity - e.quantity) > 0.001 || Math.abs(a.cost - e.cost) > 0.02) {
+        errors.push(`${sku}: target cart differs from audited cart`);
+      }
+    }
+  }
+  if (Number.isFinite(target?.totalEur) && checked.totalEur !== null && Math.abs(target.totalEur - checked.totalEur) > 0.02) {
+    errors.push(`target total EUR ${target.totalEur} differs from audited EUR ${checked.totalEur}`);
+  }
+  return { ok: errors.length === 0, targetTotalEur: target?.totalEur ?? null, errors };
+}
+
 async function main(args) {
   const [command, value, ...rest] = args;
   if (command === 'schema') { console.log(JSON.stringify(schema, null, 2)); return; }
   if (command === 'audit') {
     if (!value) throw new Error('audit JSON path required');
     const result = audit(JSON.parse(readFileSync(value, 'utf8')));
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exitCode = 1;
+    return;
+  }
+  if (command === 'verify-delivery') {
+    if (!value || !rest[0]) throw new Error('audit JSON and target cart JSON paths required');
+    const result = verifyDelivery(JSON.parse(readFileSync(value, 'utf8')), JSON.parse(readFileSync(rest[0], 'utf8')));
     console.log(JSON.stringify(result, null, 2));
     if (!result.ok) process.exitCode = 1;
     return;
@@ -198,7 +240,7 @@ async function main(args) {
       matched: result.length, products: result }, null, 2));
     return;
   }
-  throw new Error('use search QUERY [--grams N] [--contains TEXT] [--category TEXT], audit FILE, or schema');
+  throw new Error('use search QUERY [--grams N] [--contains TEXT] [--category TEXT], audit FILE, verify-delivery AUDIT TARGET, or schema');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
