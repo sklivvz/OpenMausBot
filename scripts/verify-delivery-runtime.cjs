@@ -13,6 +13,11 @@ function validateRuntimeAssignments(ledger, databasePath) {
     database = new DatabaseSync(databasePath, { readOnly: true });
     const assignment = database.prepare('SELECT status, assignee_bot_id FROM assignments WHERE id = ?');
     for (const story of ledger.stories || []) {
+      if (story.pr?.state === 'open' && story.currentCi?.conclusion === 'failure' &&
+          story.stage !== 'accepted' && !story.activeOwnerAssignmentId &&
+          !story.ciRecoveryBlocker?.evidenceReceipt) {
+        errors.push(`${story.id}: failing CI has no active owner assignment or evidenced CI recovery blocker`);
+      }
       for (const [claimed, field, ownerField, label] of [
         [story.stage === 'implementation', 'activeOwnerAssignmentId', 'ownerAssignment', 'implementation'],
         [story.reviewSlotReserved === true, 'activeReviewAssignmentId', 'reviewerAssignment', 'review'],

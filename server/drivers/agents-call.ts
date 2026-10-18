@@ -486,7 +486,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     const { ok, status, body: r } = await apiResponse(`/api/internal/assignment-status${query.size ? `?${query.toString()}` : ""}`);
     if (!ok) {
       const why = status === 404 ? `No assignment ${id || "(none given)"} is known here: check the id against your coordinate_bots receipt or list_threads.`
-        : status === 403 ? `Assignment ${id} is not this conversation's; only its requester can read it.`
+        : status === 403 ? `Assignment ${id} is not in one of your private conversations; only its requester can read it.`
         : String(r.error ?? `HTTP ${status}`);
       return { text: why, isError: true };
     }

@@ -47,3 +47,22 @@ test('an active delivery claim requires a live assignment to the recorded owner'
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('failing CI on an open PR cannot be treated as idle completed coordination', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omb-delivery-runtime-'));
+  const databasePath = path.join(dir, 'runtime.db');
+  try {
+    const database = new DatabaseSync(databasePath);
+    database.exec('CREATE TABLE assignments (id TEXT PRIMARY KEY, status TEXT, assignee_bot_id TEXT)');
+    database.prepare('INSERT INTO assignments VALUES (?, ?, ?)').run('cccccccc-cccc-cccc-cccc-cccccccccccc', 'running', 'owner');
+    database.close();
+    const story = { id: 'FLUX-184', kind: 'outcome', stage: 'blocked', ownerAssignment: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      pr: { state: 'open' }, currentCi: { conclusion: 'failure' }, activeOwnerAssignmentId: null };
+    const errors = () => validateRuntimeAssignments({ stories: [story] }, databasePath);
+    assert.match(errors().join('\n'), /failing CI has no active owner assignment/);
+    story.activeOwnerAssignmentId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    assert.deepEqual(errors(), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

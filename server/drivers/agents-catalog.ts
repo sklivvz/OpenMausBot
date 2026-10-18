@@ -241,7 +241,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "assignment_status",
-    description: "Read-only: one assignment's status, outcome and result (give its id from a coordinate_bots receipt or a list_threads row), or, with no id, everything this conversation still waits on. A result resumes you on its own, so a bot in a turn never needs this to wait: use it in a later turn when the person asks how a hand-off is going. A standing external runtime long-polls it with wait_ms instead of being resumed. It starts nothing and changes nothing.",
+    description: "Read-only: one assignment's status, outcome and result (give its id from a coordinate_bots receipt or a list_threads row), including assignments from another private conversation of this same bot. With no id, list what this conversation still waits on. Do not poll in the turn that handed work out. Use an exact id in a later routine run to reconcile earlier work. A standing external runtime long-polls its own assignment with wait_ms. It starts nothing and changes nothing.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       id: { type: "string", description: "The assignment id (a coordinate_bots receipt's requestId, or a delegation id from list_threads). Omit to list every outstanding assignment of this conversation." },
       wait_ms: { type: "integer", minimum: 0, maximum: 240_000, description: "Only for a standing external runtime: hold the answer up to this many milliseconds (at most 240000) for the assignment to settle. Omit inside a turn." },
