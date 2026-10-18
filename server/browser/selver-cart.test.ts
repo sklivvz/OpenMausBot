@@ -1,9 +1,9 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
-import { SELVER_CART_SNAPSHOT } from "./selver-cart.ts";
+import { SELVER_CART_SNAPSHOT, SELVER_SESSION_CAPTURE } from "./selver-cart.ts";
 
-function fixture() {
+function fixture(expireAtAccountCall = Number.POSITIVE_INFINITY) {
   const getters: Record<string, unknown> = {
     "user/isLoggedIn": true,
     "user/getUserToken": "synthetic-user-token",
@@ -18,6 +18,9 @@ function fixture() {
     document: { body: { innerText: "Tere, Marco Cecconi!" }, querySelector: () => ({ __vue__: { $store: store } }) },
     fetch: async (url: URL) => {
       calls.push(url.pathname);
+      if (url.pathname.endsWith("/user/me") && calls.filter((path) => path.endsWith("/user/me")).length >= expireAtAccountCall) {
+        return { ok: false, status: 401 };
+      }
       const result = url.pathname.endsWith("/user/me")
         ? { firstname: "Marco", lastname: "Cecconi" }
         : url.pathname.endsWith("/totals")
@@ -30,6 +33,12 @@ function fixture() {
 }
 
 describe("server-observed Selver cart", () => {
+  it("refuses to capture an expired browser token", async () => {
+    const { context } = fixture();
+    context.fetch = async () => ({ ok: false, status: 401 });
+    await expect(runInNewContext(SELVER_SESSION_CAPTURE, context)).rejects.toThrow("account verification failed");
+  });
+
   it("rejects a stale account label when Selver says the session is logged out", async () => {
     const { context, getters, calls } = fixture();
     getters["user/isLoggedIn"] = false;
@@ -49,6 +58,13 @@ describe("server-observed Selver cart", () => {
     expect(result.signedInAs).toBe("Marco Cecconi");
     expect(result.totalEur).toBe(4);
     expect(result.cart).toEqual([{ sku: "MILK", quantity: 2, unitPriceEur: 2 }]);
-    expect(calls).toEqual(["/api/user/me", "/api/cart/pull", "/api/cart/pull", "/api/cart/totals"]);
+    expect(calls).toEqual(["/api/user/me", "/api/user/me", "/api/cart/pull", "/api/user/me", "/api/cart/pull", "/api/user/me", "/api/cart/totals"]);
+  });
+
+  it("does not request cart totals after account verification expires", async () => {
+    const { context, calls } = fixture(4);
+    await expect(runInNewContext(SELVER_CART_SNAPSHOT, context)).rejects.toThrow("Selver cart read failed");
+    expect(calls.at(-1)).toBe("/api/user/me");
+    expect(calls).not.toContain("/api/cart/totals");
   });
 });

@@ -20,9 +20,14 @@ export const SELVER_CART_SNAPSHOT = `(async()=>{
   };
   const identity=await get('/api/user/me');
   if([identity?.firstname,identity?.lastname].filter(Boolean).join(' ').trim()!==account)throw Error('Selver backend account differs from displayed account');
-  const first=await get('/api/cart/pull');
-  const second=await get('/api/cart/pull');
-  const totals=await get('/api/cart/totals');
+  const getCart=async path=>{
+    const current=await get('/api/user/me');
+    if([current?.firstname,current?.lastname].filter(Boolean).join(' ').trim()!==account)throw Error('Selver account changed before cart request');
+    return get(path);
+  };
+  const first=await getCart('/api/cart/pull');
+  const second=await getCart('/api/cart/pull');
+  const totals=await getCart('/api/cart/totals');
   if(!Array.isArray(first)||!Array.isArray(second)||!Array.isArray(totals?.items)||!Number.isFinite(Number(totals.grand_total)))throw Error('Selver cart response is incomplete');
   const quantities=items=>JSON.stringify(items.map(p=>[p.sku,Number(p.qty)]).sort((a,b)=>a[0].localeCompare(b[0])));
   if(quantities(first)!==quantities(second))throw Error('Persisted Selver cart changed during verification');
@@ -41,5 +46,27 @@ export const SELVER_CART_SNAPSHOT = `(async()=>{
 export const SELVER_CART_TOOL = {
   name: "agent_browser_selver_cart",
   description: "Read the authenticated Selver account, persisted cart lines and total in this browser. Refuses a guest session, account mismatch, or a cart that differs from the page.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+} as const;
+
+export const SELVER_SESSION_CAPTURE = `(async()=>{
+  if(location.origin!=='https://www.selver.ee')throw Error('Open the Selver storefront first');
+  const store=document.querySelector('#app')?.__vue__?.$store;
+  const token=store?.getters['user/getUserToken'];
+  if(store?.getters['user/isLoggedIn']!==true||typeof token!=='string'||!token)throw Error('Selver account is not signed in');
+  const url=new URL('/api/user/me',location.origin);
+  url.searchParams.set('token',token);
+  const response=await fetch(url,{credentials:'include',cache:'no-store'});
+  if(!response.ok)throw Error('Selver account verification failed');
+  const body=await response.json();
+  if(body.code!==200)throw Error('Selver account verification was rejected');
+  const account=[body.result?.firstname,body.result?.lastname].filter(Boolean).join(' ').trim();
+  if(!account||store.getters['user/isLoggedIn']!==true||store.getters['user/getUserToken']!==token)throw Error('Selver account changed during verification');
+  return{token,account};
+})()`;
+
+export const SELVER_CONNECT_TOOL = {
+  name: "agent_browser_selver_connect",
+  description: "Check whether this Selver browser is signed in. Verify the account with Selver and provision a private cart session. Returns the account and session file path, never the token. If signed out, open sign-in and use request_sign_in for the person's mobile confirmation.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 } as const;

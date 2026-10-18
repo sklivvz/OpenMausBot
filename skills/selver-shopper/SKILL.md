@@ -7,7 +7,7 @@ description: Build or correct a Selver grocery cart from a fixed meal plan using
 
 Keep the source meal plan and serving counts fixed. A budget target is a constraint on product and pack selection, not permission to replace dishes or ingredients. Use lactose-free products for every dairy allocation when requested. Do not use past orders to infer quantities.
 
-Before editing a cart, require `SELVER_SESSION_FILE` to point to a provisioned authenticated Selver session containing the account token and expected account name. The direct cart client obtains the account cart ID from Selver's account-cart endpoint; do not supply or guess a cart ID. If the account session is unavailable, stop without writing or claiming delivery. Do not create a guest cart.
+To connect the account, call `agent_browser_selver_connect` in The Dude's browser. It verifies the signed-in account with Selver and returns `sessionFile` without exposing the token. Set `SELVER_SESSION_FILE` to that path for cart commands. The cart client verifies the token with Selver before every cart API request. If it reports an expired or signed-out session, stop cart requests, open Selver sign-in, use `request_sign_in` for the person's mobile confirmation, then call `agent_browser_selver_connect` and retry against the authenticated account cart. Do not write or claim delivery until authenticated. The direct cart client obtains the account cart ID from Selver's account-cart endpoint; do not supply or guess a cart ID. Do not create a guest cart.
 
 Use the direct Selver catalog client at `$HOME/.openmausbot/tools/selver-bff.mjs` to find and price candidates. For example:
 

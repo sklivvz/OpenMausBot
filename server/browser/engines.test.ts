@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { BrowserLive } from "../browser-live.ts";
 import type { BrowserRuntime } from "../browser-runtime.ts";
@@ -33,7 +36,7 @@ function engines() {
     live: { open: vi.fn(async () => undefined), action: vi.fn(async () => "chrome"), has: vi.fn((viewerId: string) => viewerId === "v-chrome"), handBack: vi.fn(), closeForSession: vi.fn(), closeForOwner: vi.fn(), closeForBot: vi.fn(), closeAll: vi.fn() },
     close: vi.fn(async () => undefined),
   };
-  const runtime = new RuntimeRouter(old as unknown as BrowserRuntime, chrome as unknown as ChromeEngine);
+  const runtime = new RuntimeRouter(old as unknown as BrowserRuntime, chrome as unknown as ChromeEngine, "/tmp");
   const live = new LiveRouter(oldLive as unknown as BrowserLive, chrome as unknown as ChromeEngine);
   return { old, oldLive, chrome, runtime, live };
 }
@@ -86,6 +89,28 @@ describe("the runtime router", () => {
     expect(runtime.heldBy("s")).toBe("viewer-1");
     expect(runtime.interrupted("s")).toBe(true);
     expect(runtime.interruptedCount()).toBe(3);
+  });
+
+  it("provisions a private session from the verified browser without returning its token", async () => {
+    const { old, chrome } = engines();
+    const directory = mkdtempSync(join(tmpdir(), "omb-selver-connect-"));
+    const runtime = new RuntimeRouter(old as unknown as BrowserRuntime, chrome as unknown as ChromeEngine, directory);
+    const context = { botId: "bot-1", botName: "Dude", threadId: "thread-1", generation: "gen-1", turnId: () => null, record: false };
+    old.agentRpc.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ token: "fixture-secret", account: "Marco Cecconi" }) }] } as never);
+    try {
+      const result = await runtime.agentRpc("s", AGENT_BROWSER, "tools/call", { name: "agent_browser_selver_connect", arguments: {} }, undefined, context) as { content: Array<{ text: string }> };
+      expect(JSON.stringify(result)).not.toContain("fixture-secret");
+      const status = JSON.parse(result.content[0]!.text) as { authenticated: boolean; sessionFile: string; account: string };
+      expect(status).toEqual({ authenticated: true, account: "Marco Cecconi", sessionFile: join(directory, "selver-sessions", "bot-1.json") });
+      expect(JSON.parse(readFileSync(status.sessionFile, "utf8"))).toMatchObject({ token: "fixture-secret", account: "Marco Cecconi" });
+      expect(statSync(status.sessionFile).mode & 0o777).toBe(0o600);
+      expect(old.agentRpc).toHaveBeenCalledWith("s", AGENT_BROWSER, "tools/call", expect.objectContaining({ name: "agent_browser_eval" }), undefined);
+      old.agentRpc.mockResolvedValue({ isError: true, content: [{ type: "text", text: "HTTP 401" }] } as never);
+      const rejected = await runtime.agentRpc("s", AGENT_BROWSER, "tools/call", { name: "agent_browser_selver_connect", arguments: {} }, undefined, context) as { isError: boolean; content: Array<{ text: string }> };
+      expect(rejected.isError).toBe(true);
+      expect(rejected.content[0]!.text).not.toContain("fixture-secret");
+      expect(() => readFileSync(status.sessionFile)).toThrow();
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
 
