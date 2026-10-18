@@ -16,10 +16,10 @@ function quantities(lines) {
 }
 
 export class SelverCartBff {
-  constructor({ token, cartId, account, fetcher = fetch }) {
-    if (!token || !cartId || !account || typeof fetcher !== 'function') throw new Error('Authenticated Selver token, cart ID, account and fetcher required');
+  constructor({ token, account, fetcher = fetch }) {
+    if (!token || !account || typeof fetcher !== 'function') throw new Error('Authenticated Selver token, account and fetcher required');
     this.token = token;
-    this.cartId = String(cartId);
+    this.cartId = null;
     this.account = account;
     this.fetcher = fetcher;
   }
@@ -27,7 +27,10 @@ export class SelverCartBff {
   async request(path, { method = 'GET', body } = {}) {
     const url = new URL(path, origin);
     url.searchParams.set('token', this.token);
-    if (path.startsWith('/api/cart/')) url.searchParams.set('cartId', this.cartId);
+    if (path.startsWith('/api/cart/')) {
+      if (!this.cartId) throw new Error('Authenticated account cart is not connected');
+      url.searchParams.set('cartId', this.cartId);
+    }
     const response = await this.fetcher(url, {
       method, headers: { 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -42,6 +45,11 @@ export class SelverCartBff {
     const identity = await this.request('/api/user/me');
     const signedInAs = [identity?.firstname, identity?.lastname].filter(Boolean).join(' ').trim();
     if (signedInAs !== this.account) throw new Error('Selver account differs from the configured account');
+    const accountCart = await this.request('/api/ext/tkg-sales/cart/merge', { method: 'POST', body: {} });
+    const canonicalId = String(accountCart?.id ?? '');
+    if (!canonicalId) throw new Error('Selver account cart ID is unavailable');
+    if (this.cartId && this.cartId !== canonicalId) throw new Error('Selver account cart ID changed');
+    this.cartId = canonicalId;
     const first = await this.request('/api/cart/pull');
     const second = await this.request('/api/cart/pull');
     const totals = await this.request('/api/cart/totals');
