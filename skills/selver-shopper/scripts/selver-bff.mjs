@@ -74,6 +74,13 @@ export function audit(spec) {
   if (!Array.isArray(spec?.requirements) || spec.requirements.length === 0) errors.push('requirements required');
   if (!Array.isArray(spec?.cart)) errors.push('cart required');
   if (errors.length) return { ok: false, errors, totalEur: null, detail };
+  if (spec.fixedSourceIngredientCount !== undefined && spec.fixedSourceIngredientCount !== spec.requirements.length) {
+    errors.push(`source count ${spec.fixedSourceIngredientCount} differs from ${spec.requirements.length} requirements`);
+  }
+  if (spec.manualFailures !== undefined) {
+    if (!Array.isArray(spec.manualFailures)) errors.push('manualFailures must be an array');
+    else errors.push(...spec.manualFailures.map(failure => `unresolved: ${String(failure)}`));
+  }
 
   const requirements = new Map();
   for (const item of spec.requirements) {

@@ -49,3 +49,15 @@ test('audit accepts mapped servings with lactose-free dairy and no excess', () =
   assert.equal(result.ok, true);
   assert.equal(result.totalEur, 1.89);
 });
+
+test('audit never drops unresolved manual findings', () => {
+  const result = audit({
+    ceilingEur: 20,
+    fixedSourceIngredientCount: 1,
+    manualFailures: ['farro remains unmatched'],
+    requirements: [{ id: 'rice', name: 'Rice', grams: 60, identityTerms: ['rice'] }],
+    cart: [{ sku: 'R', name: 'Rice 500 g', quantity: 1, unit: 'packs', netGramsPerPack: 500, unitPriceEur: 2, for: ['rice'] }],
+  });
+  assert.equal(result.ok, false);
+  assert(result.errors.includes('unresolved: farro remains unmatched'));
+});
