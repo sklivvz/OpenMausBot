@@ -47,10 +47,15 @@ COPY cloudflare/control-plane/package.json ./cloudflare/control-plane/package.js
 COPY scripts/install-git-hooks.mjs ./scripts/install-git-hooks.mjs
 RUN pnpm install --frozen-lockfile
 COPY . .
-# The Cloud home runs these as root, so nobody else may write them.
-# The Data engine's native modules (server/data/engine.ts), staged like the
-# desktop app's extraResources; the runtime stages copy this tree.
-RUN node scripts/prepare-duckdb.mjs && chmod -R go-w dist-native/duckdb
+# The Cloud home runs these as root, so nobody else may write them: the Data
+# engine's native modules (server/data/engine.ts), staged like the desktop app's
+# extraResources. scripts/prepare-duckdb.mjs defaults Linux to x64 whatever host
+# it runs on, so name the arch this image is for; the staged tree is then copied
+# to one fixed path the runtime stages use for either arch.
+RUN arch="$(node -p 'process.arch === "arm64" ? "arm64" : "x64"')" \
+  && OMB_DUCKDB_TARGET_ARCH="$arch" node --input-type=module -e 'const { stageDuckdb } = await import("/src/scripts/prepare-duckdb.mjs"); await stageDuckdb({ root: "/src", targets: [{ platform: "linux", arch: process.env.OMB_DUCKDB_TARGET_ARCH }] });' \
+  && cp -a "dist-native/duckdb/linux-${arch}/." dist-native/duckdb/native/ \
+  && chmod -R go-w dist-native/duckdb
 RUN pnpm build:server && pnpm exec vite build && chmod -R go-w dist dist-server
 
 FROM node:24-bookworm-slim AS runtime
@@ -58,7 +63,7 @@ FROM node:24-bookworm-slim AS runtime
 # invokes sudo even as root, and this image deliberately does not ship sudo.
 # git + curl: agent CLIs shell out to git; curl backs the healthcheck
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl git \
+  && apt-get install -y --no-install-recommends ca-certificates curl git unzip \
     libxcb-shm0 libx11-xcb1 libx11-6 libxcb1 libxext6 libxrandr2 \
     libxcomposite1 libxcursor1 libxdamage1 libxfixes3 libxi6 libgtk-3-0 \
     libpangocairo-1.0-0 libpango-1.0-0 libatk1.0-0 libcairo-gobject2 \
@@ -77,10 +82,25 @@ ARG AGENT_BROWSER_VERSION=0.37.0
 ARG CHROME_CACHE_TAG=""
 # The global link must be the native binary for this platform (agent-browser's
 # postinstall points it there); the other platforms' binaries are never run.
+# On arm64 `agent-browser install` refuses with a stale "Chrome for Testing does
+# not provide Linux ARM64 builds", although CfT publishes chrome-linux-arm64.zip.
+# That branch fetches the same build itself and points the executable path at it.
 RUN echo "agent-browser ${AGENT_BROWSER_VERSION}, Chrome for Testing ${CHROME_CACHE_TAG:-Stable}" \
   && npm install -g --cache /tmp/npm-cache agent-browser@${AGENT_BROWSER_VERSION} \
-  && HOME=/opt/openmausbot-browser agent-browser install \
-  && ln -s /opt/openmausbot-browser/.agent-browser/browsers/chrome-*/chrome /opt/openmausbot-browser/chrome \
+  && browsers=/opt/openmausbot-browser/.agent-browser/browsers \
+  && if [ "$(node -p process.arch)" = "arm64" ]; then \
+       mkdir -p "$browsers" \
+       && version="${CHROME_CACHE_TAG:-$(curl -fsSL https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json | node -e 'let s=""; process.stdin.on("data", (d) => (s += d)).on("end", () => process.stdout.write(JSON.parse(s).channels.Stable.version))')}" \
+       && curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/${version}/linux-arm64/chrome-linux-arm64.zip" -o /tmp/chrome-linux-arm64.zip \
+       && unzip -q /tmp/chrome-linux-arm64.zip -d /tmp/chrome-linux-arm64 \
+       && mv /tmp/chrome-linux-arm64/chrome-linux-arm64 "$browsers/chrome-${version}" \
+       && rm -rf /tmp/chrome-linux-arm64 /tmp/chrome-linux-arm64.zip \
+       && ln -s "$browsers/chrome-${version}/chrome" /opt/openmausbot-browser/chrome \
+       && "$browsers/chrome-${version}/chrome" --version; \
+     else \
+       HOME=/opt/openmausbot-browser agent-browser install \
+       && ln -s "$browsers"/chrome-*/chrome /opt/openmausbot-browser/chrome; \
+     fi \
   && native="$(readlink -f "$(command -v agent-browser)")" \
   && case "$native" in */agent-browser/bin/agent-browser-linux-*) ;; *) echo "agent-browser is not a native binary: $native" >&2; exit 1;; esac \
   && [ "$(head -c 4 "$native")" = "$(printf '\177ELF')" ] \
@@ -138,7 +158,7 @@ COPY deploy/fly/Caddyfile /app/cloud/Caddyfile
 # copies stay root's. Only the /data volume is maus's; the launcher refuses to
 # start otherwise (codeTrustProblem), and this check refuses to build.
 # DuckDB and resvg change on a version bump, not per commit: beneath the app files.
-COPY --from=build /src/dist-native/duckdb/linux-x64 ./duckdb
+COPY --from=build /src/dist-native/duckdb/native ./duckdb
 COPY --from=build /src/dist-server ./dist-server
 COPY --from=build /src/dist ./dist
 RUN export HOME=/tmp/omb-build-home \
@@ -167,7 +187,7 @@ FROM runtime AS server
 # Optional engine CLIs baked into the image (space-separated npm packages).
 ARG ENGINES=""
 RUN if [ -n "$ENGINES" ]; then HOME=/tmp/omb-build-home npm install -g $ENGINES && rm -rf /tmp/omb-build-home /tmp/node-compile-cache; fi
-COPY --from=build --chown=maus:maus /src/dist-native/duckdb/linux-x64 ./duckdb
+COPY --from=build --chown=maus:maus /src/dist-native/duckdb/native ./duckdb
 COPY --from=build --chown=maus:maus /src/dist-server ./dist-server
 COPY --from=build --chown=maus:maus /src/dist ./dist
 ENV HOME=/data

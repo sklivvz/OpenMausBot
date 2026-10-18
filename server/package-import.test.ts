@@ -73,11 +73,13 @@ describe("importing a whole team", () => {
     expect(lead).toMatchObject({
       name: "Morgan", title: "Sales lead", soul: "You coordinate the desk. Keep answers short and cite the price list.\n",
       color: "purple", mascotExpression: "focused", section: "Sales desk", chiefOfStaff: true,
-      composio: false, connectorTools: {}, avatarCrop: "circle", modelSelection: { instanceId: "claude", model: "default-model" },
+      composio: false, avatarCrop: "circle", modelSelection: { instanceId: "claude", model: "default-model" },
       playbooks: [expect.objectContaining({ key: "qualify" })],
       installedPackage: { id: "sales-desk", release: "1.3.0", source: "file", agentKey: "lead", suggestedApproval: "auto",
         requiredApps: [expect.objectContaining({ slug: "hubspot" })] },
     });
+    // No empty grants record: composio off is the off state, and absence is the normal tool surface later.
+    expect(lead.connectorTools).toBeUndefined();
     expect(lead.avatarUrl).toMatch(/^\/api\/attachments\/[\w-]+\.png$/);
     expect(lead).not.toHaveProperty("approvalMode");
     expect(lead).not.toHaveProperty("autoApprove");

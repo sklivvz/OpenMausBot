@@ -61,14 +61,14 @@ function levelLine(a: Assignment): string {
 function askLine(a: Assignment, person: string): string {
   const uncovered = a.origin.kind === "person" ? "a step their request does not cover"
     : a.origin.kind === "routine" ? "a step the routine does not cover" : "a step with consequences nobody authorised";
-  return `If something genuinely needs ${person} (a credential, a decision only they can make, ${uncovered}), end your reply with \`NEEDS INPUT:\` and the exact question.`;
+  return `Only for ${person}'s credential or decision (${uncovered}), end with \`NEEDS INPUT:\` and the exact question. Ask bots in an ordinary reply.`;
 }
 
 function replyLine(a: Assignment, requester: string): string {
   const close = a.mode === "consult" ? "" : "; end it with what you did and what stays unverified";
   if (a.reply === "resume") {
-    const ask = a.requester.kind === "bot_turn"
-      ? ` Ask ${requester} or anyone above it by ending your turn with the question, never coordinate_bots.`
+    const ask = a.requester.kind === "bot_turn" && a.mode !== "consult"
+      ? ` Questions for ${requester} go in your ordinary final reply, never \`NEEDS INPUT:\` or coordinate_bots.`
       : "";
     return `${requester} is resumed with your reply when your turn ends${close}.${ask}`;
   }

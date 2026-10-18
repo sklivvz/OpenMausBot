@@ -68,7 +68,9 @@ describe("additive portable team backups", () => {
     const backup = createTeamBackup(store, routines.listRoutines(), "Selected tools");
     expect(backup.bots.find((bot) => bot.key === chief.id)).toHaveProperty("toolScope", scope);
     const restored = importTeamBackup(store, routines, backup, selection());
-    expect(restored.bots.find((bot) => bot.name === "Mira 2")).toMatchObject({ toolScope: scope, computer: "off", composio: false, connectorTools: {} });
+    const mira = restored.bots.find((bot) => bot.name === "Mira 2");
+    expect(mira).toMatchObject({ toolScope: scope, computer: "off", composio: false });
+    expect(mira?.connectorTools).toBeUndefined();
     expect(approvalModeFor(restored.bots.find((bot) => bot.name === "Mira 2")!)).toBe("full");
     expect(restored.bots.find((bot) => bot.name === "Scout 2")).toHaveProperty("toolScope", { allow: [] });
     const invalid = structuredClone(backup) as unknown as { bots: Array<{ toolScope: unknown }> };
@@ -222,7 +224,8 @@ describe("additive portable team backups", () => {
     const result = importTeamBackup(store, routines, JSON.parse(JSON.stringify(backup)), selection());
     const imported = result.bots.find((bot) => bot.name === "Mira 2")!;
     expect(imported.composio).toBe(false);
-    expect(imported.connectorTools).toEqual({});
+    // The backup's grants are not restored, and the off state is composio: false, not an empty grants record.
+    expect(imported.connectorTools).toBeUndefined();
     const tampered = JSON.parse(JSON.stringify(backup)) as { bots: { key: string; connectorTools: unknown }[] };
     tampered.bots[0].connectorTools = { gmail: { tools: [] } };
     expect(() => parseTeamBackup(tampered)).toThrow();

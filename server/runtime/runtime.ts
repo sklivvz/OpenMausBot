@@ -245,7 +245,7 @@ export class Runtime {
       if (!n || isTerminal(n)) continue;
       if (n.status === "queued" && !n.continuation && now - this.since(n.lastActivityAt) > this.limits.queueMs) {
         this.cancelTree(n, n.executions > 0 ? "not resumed" : "never started", "failed", "expired");
-      } else if (n.status === "needs_input" && this.inputExpires(n) && now - this.since(n.lastActivityAt) > this.limits.inputWaitMs) {
+      } else if (n.status === "needs_input" && this.inputExpires(n) && now - n.lastActivityAt > this.limits.inputWaitMs) {
         this.cancelTree(n, "the person did not answer", "failed", "expired");
       } else if (n.status === "running") {
         const turn = this.turns.get(n.id);
@@ -657,7 +657,7 @@ export class Runtime {
   }
 
   private inputExpires(n: Assignment): boolean {
-    return Number.isFinite(this.limits.inputWaitMs) && !(n.cards && n.cards.length > 0);
+    return Number.isFinite(this.limits.inputWaitMs) && (n.parentId !== undefined || !n.cards?.length);
   }
 
   private outwardOf(n: Assignment): string[] {

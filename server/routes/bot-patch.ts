@@ -249,6 +249,10 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         if (typeof body.parkDirectMessages !== "boolean") return json(res, 400, { error: "parkDirectMessages must be true or false" });
         patch.parkDirectMessages = body.parkDirectMessages;
       }
+      if (body.internalEscalationOnly !== undefined) {
+        if (typeof body.internalEscalationOnly !== "boolean") return json(res, 400, { error: "internalEscalationOnly must be true or false" });
+        patch.internalEscalationOnly = body.internalEscalationOnly;
+      }
       // Omitted keeps the selection; null restores all enabled servers; [] mounts none.
       let requestedMcpServers = existingBot?.mcpServers;
       if (Object.hasOwn(body, "toolScope")) {

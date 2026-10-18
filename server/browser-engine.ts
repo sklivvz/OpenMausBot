@@ -1,9 +1,9 @@
 // The bots' browser engine, agent-browser. Fail closed with a reason a person can act on, never a silently browserless bot.
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir, hostname, tmpdir } from "node:os";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
@@ -41,6 +41,42 @@ export function browserSessionsDirectory(env: NodeJS.ProcessEnv): string {
 
 function managedBrowserConfigPath(env: NodeJS.ProcessEnv): string {
   return join(browserSessionsDirectory(env), "..", "omb-managed-config.json");
+}
+
+/** A Chrome profile per session, beside the saved states, so the whole profile lives in the data directory. */
+function managedBrowserProfilePath(env: NodeJS.ProcessEnv, session: string): string {
+  const safe = /^[A-Za-z0-9_.-]{1,96}$/.test(session) ? session : "default";
+  return join(browserSessionsDirectory(env), "..", "profiles", safe);
+}
+
+/**
+ * Chrome refuses to start on a profile another Chrome owns, naming the host and pid in `SingletonLock`. A profile kept
+ * across restarts outlives the Chrome that wrote that lock: a container gets a new hostname every recreate and a killed
+ * Chrome leaves its lock behind, so the next launch dies with exit code 21 until the lock goes. A lock naming a live
+ * Chrome on this host is left alone, because that Chrome is the one the daemon talks to.
+ */
+function clearStaleBrowserProfileLock(profilePath: string): void {
+  const lock = join(profilePath, "SingletonLock");
+  let owner: string;
+  try {
+    owner = readlinkSync(lock);
+  } catch {
+    return;
+  }
+  const match = /^(.*)-(\d+)$/.exec(basename(owner));
+  if (!match) return;
+  const [, ownerHost, ownerPid] = match;
+  if (ownerHost === hostname()) {
+    try {
+      process.kill(Number(ownerPid), 0);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EPERM") return;
+    }
+  }
+  for (const name of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+    rmSync(join(profilePath, name), { force: true });
+  }
 }
 
 function ensureManagedBrowserConfig(env: NodeJS.ProcessEnv): string {
@@ -574,6 +610,19 @@ export function agentBrowserIntegration(input: {
     // A restore name, not a boolean; fixed-length because agent-browser matches name prefixes.
     env.AGENT_BROWSER_RESTORE = browserRestoreKey(input.session);
     env.AGENT_BROWSER_RESTORE_SAVE = input.persistent === false ? "never" : "auto";
+    // The saved state carries cookies and localStorage only, and the daemon would
+    // otherwise launch Chrome with a fresh directory under /tmp each time, so a
+    // sign-in that lives in the profile (Google and similar) is asked for on every
+    // launch. Keep the profile in the data directory instead.
+    if (!env.AGENT_BROWSER_PROFILE) {
+      const profile = managedBrowserProfilePath(browserRuntimeEnv({
+        ...(sourceEnv.HOME ? { HOME: sourceEnv.HOME } : {}),
+        ...(sourceEnv.USERPROFILE ? { USERPROFILE: sourceEnv.USERPROFILE } : {}),
+      }), input.session);
+      mkdirSync(profile, { recursive: true, mode: 0o700 });
+      clearStaleBrowserProfileLock(profile);
+      env.AGENT_BROWSER_PROFILE = profile;
+    }
     if (input.headless !== false || displayless) {
       env.AGENT_BROWSER_HEADLESS = "1";
       env.AGENT_BROWSER_HEADED = "0";
@@ -589,7 +638,9 @@ export function agentBrowserIntegration(input: {
   }
   // The gate goes last, so nothing the launcher sets can route Chrome around it; launcher arguments are kept beside its own.
   if (!input.attach) Object.assign(env, input.launcher, agentBrowserEgressEnv({ ...env, ...input.launcher }, input.egressPort ?? 0, input.platform ?? process.platform));
-  return { command: input.binaryPath, args: ["mcp", "--tools", "core", "--no-webmcp"], env };
+  // `state` adds cookies, storage, auth, saved state and sessions, which signed-in
+  // sites need; `core` alone leaves a bot with no session tooling at all.
+  return { command: input.binaryPath, args: ["mcp", "--tools", "core,state", "--no-webmcp"], env };
 }
 
 export function setBrowserViewport(binaryPath: string, env: NodeJS.ProcessEnv, timeoutMs = 30_000): Promise<boolean> {

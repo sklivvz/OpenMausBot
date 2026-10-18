@@ -109,6 +109,7 @@ export interface CoordinatorHost {
    * with the hand-off, never onto the shared thread, so it resolves from `source`. */
   levelOf(target: RoomAddress, source?: RoomAddress): { level: Level; driverKind?: string };
   chiefOf(address: RoomAddress): boolean;
+  personInputAllowed?(node: HandoffView): boolean;
   /** What the cut turn already did outward (sent, posted, paid): a turn that acted outward is not run again. */
   outward?(node: HandoffView): string[];
 }

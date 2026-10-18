@@ -2422,7 +2422,10 @@ describe("soul", () => {
       ] };
     store.applyTeamSetup(request);
     expect(new Store(selection).bot("created-by-chief")?.visibility).toEqual({ people: ["hr@example.test"] });
-    expect(new Store(selection).bot("created-by-chief")).toMatchObject({ composio: false, connectorTools: {}, approvePeerComms: false });
+    const createdByChief = new Store(selection).bot("created-by-chief");
+    expect(createdByChief).toMatchObject({ composio: false, approvePeerComms: false });
+    // No grants record: turning connected apps on later must expose the normal tools, not an empty grant.
+    expect(createdByChief?.connectorTools).toBeUndefined();
     const open = new Store(selection);
     const everyoneChief = open.createBot({ name: "Ops", section: "Ops" });
     open.patchBot(everyoneChief.id, { chiefOfStaff: true });

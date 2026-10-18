@@ -322,10 +322,10 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
             ...(org ? { publisher: { ...org.publisher }, ref: org.ref, sha256: org.sha256 } : {}),
           }
         : undefined;
-      // No connected apps (absence would mean allowed) and no approval level: an imported bot starts at the defaults.
+      // Connected apps off is the off state; no approval level means an imported bot starts at the defaults.
+      // Leaving the tool grants absent means turning connected apps on later exposes the normal tool surface.
       store.patchBot(created.id, {
         composio: false,
-        connectorTools: {},
         // The publisher's choice, with no card: recording only keeps evidence in this workspace.
         ...(agent?.recordBrowserSteps === true ? { recordBrowserSteps: true } : {}),
         ...(playbooks.length ? { playbooks } : {}),

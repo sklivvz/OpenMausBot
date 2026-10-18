@@ -1558,8 +1558,8 @@ export class Store {
           title: "", description: "", soul: "", notifications: true, color: COLORS[nextBots.length % COLORS.length], unread: false,
           resumeCursors: {}, createdAt, ...operation.fields, modelSelection,
           autoApprove: false, composio: false, approvePeerComms: false,
-          // Absent would mean every tool once connected apps are turned on.
-          connectorTools: {},
+          // No grants record: once a person turns connected apps on, the bot gets the normal tool surface.
+          // An empty record here meant "no tools" and made the enable switch a no-op.
           // A restricted Chief never creates a bot everyone sees.
           ...(chief.visibility && chief.visibility !== "everyone" ? { visibility: structuredClone(chief.visibility) } : {}),
           tasks: [{ threadId: operation.threadId, title: UNTITLED_THREAD, createdAt, updatedAt: createdAt, resumeCursors: {},
