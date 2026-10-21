@@ -25,3 +25,13 @@ name, a type, an extracted function, one shared helper. A rule ("never X",
 rule that guards correctness; fix the code.
 
 More specific `AGENTS.md` files override this note within their directories.
+
+## Fork maintenance
+
+Keep this fork current with both remotes: `origin` is the upstream project and
+`fork` is the user's repository. Fetch both before maintenance work, preserve
+local edits and fork commits, and integrate upstream on an isolated branch when
+histories diverge. Verify conflicts using the isolated fixtures before pushing.
+Keep `fork/main` synchronized with upstream by fast-forward when possible;
+preserve custom work on its existing branch. Never force-push to resolve drift.
+Report source synchronization separately from the version actually deployed.

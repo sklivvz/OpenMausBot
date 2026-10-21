@@ -29,6 +29,26 @@ malformed-file errors, network retry, dismissal during loading, and narrow/light
 layout. Screenshots go to `OMB_TABLE_EVIDENCE` or `/tmp/omb-rich-tables-evidence`.
 The supplied address must be loopback and name this fixture page.
 
+## Transcript scroll regression
+
+Launch the full app with a synthetic persisted table reply:
+
+```sh
+node --experimental-strip-types scripts/verify-table-chat-scroll.ts
+```
+
+Using the same Playwright and Chromium environment variables, pass its printed URL:
+
+```sh
+node scripts/testing/check-table-chat-scroll.mjs http://127.0.0.1:PORT/__table-chat-scroll.html
+```
+
+The check measures every ancestor of the inline table before expansion, while
+expanded, and after dismissal. It requires unchanged layout and scroll offsets
+at two window heights and reading positions, with both Escape and the Close
+button, and verifies focus return. All conversations belong to the temporary
+fake-engine workspace. Ctrl-C cleans up the fixture.
+
 ## Focused regression checks
 
 ```sh
