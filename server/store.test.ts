@@ -516,7 +516,7 @@ describe("Store", () => {
   });
 
   it("createBot seeds a greeting without promising engine-specific tools", () => {
-    const store = new Store(selection);
+    const store = new Store(selection, undefined, undefined, "en");
     const bot = store.createBot();
 
     const messages = store.messagesFor(bot.threadId);
@@ -527,6 +527,15 @@ describe("Store", () => {
       text: `Hi, I'm ${bot.name}. What would you like me to do?`,
     });
     expect(bot.modelSelection).toEqual(selection());
+  });
+
+  it("reads the current language when creating a bot", () => {
+    let language = "en";
+    const store = new Store(selection, undefined, undefined, () => language);
+    language = "pt-BR";
+
+    const bot = store.createBot();
+    expect(store.messagesFor(bot.threadId)[0]?.text).toBe(`Oi, eu sou ${bot.name}. O que você gostaria que eu fizesse?`);
   });
 
   it("clears provider-owned voice ids as one durable mutation", () => {
@@ -1516,16 +1525,28 @@ describe("Store", () => {
     expect(reloaded.bot(bot.id)?.resumeCursors).toEqual({ claude: "sess-abc", codex: "thread-xyz" });
   });
 
-  it("seedIfEmpty creates exactly one starter bot, once", () => {
+  it("seedIfEmpty starts a fresh workspace with one bot, the Chief of Staff, once", () => {
     const store = new Store(selection);
     store.seedIfEmpty();
     expect(store.bots).toHaveLength(1);
+    expect(store.bots[0], "the first bot a new person meets is their Chief of Staff").toMatchObject({ chiefOfStaff: true, hidden: false });
+    expect(store.bots[0], "the role is the flag, so an untouched starter still reads as unused when sending to the Cloud")
+      .toMatchObject({ title: "", description: "", soul: "" });
     store.seedIfEmpty();
     expect(store.bots).toHaveLength(1);
 
     const reloaded = new Store(selection);
     reloaded.seedIfEmpty();
     expect(reloaded.bots).toHaveLength(1);
+    expect(reloaded.bots[0]?.chiefOfStaff).toBe(true);
+  });
+
+  it("seedIfEmpty leaves an existing workspace without a Chief as it is", () => {
+    const store = new Store(selection);
+    const existing = store.createBot();
+    store.seedIfEmpty();
+    expect(store.bots.map((bot) => bot.id)).toEqual([existing.id]);
+    expect(new Store(selection).bot(existing.id)?.chiefOfStaff).toBeFalsy();
   });
 
   it("chains appended messages and keeps the newest as active leaf", () => {
@@ -1794,7 +1815,7 @@ describe("Store change stream", () => {
     const titled = store.titleGroupTaskFromFirstMessage(group.id, "Audit the payroll", task.threadId);
     expect(titled?.threadId).toBe(task.threadId);
     expect(titled?.title).toBe("Audit the payroll");
-    store.renameGroupTask(group.id, task.threadId, "Payroll audit");
+    store.patchGroupTask(group.id, task.threadId, { title: "Payroll audit" });
     expect(store.retitleGroupTask(group.id, task.threadId, "Audit the payroll", "Payroll checks")).toBeNull();
     expect(store.activeGroupTask(group.id)!.title).toBe("Payroll audit");
     const fresh = store.createGroupTask(group.id)!.threadId;

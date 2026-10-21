@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../scripts/control-omb.ts";
 import { waitForExit } from "./testing/cleanup.ts";
+import { splitLaunchNote } from "./testing/launch-note.ts";
 
 it("reports every run into the bot's main thread while fresh executions, approvals, deletion and unread stay reachable", async () => {
   const fixture = await launchVerificationServer();
@@ -43,7 +44,8 @@ it("reports every run into the bot's main thread while fresh executions, approva
       completed.push(finished);
       const dump = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
       expect(dump.argv).not.toContain("--resume");
-      expect(JSON.stringify(dump.prompt)).not.toContain("hello from fake claude");
+      // Its recent-work instructions may name the last run; the message itself carries no earlier transcript.
+      expect(JSON.stringify(splitLaunchNote(dump.prompt).prompt)).not.toContain("hello from fake claude");
       evidence.push(await control(["wait", "--bot", bot.id, "--task", finished.threadId]));
       evidence.push(await control(["messages", "--bot", bot.id, "--task", finished.threadId, "--limit", "10"]));
     }
@@ -166,7 +168,7 @@ it("reports a routine made in a chat into that chat once the person writes there
     const { task } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Planning" }, 201);
     const chat = task.threadId as string;
     writeFileSync(planPath, JSON.stringify({ [bot.id]: { turns: [
-      { steps: [{ tool: "propose_routine", arguments: {
+      { steps: [{ tool: "create_trigger", arguments: { when: "schedule",
         name: "Chat report", instructions: "Report the fixture state; no external services.",
         schedule: { type: "cron", expression: "0 9 1 * *", timeZone: "UTC" },
       } }], reply: "The routine is scheduled." },
@@ -184,8 +186,9 @@ it("reports a routine made in a chat into that chat once the person writes there
     expect(run.resultsThreadId).toBe(chat);
     await expect.poll(async () => (await api("GET", "/api/routines")).runs.find((candidate: any) => candidate.id === run.id)?.status, { timeout: 20_000 }).toBe("completed");
     const finished = (await api("GET", "/api/routines")).runs.find((candidate: any) => candidate.id === run.id);
-    expect((await messages(chat)).find((message) => message.routineRun?.runId === run.id)?.routineRun)
-      .toMatchObject({ status: "completed", executionThreadId: finished.threadId });
+    // The chat that made it keeps one live trigger card instead of a card per run; the run still marks it unread.
+    expect((await messages(chat)).some((message) => message.routineRun?.runId === run.id)).toBe(false);
+    expect((await messages(chat)).filter((message) => message.card?.routineRequest?.resultId === routineId)).toHaveLength(1);
     expect((await messages(first)).some((message) => message.kind === "routine.run")).toBe(false);
     const saved = (await api("GET", "/api/bots")).bots.find((candidate: any) => candidate.id === bot.id);
     expect(saved.tasks.filter((candidate: any) => !candidate.routineRunId).map((candidate: any) => candidate.threadId).sort())

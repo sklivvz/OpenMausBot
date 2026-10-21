@@ -2,16 +2,17 @@ import { Children, createElement, isValidElement, type EffectCallback, type Reac
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CloudLendingBridge, CloudLendingSnapshot } from "../../electron/computer-sharing.mjs";
-import { setLocale } from "@/lib/i18n";
+import { setLocale, t } from "@/lib/i18n";
+import { localeChoices, locales } from "@/locales";
 const f = vi.hoisted(() => ({ values: [] as unknown[], index: 0, effects: [] as EffectCallback[] }));
 vi.mock("react", async original => ({ ...await original<typeof import("react")>(),
   useState: (initial: unknown) => { const index = f.index++; if (!(index in f.values)) f.values[index] = initial; return [f.values[index], (next: unknown) => { f.values[index] = next; }]; },
   useRef: (initial: unknown) => { const index = f.index++; if (!(index in f.values)) f.values[index] = { current: initial }; return f.values[index]; },
   useEffect: (effect: EffectCallback) => { f.effects.push(effect); },
 }));
-import { CloudLending, lendingStatusKey } from "./CloudLending";
+import { CloudLending, lendingFailureKey, lendingStatusKey, lendingStoppedLine, lentWhat } from "./CloudLending";
 
-type Node = ReactElement<{ children?: ReactNode; onClick?: () => void; onChange?: (event: { target: { checked: boolean } }) => void; role?: string; type?: string; "aria-label"?: string; disabled?: boolean; checked?: boolean }>;
+type Node = ReactElement<{ children?: ReactNode; onClick?: () => void; onChange?: (event: { target: { checked: boolean } }) => void; role?: string; type?: string; "aria-label"?: string; disabled?: boolean; checked?: boolean; "data-lending-more"?: boolean }>;
 function nodes(value: ReactNode): Node[] { if (!isValidElement(value)) return []; const node = value as Node; return [node, ...Children.toArray(node.props.children).flatMap(nodes)]; }
 let bridge: CloudLendingBridge;
 function render() { f.index = 0; f.effects = []; let tree: ReactNode; function Capture() { tree = CloudLending({ bridge }); return tree; }
@@ -38,7 +39,7 @@ it("says where lending stands in one line", () => {
   expect(lendingStatusKey({ ...lent, state: { ...lent.state!, busy: true } }, true)).toBe("lending.status.busy");
   expect(lendingStatusKey({ ...lent, state: { ...lent.state!, connected: false, problem: "connect-first" } }, true)).toBe("lending.status.connectFirst");
   expect(lendingStatusKey({ ...lent, state: { ...lent.state!, connected: false } }, true)).toBe("lending.status.starting");
-  expect(lendingStatusKey(off, true)).toBe("lending.status.chooseSomething");
+  expect(lendingStatusKey(off, true)).toBe("lending.status.starting");
   expect(lendingStatusKey(off, false)).toBeNull();
   expect(lendingStatusKey({ ...off, state: { ...off.state!, problem: "signed-out" } }, false)).toBe("lending.status.signedOut");
 });
@@ -48,25 +49,37 @@ it("shows nothing until the person is signed in to a known Cloud", async () => {
   expect(render().html).toBe("");
 });
 
-it("is a switch, off by default; turning it on shows the choices and lends nothing until one is chosen", async () => {
+const more = () => render().nodes.find(node => node.props["data-lending-more"])!.props.onClick!();
+
+it("is one switch, off by default; turning it on lends at once (main picks the usual folders when none were chosen) and says what is lent", async () => {
   await ready(off);
   let view = render();
   expect(view.html).toContain("Let My Cloud use this computer");
   expect(view.html).not.toContain("Apps and screen");
   toggle().props.onClick!();
   await flush();
+  expect(bridge.save).toHaveBeenCalledExactlyOnceWith({ folders: [], screen: false });
+  const usual = ["Desktop", "Documents", "Downloads"].map((name, i) => ({ ...folder, id: `${i}1111111-1111-4111-8111-111111111111`, name, path: `/Users/me/${name}` }));
+  await ready({ ...lent, state: { ...lent.state!, folders: usual } });
   view = render();
-  expect(view.html).toContain("Choose what My Cloud can use.");
+  expect(view.html).toContain("My Cloud can use Desktop, Documents, and Downloads (read only) on this computer.");
+  // The choices wait behind Choose what's lent.
+  expect(view.html).not.toContain("Add folder");
+  more();
+  view = render();
+  expect(view.html).toContain("Add folder");
   expect(view.html).toContain("If someone else writes in a conversation, it can no longer use your computer.");
-  expect(view.html).toContain("Apps and screen");
-  expect(bridge.save).not.toHaveBeenCalled();
-  view.nodes.find(node => node.type === "button" && Children.toArray(node.props.children).includes("Add folder"))!.props.onClick!();
-  await flush();
-  expect(bridge.save).toHaveBeenCalledExactlyOnceWith({ folders: [folder], screen: false });
+});
+
+it("names what is lent in one phrase", () => {
+  expect(lentWhat([{ name: "Plans", write: false }], false)).toBe("Plans (read only)");
+  expect(lentWhat([{ name: "Plans", write: true }, { name: "Notes", write: false }], true)).toBe("Plans (can edit), Notes, and apps and screen");
+  expect(lentWhat([], true)).toBe("apps and screen");
 });
 
 it("while lent, says so, shows this computer's activity, and removing the last choice stops lending instead of saving nothing", async () => {
   await ready({ ...lent, state: { ...lent.state!, busy: true }, activity: [{ at: 1_790_000_000_000, server: "My Cloud", origin: "https://c.test", action: "read_file", detail: "Plans/todo.md", ok: true }] });
+  more();
   const view = render();
   expect(view.html).toContain("My Cloud is using this computer now.");
   expect(view.html).toContain("Plans/todo.md");
@@ -86,8 +99,64 @@ it("turning the switch off stops lending at once", async () => {
 
 it("apps and screen cannot be chosen until this app's computer control is ready", async () => {
   await ready({ ...lent, screenAvailable: false });
+  more();
   const view = render();
   const checkbox = view.nodes.find(node => node.type === "input" && node.props.checked === false && node.props.disabled === true);
   expect(checkbox).toBeTruthy();
   expect(view.html).toContain("Set up computer control for this app first");
+});
+
+// A customer saw the switch off while his computer still showed apps and screen lent, with no reason given.
+it("an off switch says why and since when, keeps the choices, and the switch lends the same again", async () => {
+  const at = new Date(2026, 9, 7, 14, 2).getTime();
+  const stopped: CloudLendingSnapshot = { available: true, screenAvailable: true, activity: [],
+    state: { enabled: false, folders: [folder], screen: true, busy: false, stopped: { reason: "signed-out", at } } };
+  expect(lendingStoppedLine(stopped.state)).toBe("Off since Oct 7, 2026, 2:02 PM, when you signed out of MausBot Cloud.");
+  expect(lendingStoppedLine({ ...stopped.state!, stopped: { reason: "you", at } })).toBe("Off since Oct 7, 2026, 2:02 PM: you turned it off.");
+  expect(lendingStoppedLine({ ...stopped.state!, stopped: { reason: "something-new", at } })).toBe("Off since Oct 7, 2026, 2:02 PM.");
+  expect(lendingStoppedLine(lent.state)).toBeNull();
+  await ready(stopped);
+  const view = render();
+  expect(view.html).toContain('data-lending-stopped="signed-out"');
+  expect(view.html).not.toContain("Apps and screen<");
+  expect(view.html).not.toContain("Lend the same again");
+  toggle().props.onClick!();
+  await flush();
+  expect(vi.mocked(bridge.save).mock.calls).toEqual([[{ folders: [folder], screen: true }]]);
+});
+
+it("says how it is lent when Computer access lent it, terminal included, and when My Cloud last used it", async () => {
+  const viaAccess: CloudLendingSnapshot = { available: true, screenAvailable: true,
+    activity: [{ at: Date.now() - 3 * 60_000, server: "My Cloud", origin: "https://omb-u-1.fly.dev", action: "computer_call", detail: "", ok: true }],
+    state: { enabled: true, folders: [], screen: true, busy: false, via: "access", terminal: true, problem: "access-off" } };
+  expect(lendingStatusKey(viaAccess, true)).toBe("lending.status.accessOff");
+  await ready(viaAccess);
+  const html = render().html;
+  expect(html).toContain("Lent through Computer access in Settings → Servers, terminal included.");
+  expect(html).toContain("My Cloud last used this computer 3 minutes ago.");
+  await ready({ ...lent, activity: [] });
+  expect(render().html).toContain("My Cloud hasn&#x27;t used this computer yet.");
+});
+
+it("names a refusal main explains in plain words, and keeps Try again for the rest", () => {
+  const ipc = (message: string) => new Error(`Error invoking remote method 'lending:save': Error: ${message}`);
+  expect(lendingFailureKey(ipc("lending-refused:home-or-root"))).toBe("lending.refused.homeOrRoot");
+  expect(lendingFailureKey(ipc("lending-refused:not-folder"))).toBe("lending.refused.notFolder");
+  expect(lendingFailureKey(ipc("lending-refused:too-many"))).toBe("lending.refused.tooMany");
+  expect(lendingFailureKey(ipc("lending-refused:nothing-to-lend"))).toBe("lending.refused.nothingToLend");
+  expect(lendingFailureKey(ipc("lending-refused:something-new"))).toBe("lending.failed");
+  expect(lendingFailureKey(ipc("socket hang up"))).toBe("lending.failed");
+  expect(lendingFailureKey("not an error")).toBe("lending.failed");
+});
+
+it("nothing to lend names the button the person sees, in every language, and Settings → MausBot Cloud where it is translated", () => {
+  const unseen = localeChoices.flatMap(({ code }) => {
+    setLocale(code);
+    const said = t("lending.refused.nothingToLend");
+    const translated = Object.hasOwn(locales[code]!, "lending.refused.nothingToLend");
+    return [t("lending.more"), ...(translated ? [t("settings.title"), t("settings.section.cloudAccount")] : [])]
+      .filter((label) => !said.includes(label)).map((label) => `${code}: ${label}`);
+  });
+  setLocale("en");
+  expect(unseen).toEqual([]);
 });

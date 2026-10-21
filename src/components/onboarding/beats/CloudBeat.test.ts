@@ -69,6 +69,21 @@ it("the beat's offer: an account that may buy and the Admin's offer; nothing for
   await mount(createElement(Probe)); expect(host.textContent, "a page that is not this computer's own").toBe("none");
 });
 
+it("no beat once main says this desktop has seen the Cloud Pro popup; it waits for main's answer, and none is no beat", async () => {
+  const notices = (state: () => Promise<{ seen: string[]; cloud: boolean }>) => ({ desktopNotices: { state: vi.fn(state) } });
+  desktop(signedOut, async () => OFFER, notices(async () => ({ seen: ["cloud-pro-update-2026-10"], cloud: true })));
+  await mount(createElement(Probe)); expect(host.textContent, "seen").toBe("none");
+  await act(async () => root!.unmount()); root = null;
+  let answer: (seen: string[]) => void = () => {};
+  desktop(signedOut, async () => OFFER, notices(() => new Promise(resolve => { answer = seen => resolve({ seen, cloud: true }); })));
+  await mount(createElement(Probe)); expect(host.textContent, "main has not answered").toBe("none");
+  await act(async () => { answer([]); await Promise.resolve(); });
+  expect(host.textContent, "not seen").toBe("offer:2");
+  await act(async () => root!.unmount()); root = null;
+  desktop(signedOut, async () => OFFER, notices(async () => { throw new Error("only available in this app's window"); }));
+  await mount(createElement(Probe)); expect(host.textContent, "no answer").toBe("none");
+});
+
 it("an offer that has not come in time leaves the beat out for this welcome, and a late one changes nothing", async () => {
   vi.useFakeTimers();
   let late: (offer: CloudOffer) => void = () => {};
@@ -85,7 +100,7 @@ it("the beat: what Cloud does, the night shift scene, the Admin's offer in one l
   const beat = () => createElement(CloudBeat, { offer: OFFER, onNext, onSkip, setMascot, bump: vi.fn() });
   await mount(beat());
   const text = host.textContent!;
-  for (const words of ["MausBot Cloud is your own computer in the cloud. Your bots keep going 24/7, even when this computer is off.",
+  for (const words of ["MausBot Cloud runs your bots in the cloud. They keep going 24/7, even when this computer is off.",
     "Routines run on time, day and night", "Talk to your bots from your phone", "Bring everything over in one click",
     "Free for 3 days, then from $29/month + tax. Includes $5 of Claude credit. 14-day money-back.", "Start free trial", "Not now",
     "You can add a Cloud any time from the switcher."]) expect(text).toContain(words);
