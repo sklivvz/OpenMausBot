@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { routePortfolioTasks, type OwnershipTask } from "../../server/objective-ownership.ts";
+import { deliveryObservations } from "../../server/objective-portfolio.ts";
 import { ObjectiveController, atomicJson, loopbackApi, type ObjectiveConfig } from "../../server/objective-controller.ts";
 
 const root = process.env.OMB_OBJECTIVE_STATE ?? "/state";
@@ -79,6 +80,7 @@ while (running) {
     }
   }
   atomicJson(join(root, "health.json"), { at: Date.now(), sourceCheckedAt: source?.checkedAt, sourceError, capacity,
-    portfolios: [...controllers.values()].map(c => ({ id: c.config.id, botId: c.config.botId, threadId: c.config.threadId, status: c.state.status, paused: existsSync(join(root, c.config.id, "paused")), cycle: c.state.cycle, detail: c.state.detail, objectives: c.state.checkpoint?.objectives })) });
+    portfolios: [...controllers.values()].map(c => ({ id: c.config.id, botId: c.config.botId, threadId: c.config.threadId, status: c.state.status, paused: existsSync(join(root, c.config.id, "paused")), cycle: c.state.cycle, detail: c.state.detail, objectives: c.state.checkpoint?.objectives,
+      delivery: { basis: "last_settled_checkpoint", sendId: c.state.checkpoint?.sendId, observations: deliveryObservations(c.state.checkpoint?.objectives, Date.now()) } })) });
   await new Promise(resolve => setTimeout(resolve, 2000));
 }

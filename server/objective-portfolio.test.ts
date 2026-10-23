@@ -27,3 +27,24 @@ it("keeps future scheduled work out of immediate execution and wakes when due", 
   expect(() => validatePortfolio([{ ...objective("review"), state: "scheduled" }], ["review"], [], 1000)).toThrow(/recorded wakeAt/);
   expect(portfolioContinuation(validatePortfolio([{ ...objective("review", "waiting"), wakeAt: 500 }], ["review"], [], 1000), 1000)).toEqual({ state: "ready" });
 });
+
+it("rejects incomplete timing contracts without invalidating legacy portfolios", () => {
+  const delivery = { outcome: "Usable review packet", owner: "Lead", scope: "Review only", acceptance: "Findings with source links", timingSource: "Lead estimate", dueAt: 4000, checkAt: 2000, status: "active" as const, evidenceRefs: [] };
+  expect(() => validatePortfolio([objective("legacy")], ["legacy"], [], 1000)).not.toThrow();
+  for (const patch of [{ checkAt: 4000 }, { dueAt: NaN }, { timingSource: "" }, { scope: "" }, { status: "delivered" }]) {
+    expect(() => validatePortfolio([{ ...objective("review"), delivery: { ...delivery, ...patch } }], ["review"], [], 1000)).toThrow(/Delivery commitment/);
+  }
+});
+
+it("observes deadlines without completing, waking or cancelling work", async () => {
+  const { deliveryObservations } = await import("./objective-portfolio.ts");
+  const o = { ...objective("review", "waiting"), wakeAt: 9000, delivery: { outcome: "Usable review packet", owner: "Lead", scope: "Review only", acceptance: "Findings with source links", timingSource: "User message", dueAt: 4000, checkAt: 2000, status: "active" as const, evidenceRefs: [] } };
+  const before = JSON.stringify(o);
+  expect([1000, 2000, 4000].map(now => deliveryObservations([o], now)[0].status)).toEqual(["upcoming", "check_due", "overdue"]);
+  expect(portfolioContinuation([o], 4000)).toEqual({ state: "waiting", wakeAt: 9000 });
+  expect(JSON.stringify(o)).toBe(before);
+  expect(deliveryObservations([{ ...o, state: "stopped" }], 5000)[0].status).toBe("stopped");
+  expect(deliveryObservations([{ ...o, delivery: { ...o.delivery, status: "delivered", evidenceRefs: ["artifact"] } }], 5000)[0]).toMatchObject({ status: "delivery_claimed", businessSuccess: "unverified" });
+  expect(deliveryObservations([{ ...o, delivery: { ...o.delivery, status: "delivered" } }], 5000)[0].status).toBe("invalid_record");
+  expect(deliveryObservations([objective("legacy")], 5000)[0].status).toBe("unrecorded");
+});

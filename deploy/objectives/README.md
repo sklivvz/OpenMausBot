@@ -45,6 +45,22 @@ waits until its recorded time or new evidence; ongoing record maintenance is not
 an endlessly ready objective. The controller does not establish semantic truth or
 repair arbitrary provider failures.
 
+Leads use the `delivery-commitments` skill for completion targets, specialist
+return times, early risk checks and scoped acceptance. The optional objective
+`delivery` record contains outcome, owner, scope, acceptance, timingSource,
+dueAt, checkAt, status and evidenceRefs. Times are Unix milliseconds; the check
+precedes delivery. Status is active, delivered or missed. Delivery claims require
+an artifact or receipt. Existing checkpoints without commitments remain valid.
+
+Health includes deterministic timing observations from the last settled
+checkpoint: unrecorded, upcoming, check_due, overdue, delivery_claimed,
+miss_reported, stopped or invalid_record. The checkpoint sendId identifies its
+source. These observations do not start work, cancel assignments, change user
+deadlines or verify business success. They cannot see an active turn's unreported
+progress. Missing commitments are visible as unrecorded, not invented deadlines.
+The lead uses existing scheduled wakes and task history for early checks and
+preserving original and revised commitments.
+
 Source routing uses explicit accountable owners, inherited parent ownership and
 project fallback for unresolved records. Cross-team descendants remain visible
 as dependencies, with their own accountable portfolio. An explicit human owner
