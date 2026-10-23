@@ -16,13 +16,17 @@ export function auditCalendar(text: string, now = new Date(), horizonDays = 7) {
     if (!key || seen.has(key)) throw new Error(`Missing or duplicate calendar key: ${key}`);
     seen.add(key);
     const dated = /^\d{4}-\d{2}-\d{2}$/.test(row.date);
-    const verifiedPublished = row.state === 'published' && (row.publication_url || '').startsWith('https://');
-    const bucket = verifiedPublished ? 'published' : row.state === 'published_user_reported' ? 'published_user_reported' : !dated ? 'undated' : row.date < today ? 'overdue' : row.date === today ? 'today' : row.date <= end ? 'next_seven_days' : 'later';
+    const state = row.state.trim().toLowerCase();
+    const verifiedPublished = state === 'published' && (row.publication_url || '').startsWith('https://');
+    const bucket = verifiedPublished ? 'published' : state === 'published_user_reported' ? 'published_user_reported' :
+      state === 'sent' ? 'sent_recorded' : state === 'published' ? 'publication_claimed' :
+      ['hold', 'paused', 'stopped', 'cancelled', 'canceled'].includes(state) ? 'held' :
+      !dated ? 'undated' : row.date < today ? 'overdue' : row.date === today ? 'today' : row.date <= end ? 'next_seven_days' : 'later';
     return { ...row, key, bucket };
   });
-  const counts = Object.fromEntries(['overdue', 'today', 'next_seven_days', 'undated', 'later', 'published', 'published_user_reported'].map(bucket => [bucket, rows.filter(r => r.bucket === bucket).length]));
+  const counts = Object.fromEntries(['overdue', 'today', 'next_seven_days', 'undated', 'later', 'published', 'published_user_reported', 'sent_recorded', 'publication_claimed', 'held'].map(bucket => [bucket, rows.filter(r => r.bucket === bucket).length]));
   return { checkedAt: now.toISOString(), dateBasis: 'UTC dates; exact slot and timezone must be read from the shared calendar', sourceSha256: crypto.createHash('sha256').update(text).digest('hex'), totalRows: rows.length, counts, rows,
-    limits: 'Read-only local register inventory. Hold/drafted are recorded states, not proof that preparation is finished or permission is absent. Reconcile with the live shared calendar and latest user decisions. This command neither publishes nor changes state.' };
+    limits: 'Read-only local register inventory. Sent/publication labels and links are recorded evidence, not independently verified delivery or business success. Reconcile missing receipts without sending again. Held rows remain visible with their dates but are not executable overdue work. Reconcile scope with the live shared calendar and latest user decisions. This command neither publishes nor changes state.' };
 }
 
 if (process.argv[1]?.endsWith('marketing-calendar-audit')) {

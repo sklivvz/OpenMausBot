@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { reconcileObjectiveConversation } from "./objective-reconciliation.ts";
 import { deliveryObservations } from "./objective-portfolio.ts";
 import { ObjectiveController, atomicJson, loopbackApi, type ObjectiveConfig } from "./objective-controller.ts";
 
@@ -54,6 +55,8 @@ it("continues one business objective across real guarded requests and a controll
     expect(controller.state.cycle).toBe(3);
     const page = await api("GET", `/api/threads/${task.threadId}/messages?limit=100`);
     expect(page.messages.filter((m: any) => m.role === "user")).toHaveLength(3);
+    const lastTerminal = page.messages.findLast((m: any) => m.turnTerminal);
+    expect(reconcileObjectiveConversation(page.messages, page.activeLeafId, { leafId: lastTerminal.id }, {}).status).toBe("ready");
     expect(page.messages.filter((m: any) => m.role === "user").every((m: any) => m.relayed)).toBe(true);
     evidence.push({ final: JSON.parse(readFileSync(join(directory, "state.json"), "utf8")), page, limitation: "Scripted provider and fixture-authored checkpoints prove lifecycle only, not live agent judgment or business acceptance." });
   } finally {
@@ -148,6 +151,8 @@ it("continues after a settled user correction without replaying the previous req
     const page = await api("GET", `/api/threads/${task.threadId}/messages?limit=100`);
     expect(page.messages.filter((m: any) => m.sendId === firstId)).toHaveLength(1);
     expect(page.messages.filter((m: any) => m.role === "user")).toHaveLength(3);
+    const lastTerminal = page.messages.findLast((m: any) => m.turnTerminal);
+    expect(reconcileObjectiveConversation(page.messages, page.activeLeafId, { leafId: lastTerminal.id }, {}).status).toBe("ready");
   } finally {
     writeFileSync(`${fixture.info.logPath}.objective-reconciliation.json`, JSON.stringify(evidence, null, 2));
     console.log(`Reconciliation evidence: ${fixture.info.logPath}.objective-reconciliation.json`);

@@ -52,3 +52,27 @@ it("requires the latest resumed turn to succeed and waits for all teammates", ()
   expect(check([source, first, { ...later, turnSucceeded: true }], { waitingForTeammates: true }).status).toBe("waiting");
   expect(check([source, first, { ...later, turnSucceeded: true }]).status).toBe("ready");
 });
+
+it("reconciles passive cards after a proven completed checkpoint without replaying it", () => {
+  const done = { ...terminal, parentId: source.id, requestMessageId: source.id };
+  const digest: WireMessage = { ...done, id: "digest", kind: "digest", parentId: done.id, turnTerminal: undefined };
+  const options: WireMessage = { id: "options", role: "bot", kind: "options", at: 4, parentId: digest.id };
+  const messages = [source, done, digest, options];
+  expect(reconcileObjectiveConversation(messages, options.id, { leafId: digest.id }, {})).toMatchObject({ status: "ready", sourceMessageId: source.id });
+  expect(reconcileObjectiveConversation([source, { ...done, turnSucceeded: false }, { ...digest, turnSucceeded: false }, options], options.id, { leafId: digest.id }, {}).status).toBe("intervened");
+  expect(reconcileObjectiveConversation(messages, options.id, { leafId: digest.id }, { busy: true }).status).toBe("waiting");
+  expect(reconcileObjectiveConversation([{ ...source, requestCancelled: true }, done, digest, options], options.id, { leafId: digest.id }, {}).status).toBe("stopped");
+  const later = { ...correction, id: "later", parentId: options.id };
+  expect(reconcileObjectiveConversation([...messages, later], later.id, { leafId: digest.id }, {}).status).toBe("intervened");
+});
+
+it("does not mistake a proven exact retry for a new oversized user instruction", () => {
+  const original = { ...source, relayed: true, text: "Complete source snapshot: " + "x".repeat(18000) };
+  const failed = { ...terminal, id: "failed", parentId: source.id, requestMessageId: source.id, turnSucceeded: false };
+  const retry = { ...original, id: "retry", relayed: undefined, sendId: "retry-id" };
+  const steer = { ...correction, id: "steer", parentId: retry.id, steered: true, text: "Keep publication stopped" };
+  const done = { ...terminal, parentId: steer.id, requestMessageId: retry.id };
+  expect(reconcileObjectiveConversation([original, failed, retry, steer, done], done.id, { leafId: failed.id }, {})).toMatchObject({ status: "ready", instructions: [{ messageId: steer.id, text: steer.text }] });
+  const changed = { ...retry, text: retry.text + "new instruction" };
+  expect(reconcileObjectiveConversation([original, failed, changed, steer, done], done.id, { leafId: failed.id }, {}).status).toBe("intervened");
+});
