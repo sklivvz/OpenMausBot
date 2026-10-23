@@ -81,3 +81,9 @@ A publishing hold leaves independently authorized copy/design preparation availa
 structurally_ready means only that the supplied fields agree; Darcy still owns
 meaning, source authority and business suitability. Reuse this brief/version for
 specialist work instead of rebuilding its checklist at every turn.
+
+Use review-packet.prepare_review_packet to verify the existing decision message,
+required artifacts and exact versions, and format their usable links. Include
+the assembled-output receipt where relevant; retain failed and unknown checks.
+Deliver the complete packet through the existing user conversation. The tool
+does not send it, approve it or prove a waiting_user dependency by itself.

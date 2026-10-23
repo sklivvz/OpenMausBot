@@ -12,7 +12,8 @@ connection is one concrete setup blocker to escalate; do not spend turns
 rediscovering editor mechanics or ask the user to perform the production work.
 
 Use the documented manifest and payload schema in
-this skill's `API.md` reference (source: `deploy/keila/README.md`).
+`/data/.openmausbot/providers/automation-tools/current/keila-API.md`
+(source: `deploy/keila/README.md`).
 Operate only on the exact authorized task, preserve user holds, and keep sent
 campaigns untouched. A template-install task does not authorize filling it with
 issue copy. A draft-preparation task does not authorize sending. Copy approved
@@ -33,6 +34,13 @@ available DeepSeek executor); no model is used inside the API operations. Jev ma
 classify a bounded ambiguous routing decision, but neither Jev nor an executor
 can turn uncertain permission into approval. Keep design with Edna and copy with
 Chandler; Liz assembles and verifies.
+
+For saved assembled HTML, use assembled-output.verify_assembled_output with
+the exact artifact hash and requirements from the current brief. The manifest
+contract is in `/data/.openmausbot/providers/automation-tools/current/assembled-output-API.md`.
+Return its receipt with the artifact. Mechanical passes do not establish visual
+layout, email-client rendering or URL reachability; retain those unknowns for
+the responsible reviewer. The tool does not rewrite copy or design.
 
 
 
