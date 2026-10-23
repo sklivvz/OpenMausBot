@@ -64,7 +64,7 @@ callers must also invalidate receipts when artifact or brief versions change.
 
 ## Installation
 
-Build with `node deploy/review-packet/build.mjs`. The resulting ignored bundle is
+Build with `node deploy/review-packet/build.mjs`. The generated bundle is
 `deploy/local/review-packet-mcp.cjs`. Install it with an absolute MCP command and
 set `REVIEW_PACKET_APP_URL` to the existing app origin when different from
 `http://127.0.0.1:8799`. The app reserves the `OMB_` environment prefix, so the
@@ -75,7 +75,7 @@ of `{ "botId": "...", "threadId": "..." }`. This provides destination
 provenance only; it grants no editing/sending authority. Consumers embedding
 `createReviewPacket` can supply destinations directly from the genuine request.
 
-Root owns shared build/Docker registration and live deployment. This branch
+Root owns shared build/Docker registration, the generated-bundle ignore entry and live deployment. This branch
 changes only `deploy/review-packet`; it does not alter existing bot selections,
 skills, server routes or deployment files.
 
