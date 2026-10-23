@@ -105,12 +105,19 @@ it("holds acceptance claims without converting them into completed business outc
   expect(f.controller.state.status).toBe("verification"); f.restart(); await f.controller.tick(); expect(f.sends).toHaveLength(1);
 });
 
-it.each(["Selected model is at capacity. Please try a different model.", "This Claude account has reached its weekly limit, which resets Oct 24, 12:00 PM (UTC). Until then, switch this bot to another engine or Claude account."])("recovers proven provider unavailability once with the configured fallback: %s", async (providerError) => {
+it.each([
+  ["working", "Selected model is at capacity. Please try a different model."],
+  ["working", "This Claude account has reached its weekly limit, which resets Oct 24, 12:00 PM (UTC)."],
+  ["working", "Your ChatGPT account (used by Codex) reached its Codex usage limit. This is OpenAI's limit, not your MausBot plan."],
+  ["maintenance", 'This Claude account has reached its usage limit (Claude says: "usage exhausted"). For now, switch this bot to another engine or Claude account.'],
+  ["maintenance", "Your ChatGPT account (used by Codex) reached its Codex usage limit. This is OpenAI's limit, not your MausBot plan."],
+])("recovers proven provider unavailability once from %s: %s", async (status, providerError) => {
   const root = mkdtempSync(join(tmpdir(), "omb-objective-recovery-")); roots.push(root);
   const config: ObjectiveConfig = { id: "recovery", botId: "owner", threadId: "thread", approvalMode: "full", objective: "Finish accepted outcomes", instructions: "Reconcile prior work", initialLeafId: null, checkpointDirectory: join(root, "checkpoints"), recoveryModels: [{ instanceId: "claude", model: "configured-fallback" }] };
   const sends: any[] = [], patches: any[] = [];
   const api = async (method: string, path: string, body?: any) => {
     if (method === "PATCH") { patches.push(body); return {}; }
+    if (path === "/api/bots?messages=0") return { bots: [{ id: config.botId, tasks: [{ threadId: config.threadId }] }] };
     if (method === "POST") { sends.push(body); return {}; }
     if (path.includes("/requests/")) return { phase: "untracked", activeTurnId: null, activeLeafId: "failed-leaf", messages: [
       { sendId: sends.at(-1).sendId },
@@ -120,7 +127,9 @@ it.each(["Selected model is at capacity. Please try a different model.", "This C
     return { activeLeafId: sends.length ? "failed-leaf" : null };
   };
   let controller = new ObjectiveController(config, root, api);
-  await controller.tick(); await controller.tick();
+  await controller.tick();
+  if (status === "maintenance") controller.state.status = "maintenance";
+  await controller.tick();
   expect(patches).toEqual([{ modelSelection: config.recoveryModels![0] }]);
   expect(controller.state.status).toBe("ready");
   controller = new ObjectiveController(config, root, api);
@@ -130,4 +139,33 @@ it.each(["Selected model is at capacity. Please try a different model.", "This C
   await controller.tick();
   expect(controller.state.status).toBe("maintenance");
   expect(patches).toHaveLength(1);
+});
+
+it.each([
+  ["operator stop", "stopped"], ["active turn", "maintenance"],
+  ["pending teammate", "waiting"], ["successful outcome", "maintenance"],
+  ["unrecognized failure", "maintenance"],
+])("does not select a fallback for %s", async (condition, expected) => {
+  const root = mkdtempSync(join(tmpdir(), "omb-objective-recovery-refusal-")); roots.push(root);
+  const config: ObjectiveConfig = { id: "refusal", botId: "owner", threadId: "thread", approvalMode: "ask", objective: "Preserve fixture authority", instructions: "Use fixture data", initialLeafId: null, checkpointDirectory: join(root, "checkpoints"), recoveryModels: [{ instanceId: "claude", model: "fixture-fallback" }] };
+  const sends: any[] = [], patches: any[] = [];
+  const api = async (method: string, path: string, body?: any) => {
+    if (method === "PATCH") { patches.push(body); return {}; }
+    if (method === "POST") { sends.push(body); return {}; }
+    if (path.includes("/requests/")) return {
+      phase: condition === "pending teammate" ? "waiting" : "untracked",
+      activeTurnId: condition === "active turn" ? "live" : null,
+      activeLeafId: "failed-leaf", messages: [
+        { sendId: sends.at(-1).sendId, requestCancelled: condition === "operator stop" },
+        { kind: "activity", tool: { name: condition === "unrecognized failure" ? "error: Provider transport failed" : "error: Your ChatGPT account (used by Codex) reached its Codex usage limit.", ok: false } },
+        { turnSucceeded: condition === "successful outcome" },
+      ],
+    };
+    return { activeLeafId: null };
+  };
+  const controller = new ObjectiveController(config, root, api);
+  await controller.tick(); await controller.tick();
+  expect(controller.state.status).toBe(expected);
+  expect(patches).toEqual([]);
+  expect(sends).toHaveLength(1);
 });

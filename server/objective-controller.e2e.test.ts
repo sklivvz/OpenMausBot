@@ -66,8 +66,8 @@ it("continues one business objective across real guarded requests and a controll
   }
 }, 90_000);
 
-it("uses configured fallback after a real fixture provider capacity error without replacing the objective thread", async () => {
-  const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_MODE: "api-error", FAKE_CLAUDE_API_ERROR: "Selected model is at capacity. Please try a different model." });
+it("recovers a maintained provider quota failure with configured fallback in the same objective thread", async () => {
+  const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_MODE: "api-error", FAKE_CLAUDE_API_ERROR: "Your ChatGPT account (used by Codex) reached its Codex usage limit. This is OpenAI's limit, not your MausBot plan." });
   const api = loopbackApi(fixture.info.url);
   const evidence: unknown[] = [{ fixture: fixture.info }];
   try {
@@ -87,8 +87,9 @@ it("uses configured fallback after a real fixture provider capacity error withou
     writeFileSync(wrapper, `#!/usr/bin/env node\nprocess.env.FAKE_CLAUDE_MODE = 'happy';\nawait import(${JSON.stringify(new URL("./testing/fake-claude-cli.ts", import.meta.url).href)});\n`, { mode: 0o700 });
     await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).bots.some((b: any) => b.busy || b.tasks?.some((t: any) => t.busy)), { timeout: 10_000 }).toBe(false);
     await api("PATCH", "/api/instances/claude", { cli: wrapper });
+    controller.state.status = "maintenance";
     await controller.tick();
-    expect(controller.state.status).toBe("ready");
+    expect(controller.state.status, controller.state.detail).toBe("ready");
     expect(controller.state.recoveries).toBe(1);
     await api("POST", `/api/bots/${bot.id}/messages/${failedSnapshot.messageId}/edit`, { threadId: task.threadId, text: originalText, sendId: "fixture-exact-retry-1234" });
     await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/fixture-exact-retry-1234?threadId=${task.threadId}`)).phase, { timeout: 15_000 }).toBe("settled");

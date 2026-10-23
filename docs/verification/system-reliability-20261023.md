@@ -131,3 +131,21 @@ maintenance worktree; the prior image remains available. The Compose override
 now inherits the image selected by the local environment instead of shadowing it.
 The independent DeepSeek source work remains in its owner's worktree; this repair
 does not claim that work was committed or merged upstream.
+
+## Provider quota continuation
+
+After admission resumed, Finance and Sales started new cycles. Marketing and
+Legal retained failed resumed turns from the Codex account usage limit. The
+controller recognized model capacity and some Claude quota messages, but omitted
+the standardized Codex quota message and Claude's parenthesized usage detail.
+Controllers already in maintenance did not attempt their configured fallback.
+
+Recovery now recognizes these runtime error formats, checks the guarded request's
+ownership and failed outcome, and selects the next existing configured fallback.
+It preserves the failed turn's artifacts and requires reconciliation of prior
+effects. Stops, active turns, pending teammates, successful outcomes and unknown
+errors do not trigger fallback. Recovery clears the old reconciliation delay.
+Thirty-four controller/reconciliation checks passed, including an isolated live
+fixture recovering from maintenance through a real provider error and guarded
+continuation. This does not add fallback providers to configurations lacking them
+or claim to restore a provider's exhausted account quota.
