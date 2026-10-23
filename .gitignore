@@ -50,3 +50,5 @@ deploy/podman/.env.*
 /deploy/observability/observer.cjs
 
 /deploy/objectives/controller.mjs
+
+/deploy/local/keila-drafts-mcp.cjs

@@ -2,6 +2,7 @@ import { chmodSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const bundles = [
+  ["../deploy/keila/build.mjs", "../deploy/local/keila-drafts-mcp.cjs"],
   ["../deploy/objectives/build.mjs", "../deploy/objectives/controller.mjs"],
   ["../deploy/slop-detector/build.mjs", "../deploy/local/slop-detector-mcp.cjs"],
   ["../deploy/task-review/build.mjs", "../deploy/local/work-review-mcp.cjs"],
