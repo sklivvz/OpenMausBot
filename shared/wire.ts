@@ -549,6 +549,8 @@ export const movesThreadToTop = (message: Pick<WireMessage, "role" | "kind" | "p
   message.role === "user" ? !message.peerAsk : message.kind === "text" && (message.turnTerminal === true || !message.turnId);
 
 export interface OptionCardData {
+  /** A user-only, expiring approval for an exact Bolt checkout in one bot's browser profile. */
+  boltCheckoutRequest?: { checkoutHash: string; botId: string; profileKey: string; expiresAt: number };
   /** calls: one per outbound call the card covers, in subtitle order. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }> };
   /** `revision`: the entry as it applied without a person, so Undo can tell it changed since. */

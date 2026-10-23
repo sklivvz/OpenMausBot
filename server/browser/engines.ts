@@ -1,6 +1,7 @@
 // The bots' browser runs on agent-browser or, with browserEngine.engine set to "chrome", on OpenMausBot's own Chrome
 // driver. A session's spec says which: the new engine's names the profile it drives. Everything that reaches a browser
 // goes through the two routers here, which keep the agent-browser engine's API.
+import type { BoltPaymentAuthority } from "./bolt/runner.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
@@ -219,12 +220,12 @@ export class RuntimeRouter {
     this.#annotate = options.annotate;
   }
 
-  async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+  async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext, boltAuthority?: BoltPaymentAuthority): Promise<unknown> {
     const refusal = method === "tools/call" ? this.#refusal?.(spec, params) : null;
     if (refusal) return { isError: true, content: [{ type: "text", text: refusal }] };
     const target = chromeTarget(session, spec);
     if (method === "tools/list") {
-      const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx));
+      const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch, boltAuthority) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx));
       const tools = (result as { tools?: unknown })?.tools;
       return Array.isArray(tools) ? { ...result as object, tools: [...tools.filter((tool) => (tool as { name?: unknown })?.name !== SELVER_CONNECT_TOOL.name), SELVER_CONNECT_TOOL] } : result;
     }
@@ -258,7 +259,7 @@ export class RuntimeRouter {
       } finally { await unlink(temporary).catch(() => undefined); }
       return { content: [{ type: "text", text: JSON.stringify({ authenticated: true, account, sessionFile: path }) }] };
     }
-    const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx));
+    const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch, boltAuthority) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx));
     return this.#annotate ? this.#annotate(spec, result) : result;
   }
 

@@ -71,7 +71,7 @@ describe("the runtime router", () => {
   it("sends a new-engine session's calls to the browser service and every other to agent-browser", async () => {
     const { old, chrome, runtime } = engines();
     await expect(runtime.agentRpc("s", CHROME, "tools/call", { name: "agent_browser_open" })).resolves.toBe("chrome");
-    expect(chrome.service.agentRpc).toHaveBeenCalledWith({ session: "s", key: "bot:a" }, "tools/call", { name: "agent_browser_open" }, undefined);
+    expect(chrome.service.agentRpc).toHaveBeenCalledWith({ session: "s", key: "bot:a" }, "tools/call", { name: "agent_browser_open" }, undefined, undefined);
     await expect(runtime.agentRpc("s", AGENT_BROWSER, "tools/list", {})).resolves.toBe("agent-browser");
     expect(old.agentRpc).toHaveBeenCalledOnce();
     expect(chrome.service.agentRpc).toHaveBeenCalledOnce();

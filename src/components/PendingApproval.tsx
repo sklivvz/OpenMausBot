@@ -79,7 +79,7 @@ export function spokenApprovalPrompt(pending: Pending, requester: string): strin
 }
 
 function label(pending: Pending): string {
-  if (pending.message.card?.teamSetupRequest) return pending.message.card.title;
+  if (pending.message.card?.teamSetupRequest || pending.message.card?.boltCheckoutRequest) return pending.message.card.title;
   if (isSkillApproval(pending)) {
     return pending.message.card?.skillRequest?.action === "update"
       ? t("approval.label.updateSkill")
@@ -112,7 +112,7 @@ function firstLine(text: string): string {
 function isDurable(pending: Pending): boolean {
   const card = pending.message.card;
   return isSkillApproval(pending) || isProfileApproval(pending) ||
-    Boolean(card?.teamSetupRequest) || Boolean(card?.modelRequest);
+    Boolean(card?.teamSetupRequest) || Boolean(card?.modelRequest) || Boolean(card?.boltCheckoutRequest);
 }
 
 function rowText(pending: Pending, botName?: string): { line: string; inline?: string } {
@@ -142,7 +142,7 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
   more?: ReactNode;
   locale?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(pending.message.card?.boltCheckoutRequest));
   const outbound = pending.message.card ? outboundSummary(pending.message.card) : undefined;
   const heldNote = outbound?.opaque && pending.heldCode === "approval.held.outbound"
     ? t("approval.opaqueCode")
@@ -314,7 +314,7 @@ export function PendingApprovalActions({
       disabled={isSkillRequest && !reviewedSha256}
       className={cn(APPROVAL_CONTROL, "bg-accent text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40")}
     >
-      {isTeamSetup ? pending.message.card?.options[0] : isSkillRequest
+      {isTeamSetup || pending.message.card?.boltCheckoutRequest ? pending.message.card?.options[0] : isSkillRequest
         ? pending.message.card?.skillRequest?.action === "update"
           ? t("approval.action.update")
           : t("approval.action.enable")

@@ -5,8 +5,9 @@
 // apps/server/src/preview/ServerBrowser.ts (dropTab, adoptPopup, saveDownload, closeIdleAgentTabs), MIT License,
 // Copyright (c) 2026 T3 Tools Inc. (full text in third_party/t3-code/LICENSE); modified: a Chrome per profile behind the
 // CDP driver instead of Playwright contexts, and OpenMausBot's idle close, caps and person/bot control rules.
+import type { BoltPaymentAuthority } from "./bolt/runner.ts";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { scrubHeldSecrets } from "../../shared/redact.ts";
@@ -349,8 +350,11 @@ export class BrowserService {
 
   // Bot calls.
 
-  async agentRpc(target: BrowserTarget, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void): Promise<unknown> {
-    if (method === "tools/list") return { tools: TOOL_LIST.map((tool) => ({ ...tool })) };
+  async agentRpc(target: BrowserTarget, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, boltAuthority?: BoltPaymentAuthority): Promise<unknown> {
+    if (method === "tools/list") {
+      const boltConfigured = existsSync(join(browserRoot(this.#options.dataDir), "bolt", "dom-bindings.json"));
+      return { tools: TOOL_LIST.filter((tool) => tool.name !== "agent_browser_bolt" || boltConfigured).map((tool) => ({ ...tool })) };
+    }
     if (method !== "tools/call") throw new Error("Unsupported browser method.");
     const profile = this.profile(target);
     for (let stopping = profile.stopping; stopping; stopping = profile.stopping) await stopping;
@@ -360,7 +364,7 @@ export class BrowserService {
     const started = performance.now();
     let result: ToolResult | null;
     try {
-      const work = () => this.#call(profile, params, deadline, beforeDispatch);
+      const work = () => this.#call(profile, params, deadline, beforeDispatch, boltAuthority);
       const call = name === RESTART_TOOL || profile.control.uncertain ? work() : this.#lanes.run(profile.key, work, this.#options.laneWaitMs);
       result = await this.#withinBudget(profile, name, call, deadline);
     } finally {
@@ -389,7 +393,7 @@ export class BrowserService {
     return profile.control.lostCall === null ? errorResult(BROWSER_STUCK) : lostCallResult(call);
   }
 
-  async #call(profile: ProfileState, params: unknown, deadline: number, beforeDispatch?: () => void): Promise<ToolResult> {
+  async #call(profile: ProfileState, params: unknown, deadline: number, beforeDispatch?: () => void, boltAuthority?: BoltPaymentAuthority): Promise<ToolResult> {
     const name = toolNameOf(params);
     const control = profile.control;
     if (name === RESTART_TOOL) {
@@ -417,7 +421,7 @@ export class BrowserService {
     if (control.owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
     control.call = parsed.call.name;
     try {
-      const result = await executeTool(this.#context(profile, run, deadline), parsed.call);
+      const result = await executeTool(this.#context(profile, run, deadline, beforeDispatch, boltAuthority), parsed.call);
       beforeDispatch?.();
       return shapeResult(result, parsed.call.name);
     } catch (error) {
@@ -434,7 +438,7 @@ export class BrowserService {
     }
   }
 
-  #context(profile: ProfileState, run: Running, deadline: number): ToolContext {
+  #context(profile: ProfileState, run: Running, deadline: number, beforeDispatch?: () => void, boltAuthority?: BoltPaymentAuthority): ToolContext {
     return {
       control: profile.control,
       tabs: profile.tabs,
@@ -450,6 +454,12 @@ export class BrowserService {
       secretOnPage: (tab) => this.#holds.refuses(profile.session, async () => tab.page.url(), tab.page.targetId),
       saveScreenshot: (data, pageUrl) => this.#saveScreenshot(profile, data, pageUrl),
       downloads: () => run.browser.downloads?.list() ?? [],
+      bolt: {
+        authority: boltAuthority,
+        directory: join(browserRoot(this.#options.dataDir), "bolt", profileHash(workspaceId(this.#options.dataDir), profile.key)),
+        bindingsPath: join(browserRoot(this.#options.dataDir), "bolt", "dom-bindings.json"),
+        guard: () => beforeDispatch?.(),
+      },
     };
   }
 
