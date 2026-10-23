@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import path from 'node:path';
 import { createBridge, toolDefinitions } from './bridge.mjs';
 let bridge;
+function loadConfig() {
+  const file = process.env.BLUESKY_CONFIG_FILE;
+  if (!file || !path.isAbsolute(file)) throw Error();
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.size > 65536 || (stat.mode & 0o077) !== 0) throw Error();
+  const real = fs.realpathSync(file);
+  const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  for (const root of config.artifactRoots ?? []) { const dir = fs.realpathSync(root); if (real === dir || real.startsWith(dir + path.sep)) throw Error(); }
+  return config;
+}
 let buffer = '';
 let queue = Promise.resolve();
 let pending = 0;
@@ -16,7 +27,7 @@ async function dispatch(line) {
     else if (message.method === 'ping') result = {};
     else if (message.method === 'tools/call') {
       let output;
-      try { bridge ??= createBridge(JSON.parse(fs.readFileSync(process.env.BLUESKY_CONFIG_FILE, 'utf8'))); output = await bridge(message.params.name, message.params.arguments); }
+      try { bridge ??= createBridge(loadConfig()); output = await bridge(message.params.name, message.params.arguments); }
       catch { output = { status: 'blocked', code: 'configuration_unavailable', nextAction: 'Operator must provide a valid private BLUESKY_CONFIG_FILE.' }; }
       result = { ...(output.status === 'blocked' ? { isError: true } : {}), content: [{ type: 'text', text: JSON.stringify(output) }] };
     } else throw Error();

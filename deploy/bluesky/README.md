@@ -9,7 +9,7 @@ Publishing is disabled unless explicitly configured and independently granted.
 
 Run `node deploy/bluesky/build.mjs`; register the absolute Node executable with
 `deploy/local/bluesky-mcp.cjs` as its argument and `BLUESKY_CONFIG_FILE` pointing
-to a host-managed copy of `config.example.json`. Root integration supplies the
+to an absolute, private (0600), host-managed copy of `config.example.json`. Root integration supplies the
 shared build/Docker wiring and per-bot tool selection.
 
 Pin the account's verified DID and its actual PDS HTTPS origin. The operator
