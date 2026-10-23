@@ -454,6 +454,7 @@ import { asSchedule, RoutineRequestService } from "./routine-requests.ts"; impor
 import { engineLabel, LimitResetClock, nearLimitNote } from "./limit-resets.ts"; import { planAccountsFromInstances } from "./plan-usage.ts"; import { failoverLine, LimitFailovers, limitBackupAllowed } from "./limit-failover.ts"; import { createLimitResetRoutes } from "./routes/limit-resets.ts";
 import { parseTriggerRequest, triggerTarget } from "./trigger-tools.ts"; import { WebhookRequestError, WebhookRequestService } from "./webhook-requests.ts"; import { createAppTriggerHost } from "./app-trigger-host.ts";
 import { appliesNow, directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
+import { boltPaymentAuthority, resolveBoltApproval } from "./browser/bolt/approvals.ts";
 import { createTeamMemoryRequests } from "./team-memory-requests.ts";
 import { createAgentCard } from "./chat-widgets.ts";
 import { buildBotOverview, type BotOverview, connectedAppsFacts } from "./bot-overview.ts";
@@ -1120,6 +1121,10 @@ function cardAnswerRefusal(auth: RequestAuth, threadId: string, requestId: strin
   if (!auth.scopes.includes("admin") && store.messagesFor(threadId).some(message =>
     message.card?.requestId === requestId && message.card.teamMemoryRequest)) {
     return "Only a workspace admin can review shared team memory.";
+  }
+  if (!auth.scopes.includes("admin") && store.messagesFor(threadId).some(message =>
+    message.card?.requestId === requestId && message.card.boltCheckoutRequest)) {
+    return "Only a workspace admin can approve a purchase.";
   }
   // A Cloud guest may read along but never answer: its words would reach the owner's turn and a lent Mac.
   if (CLOUD_HOME) return cloudCardRefusal(auth);
@@ -5398,6 +5403,7 @@ async function respondToCard(input: {
   }
   const refusal = cardAnswerRefusal(auth, threadId, requestId, behavior);
   if (refusal) return { ok: false, status: 403, error: refusal };
+  if (resolveBoltApproval(store, threadId, requestId, behavior)) return { ok: true };
   const bot = store.botByThread(threadId);
   if (!bot) return { ok: false, status: 404, error: "The chat is gone." };
   const cardMessage = store.messagesFor(threadId).find((candidate) => candidate.card?.requestId === requestId);
@@ -9855,6 +9861,8 @@ const outboundCounts = new OutboundCounts(join(DATA_DIR, "outbound-counts.json")
 const OUTBOUND_HOLD_MS = 9 * 60_000;
 
 function resolveAndSendTrust(res: ServerResponse, threadId: string, requestId: string, behavior: "allow" | "deny" | "answer"): boolean {
+  const purchase = resolveBoltApproval(store, threadId, requestId, behavior);
+  if (purchase) { json(res, 200, purchase); return true; }
   const remembered = teamMemoryRequests.resolve(threadId, requestId, behavior);
   if (remembered) {
     json(res, 200, remembered);
@@ -14339,7 +14347,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           if (body.method === "tools/call" && !claimTurnResource(internalCapability, `browser:${browser.session}`)) {
             throw Object.assign(new Error("another thread is using this browser — pause browser work until that thread finishes"), { status: 409 });
           }
-        }, stepContext(bot, internalCapability, () => liveTurnByThread.get(internalCapability.threadId) ?? null)).catch((error: unknown) => {
+        }, stepContext(bot, internalCapability, () => liveTurnByThread.get(internalCapability.threadId) ?? null), boltPaymentAuthority(store, { botId: bot.id, threadId: internalCapability.threadId, profileKey: browser.spec.command === "omb-cdp" ? browser.spec.args?.[0] ?? browser.session : browser.session })).catch((error: unknown) => {
           if (error instanceof Error && error.message === BROWSER_CONTROL_REFUSAL) parkBrowserControl(internalCapability, browser.session);
           throw error;
         });

@@ -5,6 +5,7 @@
 // third_party/t3-code/LICENSE); modified: zod schemas under OpenMausBot's tool names, refs instead of Playwright
 // locators, and the names agent-browser advertised accepted as aliases.
 import { z } from "zod";
+import { BOLT_INPUT } from "./bolt/contracts.ts";
 
 export const RESTART_TOOL = "restart_browser";
 
@@ -114,6 +115,7 @@ export const TOOL_INPUTS = {
     tab: actTab.optional(),
   }),
   agent_browser_selver_cart: z.object({ tab: actTab.optional() }),
+  agent_browser_bolt: BOLT_INPUT,
   agent_browser_dialog: z.object({
     accept: z.boolean().describe("true accepts the open alert, confirm or prompt; false dismisses it."),
     promptText: z.string().max(4_000).optional().describe("The answer to a prompt, when accepting."),
@@ -151,6 +153,7 @@ const DESCRIPTIONS: Record<ToolName, string> = {
   agent_browser_wait: "Wait until every condition given holds: a time, text on the page, an element appearing or going, the address, or a load state. 60 s at most.",
   agent_browser_eval: "Run JavaScript in the page and return its value. It needs the same control as clicking, and is refused while a filled password is still on the page.",
   agent_browser_selver_cart: "Read the current Selver cart and total through this browser. Requires an authenticated, connected Selver account and reads persisted cart data twice. Use its account and total before claiming the person's cart changed.",
+  agent_browser_bolt: "Mechanical Bolt Food browser operations. Start with inspect; use its observationRef and target refs, with a unique operationId for every mutation. Supports item options, comments, quantities, dynamic delivery choices, checkout and guarded pay. Missing DOM bindings are explicit blockers. After an uncertain mutation use reconcile_operation with the same operationId; never invent another ID to retry. Use request_payment_approval to show the exact checkout to the user; pay requires its approvalRef as approvedCheckoutRef. A bot cannot grant approval.",
   agent_browser_dialog: "Accept or dismiss the alert, confirm or prompt dialog the page opened (agent_browser_status shows it). Nothing else works on the tab until it is answered.",
   agent_browser_tabs: "List, open, switch between or close your browser's tabs.",
   agent_browser_close: "Close a tab, or with no tab the whole browser. Saved sign-ins are kept.",

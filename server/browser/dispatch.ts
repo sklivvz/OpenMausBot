@@ -19,6 +19,10 @@ import { errorResult, pageLabel, snapshotText, textResult, withParts, type ToolR
 import type { Tab, TabRegistry } from "./tabs.ts";
 import { targetOf, type ToolCall, type ToolInput } from "./tools.ts";
 import { SELVER_CART_SNAPSHOT } from "./selver-cart.ts";
+import { BoltBrowserPort, loadBindings } from "./bolt/browser.ts";
+import { BoltFault } from "./bolt/contracts.ts";
+import { BoltRunner, type BoltPaymentAuthority } from "./bolt/runner.ts";
+import { BoltJournal } from "./bolt/state.ts";
 
 export const DEFAULT_ACTION_MS = 15_000;
 /** Kept back from a call's budget for the reads after its action. */
@@ -60,6 +64,7 @@ export interface ToolContext {
   secretOnPage(tab: Tab): Promise<boolean>;
   saveScreenshot(data: Buffer, pageUrl: string): string;
   downloads(): Download[];
+  bolt?: { directory: string; bindingsPath: string; authority?: BoltPaymentAuthority; guard(): void };
 }
 
 /** A typed address with its scheme: a bare host means https, loopback http. */
@@ -388,6 +393,27 @@ export async function executeTool(context: ToolContext, call: ToolCall): Promise
         if (await context.secretOnPage(tab)) return errorResult(SECRET_ON_PAGE_EVAL);
         const value = await tab.page.evaluate(call.input.expression, { world: call.input.world ?? "isolated", timeoutMs: remaining(context) });
         return textResult(value === undefined ? "undefined" : JSON.stringify(value));
+      });
+    }
+    case "agent_browser_bolt": {
+      const tab = tabOf(context, call.input.tab);
+      return act(context, tab, async () => {
+        if (await context.secretOnPage(tab)) return errorResult(SECRET_ON_PAGE_EVAL);
+        if (!context.bolt) return errorResult("bolt_host_configuration_required");
+        const guard = () => {
+          context.bolt!.guard();
+          if (context.control.owner !== null || context.control.closing || context.control.uncertain) throw new BoltFault("browser_control_changed");
+          if (Date.now() >= context.deadline - FOLLOW_UP_MS) throw new BoltFault("call_budget_exhausted");
+          if (tab.page.dialogs.pending || tab.page.fileChoosers.open || tab.page.auth.pending) throw new BoltFault("browser_prompt_requires_resolution");
+        };
+        try {
+          const port = new BoltBrowserPort(tab.page, loadBindings(context.bolt.bindingsPath), guard, () => remaining(context));
+          const runner = new BoltRunner(port, new BoltJournal(context.bolt.directory), context.bolt.authority);
+          return textResult(JSON.stringify(await runner.run(call.input)));
+        } catch (error) {
+          if (error instanceof BoltFault) return errorResult(JSON.stringify({ status: "blocked", code: error.code, operationId: call.input.operationId }));
+          throw error;
+        }
       });
     }
     case "agent_browser_selver_cart": {

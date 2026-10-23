@@ -26,6 +26,25 @@ const createRoutineOperation = {
   },
 };
 
+describe("Bolt checkout approval", () => {
+  it("shows the checkout title and opens the item and fee details for review", () => {
+    const message: Message = { id: "bolt-card", role: "bot", kind: "options", at: 1, card: {
+      title: "Approve Bolt order — €8.50?", subtitle: "Meal, no onion. Delivery €2.00. Total €8.50.",
+      requestId: "checkout", tool: "bolt_food_payment", requestType: "permission", options: ["Approve this order", "Do not order"],
+      boltCheckoutRequest: { botId: "donna", profileKey: "profile", checkoutHash: "hash", expiresAt: Date.now() + 600_000 },
+    } };
+    const card = renderToStaticMarkup(createElement(ApprovalCard, { message }));
+    expect(card).toContain("Approve Bolt order");
+    const pending = pendingApprovals([message])[0];
+    const panel = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending, count: 1, index: 0, actions: null }));
+    expect(panel).toContain('aria-expanded="true"');
+    expect(panel).toContain("Meal, no onion. Delivery €2.00. Total €8.50.");
+    expect(panel).not.toContain('hidden=""');
+    expect(pending.allowKey).toBeUndefined();
+    expect(pending.allowSession).toBeUndefined();
+  });
+});
+
 describe("ApprovalCard decided by voice", () => {
   const bash = (answered: string, via?: "call"): Message => ({
     id: "bash-card",

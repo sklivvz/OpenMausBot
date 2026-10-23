@@ -436,7 +436,7 @@ export function ApprovalCard({
 
   if (!isRoutineRequest && !isSkillRequest && !isProfileRequest && !isTeamSetup && !card.modelRequest) {
     const waiting = !settled && !expired;
-    const header = outbound
+    const header = card.boltCheckoutRequest ? card.title : outbound
       ? waiting ? outbound.headline : outbound.headline.replace(/\s*[?？]$/, "")
       : bot
         ? t("approval.card.namedWantsTo", { name: bot.name, action: toolLabel(displayTool) })
