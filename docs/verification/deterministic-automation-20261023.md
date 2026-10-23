@@ -60,6 +60,18 @@ file hash, preserve supporting assets, use the application installation API and
 verify exact text, enablement and absence of review warnings. They never directly
 overwrite approved skill files.
 
+## Deployment completion
+
+At 19:59:38 UTC the final readback verified all five MCP servers enabled,
+all ten reviewed skill replacements enabled with exact content and no warnings,
+all six lead selections, and hashes for every deployed bundle/reference file.
+Keila is selected only for Liz. Louis's previous implicit all-tools selection was
+made explicit before enabling Keila and assembled-output verification. Changes
+waited for natural idle windows; no active bot was interrupted. All temporary
+administration sessions were revoked. The deterministic rollout watcher exited
+with no pending operations. `final-check.json` records the completed readback
+beside the private rollback and smoke evidence.
+
 ## Limits
 
 The native assignment-version correction is integrated in source but requires a
