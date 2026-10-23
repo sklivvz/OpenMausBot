@@ -107,7 +107,7 @@ sources and temporary artifacts/credentials/receipts, exercise baseline → chan
 artifact → authenticated receipt → task update → exact readback, and verify
 stopped receipts, invalid keys, forbidden caller flags, project bounds and absent
 progress credentials. A bundled stdio process exposes all seven tools and runs
-an inspection through the same provider fixture without writes. Eight existing
+an inspection through the same provider fixture without writes. Seven existing
 Legal transport/queue tests passed after extracting the import-safe transport.
 Strict targeted TypeScript, lint and the bundle build pass.
 
