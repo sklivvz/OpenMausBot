@@ -105,6 +105,16 @@ describe("the job of a conversation", () => {
     expect(view(rows, { conversation: { ...idle, queued: 1 } }).version).not.toBe(before);
   });
 
+  it("invalidates a snapshot when returned evidence or its source identity changes", () => {
+    const rows = [root({ status: "completed", result: "Draft A", finishedAt: 8000 })];
+    const before = view(rows, { full: true }).version;
+    for (const patch of [{ result: "Draft B" }, { outcomeDetail: "Provider failed after saving" }, { finishedAt: 8500 }]) {
+      expect(view([{ ...rows[0]!, ...patch }], { full: true }).version).not.toBe(before);
+    }
+    expect(view(rows, { full: true, titleOf: () => "Changed source title" }).version).not.toBe(before);
+    expect(view(rows, { full: true, visible: () => false }).version).not.toBe(before);
+  });
+
   it("counts what the reader may not see without listing it, and clips results unless asked for them whole", () => {
     const long = "x".repeat(2_000);
     const rows = [root({ status: "completed", result: long }), child("a1", "priya", { status: "completed", result: "secret room" })];

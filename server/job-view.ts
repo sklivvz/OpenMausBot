@@ -149,10 +149,6 @@ export function jobView(input: JobInput): JobView {
     else if (row.status === "resume") tally.queued += 1;
     else tally[row.status] += 1;
   }
-  const version = createHash("sha256").update(JSON.stringify([
-    state, conversation.busy, conversation.activity ?? "", conversation.queued, asking.map((row) => row.id),
-    input.rows.map((row) => [row.id, row.status, row.outcome ?? "", row.executions, row.question ?? ""]),
-  ])).digest("base64url").slice(0, 16);
   const node = (row: Assignment): JobNode => {
     const { destination } = row.assignee;
     const title = input.titleOf(row);
@@ -169,12 +165,14 @@ export function jobView(input: JobInput): JobView {
       ...(result ? { result: input.full || result.length <= RESULT_CLIP ? result : `${result.slice(0, RESULT_CLIP)}…` } : {}),
     };
   };
-  return {
-    threadId: input.threadId, scope: input.scope, since: input.since, now: input.now, state, reason, version, conversation,
+  const snapshot = {
+    threadId: input.threadId, scope: input.scope, since: input.since, state, reason, conversation,
     roots: [...input.scopes], nodes: ordered.map(node), hidden: input.rows.length - shown.length, counts: tally,
     needsInput: [...parked, ...asking].filter((row) => input.visible(row.assignee.destination.threadId)).map((row) => ({
       id: row.id, botId: row.assignee.botId, botName: nameOf(row.assignee.botId), threadId: row.assignee.destination.threadId,
       question: row.question ?? "An approval is waiting in its conversation",
     })),
   };
+  const version = createHash("sha256").update(JSON.stringify(snapshot)).digest("base64url").slice(0, 16);
+  return { ...snapshot, now: input.now, version };
 }
