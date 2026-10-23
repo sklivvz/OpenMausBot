@@ -1,0 +1,28 @@
+services:
+  objectives:
+    image: ${OMB_OBJECTIVE_IMAGE:-${OMB_LOCAL_IMAGE:-openmausbot-local:latest}}
+    init: true
+    restart: unless-stopped
+    user: "1001:1001"
+    entrypoint: ["node", "/opt/objectives/controller.mjs"]
+    network_mode: service:caddy
+    read_only: true
+    mem_limit: 128m
+    cpus: 0.25
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - data:/data:ro
+      - ./deploy/objectives:/opt/objectives:ro
+      - objective-state:/state
+    healthcheck:
+      test: ["CMD", "node", "-e", "const h=JSON.parse(require('fs').readFileSync('/state/health.json'));if(Date.now()-h.at>60000)process.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 3
+    environment:
+      OMB_OBJECTIVE_URL: http://127.0.0.1:8799
+      OMB_OBJECTIVE_STATE: /state
+volumes:
+  objective-state:

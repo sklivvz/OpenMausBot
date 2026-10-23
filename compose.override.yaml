@@ -14,6 +14,10 @@
 # happens in the app while the sandbox is the active server. A COMPOSIO_API_KEY
 # (project key) takes priority over the broker whenever one is set.
 services:
+  objectives:
+    extends:
+      file: compose.objectives.yaml
+      service: objectives
   observability:
     extends:
       file: compose.observability.yaml
@@ -36,6 +40,7 @@ services:
       OMB_COMPOSIO_BROKER_URL: ${OMB_COMPOSIO_BROKER_URL:-}
       OMB_COMPOSIO_BROKER_TOKEN: ${OMB_COMPOSIO_BROKER_TOKEN:-}
 volumes:
+  objective-state:
   observability-state:
     external: true
     name: ${OMB_OBSERVER_STATE_VOLUME:-${COMPOSE_PROJECT_NAME:-openmausbot}_observability-state}

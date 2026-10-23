@@ -166,3 +166,15 @@ Marco's root-cause hypothesis for the failed four-channel attempt is that Darcy 
 During genuinely authorized publishing work, Liz discovers a workable procedure, obtains help at the appropriate layer when necessary, verifies the resulting post and records a reusable skill. The progression is browser discovery → sequence of discrete browser actions → direct BFF calls → full automation. Preserve the prerequisites, checks and known exceptions at each transition. Observation captures attempts and failures independently. Further executions expose variations and exceptions. The frontier reviews the skill and replaces demonstrated stable operations with API calls or a tested MCP when that becomes justified by evidence. One successful post is not enough to establish a generally reliable publishing capability.
 
 This example does not resume previously stopped production or authorize publication of rejected content.
+
+## Continuous ownership across the whole portfolio
+
+An orchestrator retains all accepted business objectives across turns. A finished
+assignment, a blocked campaign or one completed outcome does not suspend the
+remaining objectives. Todoist tasks map to business objectives; they do not
+automatically define them. The lead reconciles priorities and chooses contributions
+within the user’s authority. Deterministic continuation retains objective identity,
+source coverage, actual request settlement and explicit dependencies. It shares
+capacity across teams and keeps absent progress or broken control paths visible.
+See the [portfolio controller verification](verification/objective-portfolios-20261023.md)
+for implementation evidence and current limits.
