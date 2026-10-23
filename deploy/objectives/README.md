@@ -29,9 +29,12 @@ observations. The controller follows the exact admitted request through real
 teammate returns. It does not trust an earlier acknowledgement as a final. Lost
 HTTP responses replay the same persisted send identity. Explicit Stop, a changed
 conversation and unproven request ownership prevent automatic resubmission.
-Provider failure, three missing/invalid checkpoints or three unchanged ready
-checkpoints produce a visible `maintenance` state with retained unfinished work.
-This first controller does not automatically repair arbitrary provider failures
+A server-recorded model-capacity failure can use the configured fallback chain,
+once per entry, in the same objective thread. The next turn must reconcile prior
+effects before continuing. Stop takes precedence. Other provider failures, three
+missing/invalid checkpoints or three unchanged ready checkpoints produce a visible
+`maintenance` state with retained unfinished work. The controller does not repair
+arbitrary provider failures
 or classify new human messages. Those cases require orchestration repair; it
 never silently converts them to completion.
 

@@ -60,3 +60,38 @@ it("continues one business objective across real guarded requests and a controll
     await fixture.close();
   }
 }, 90_000);
+
+it("uses configured fallback after a real fixture provider capacity error without replacing the objective thread", async () => {
+  const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_MODE: "api-error", FAKE_CLAUDE_API_ERROR: "Selected model is at capacity. Please try a different model." });
+  const api = loopbackApi(fixture.info.url);
+  const evidence: unknown[] = [{ fixture: fixture.info }];
+  try {
+    const { bot } = await runControlOmb(["new-bot", "--name", "Fallback owner", "--url", fixture.info.url]) as any;
+    const { task } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Capacity recovery fixture" });
+    await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { approvalMode: "ask" });
+    const config: ObjectiveConfig = { id: "capacity-fixture", botId: bot.id, threadId: task.threadId, approvalMode: "ask", objective: "Finish accepted fixture work", instructions: "Use only fixture data", initialLeafId: null, checkpointDirectory: join(fixture.info.dataDir, "checkpoints"), recoveryModels: [{ instanceId: "claude", model: "claude-sonnet-4-6" }] };
+    const controller = new ObjectiveController(config, join(fixture.info.dataDir, "controller"), api);
+    await controller.tick();
+    expect(controller.state.status, controller.state.detail).toBe("working");
+    const firstId = controller.state.request!.sendId;
+    await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/${firstId}?threadId=${task.threadId}`)).phase, { timeout: 15_000 }).toBe("untracked");
+    evidence.push(await api("GET", `/api/bots/${bot.id}/requests/${firstId}?threadId=${task.threadId}`));
+    const wrapper = join(fixture.info.dataDir, "healthy-provider.mjs");
+    writeFileSync(wrapper, `#!/usr/bin/env node\nprocess.env.FAKE_CLAUDE_MODE = 'happy';\nawait import(${JSON.stringify(new URL("./testing/fake-claude-cli.ts", import.meta.url).href)});\n`, { mode: 0o700 });
+    await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).bots.some((b: any) => b.busy || b.tasks?.some((t: any) => t.busy)), { timeout: 10_000 }).toBe(false);
+    await api("PATCH", "/api/instances/claude", { cli: wrapper });
+    await controller.tick();
+    expect(controller.state.status).toBe("ready");
+    expect(controller.state.recoveries).toBe(1);
+    await controller.tick();
+    const resumed = controller.state.request!.sendId;
+    await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/${resumed}?threadId=${task.threadId}`)).phase, { timeout: 15_000 }).toBe("settled");
+    evidence.push(await api("GET", `/api/bots/${bot.id}/requests/${resumed}?threadId=${task.threadId}`));
+    expect(resumed).not.toBe(firstId);
+    const inventory = await api("GET", "/api/bots?messages=0");
+    expect(inventory.bots.find((b: any) => b.id === bot.id).tasks.find((t: any) => t.threadId === task.threadId).modelSelection).toMatchObject(config.recoveryModels![0]);
+  } finally {
+    writeFileSync(`${fixture.info.logPath}.objective-recovery.json`, JSON.stringify(evidence, null, 2));
+    await fixture.close();
+  }
+}, 60_000);

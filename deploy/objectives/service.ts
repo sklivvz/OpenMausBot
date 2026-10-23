@@ -76,6 +76,6 @@ while (running) {
     }
   }
   atomicJson(join(root, "health.json"), { at: Date.now(), sourceCheckedAt: source?.checkedAt, sourceError, capacity,
-    portfolios: [...controllers.values()].map(c => ({ id: c.config.id, botId: c.config.botId, threadId: c.config.threadId, status: c.state.status, cycle: c.state.cycle, detail: c.state.detail, objectives: c.state.checkpoint?.objectives })) });
+    portfolios: [...controllers.values()].map(c => ({ id: c.config.id, botId: c.config.botId, threadId: c.config.threadId, status: c.state.status, paused: existsSync(join(root, c.config.id, "paused")), cycle: c.state.cycle, detail: c.state.detail, objectives: c.state.checkpoint?.objectives })) });
   await new Promise(resolve => setTimeout(resolve, 2000));
 }
