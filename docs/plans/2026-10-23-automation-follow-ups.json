@@ -1,0 +1,32 @@
+{
+  "status": "deferred_until_current_automation_is_verified",
+  "questions": [
+    {
+      "topic": "Task platform and executor",
+      "question": "Is our Todoist integration API-driven or MCP-driven? Compare staying with Todoist, a new Linear team, Google Keep and other suitable alternatives; which execution approach is fastest and most reliable?",
+      "status": "pending"
+    },
+    {
+      "topic": "Further service automation",
+      "question": "Can we automate access to these services? Assess available APIs/MCPs, existing connected access, browser-only gaps, expected benefit and scope. Do not implement before the follow-up is selected.",
+      "services": [
+        "Bolt Food",
+        "Perk",
+        "Selver",
+        "Rimi",
+        "Web Summit",
+        "Slush",
+        "marketing calendar",
+        "X",
+        "Mastodon",
+        "Threads",
+        "LinkedIn",
+        "LinkedIn Sales Navigator",
+        "Bluesky",
+        "Google Analytics",
+        "Reddit Ads"
+      ],
+      "status": "pending"
+    }
+  ]
+}
