@@ -1,0 +1,11 @@
+{
+  "event": "lis26",
+  "sources": [
+    { "kind": "company", "format": "csv", "path": "websummit-exhibitors.csv" },
+    { "kind": "person", "format": "tsv", "path": "websummit-icp-prospects.tsv" }
+  ],
+  "prospects": [
+    { "id": "example-company", "kind": "company", "domain": "acme.example" },
+    { "id": "example-person", "kind": "person", "name": "Jane Example", "company": "Acme Ltd" }
+  ]
+}
