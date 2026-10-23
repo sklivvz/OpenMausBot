@@ -11,9 +11,14 @@ No production account or post was used to verify this implementation.
 Build with `node deploy/threads/build.mjs`; output is
 `deploy/local/threads-mcp.cjs`. Register a stdio MCP with an absolute Node command,
 the bundle as its only argument, and `THREADS_CONFIG_FILE` pointing to a private
-host configuration based on `config.example.json`. No secret belongs in an MCP
+host configuration based on `config.example.json`. The configuration path must
+be absolute, resolve outside every artifact root, and name a nonsymlink regular
+file with mode 0600 (or stricter), at most 64 KiB. Configuration reads are bounded
+even if the file grows while being read. No secret belongs in an MCP
 argument, bot workspace, prompt, or tool result. Tool discovery works before
-credentials are installed. Actual calls return structured configuration blockers.
+credentials are installed. Actual calls return structured configuration blockers
+with MCP `isError: true`; connector-level blocked outcomes use the same error
+flag. Successful preparation remains `isError: false`.
 
 The operator provisions a Meta app with the Threads use case and completes
 OAuth for the intended account with `threads_basic` and

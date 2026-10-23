@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import fs from "node:fs";
 import readline from "node:readline";
+import { loadHostConfig } from "./config.mjs";
 import { createThreads, toolDefinitions } from "./connector.mjs";
 const lines = readline.createInterface({
   input: process.stdin,
@@ -28,9 +28,7 @@ async function main() {
         let value;
         try {
           connector ??= createThreads(
-            JSON.parse(
-              fs.readFileSync(process.env.THREADS_CONFIG_FILE, "utf8"),
-            ),
+            loadHostConfig(process.env.THREADS_CONFIG_FILE),
           );
           value = await connector.call(
             message.params?.name,
@@ -43,7 +41,10 @@ async function main() {
             retryPublication: false,
           };
         }
-        result = { content: [{ type: "text", text: JSON.stringify(value) }] };
+        result = {
+          content: [{ type: "text", text: JSON.stringify(value) }],
+          isError: value.state === "blocked",
+        };
       } else throw Error("method");
       process.stdout.write(
         JSON.stringify({ jsonrpc: "2.0", id: message.id, result }) + "\n",

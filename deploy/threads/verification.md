@@ -10,6 +10,10 @@ publication, failed read-back, mismatched published text, processing/expired
 containers and concurrent operation locks. A fresh connector reuses durable
 receipts without duplicate writes. The stdio subprocess check performs real
 JSON-RPC initialization, discovery and a structured missing-config call.
+Additional stdio checks reject relative, symlink, nonprivate, oversized, directory
+and artifact-root configuration paths; accept a private host configuration;
+verify default-disabled writes; and assert the MCP error flag for both startup
+and connector blockers. All 19 tests pass after configuration hardening.
 
 The actual OpenMausBot fixture was launched using:
 

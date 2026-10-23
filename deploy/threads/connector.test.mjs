@@ -497,6 +497,7 @@ test("stdio advertises five strict tools and returns missing-config blocker with
     JSON.parse(result.result.content[0].text).reason,
     "host_configuration_unavailable",
   );
+  assert.equal(result.result.isError, true);
   p.stdin.end();
   lines.close();
 });
@@ -556,4 +557,95 @@ test("UTF-8 byte order mark is preserved in exact submitted copy", async (t) => 
     (await f.client.call("threads_publish", f.args)).state,
     "published_verified",
   );
+});
+
+async function stdioCall(t, configFile, name, args = {}) {
+  const child = spawn(process.execPath, ["deploy/threads/main.mjs"], {
+    env: { ...process.env, THREADS_CONFIG_FILE: configFile },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  t.after(() => child.kill());
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  const result = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(Error("stdio_timeout"));
+    }, 5000);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      try {
+        assert.equal(code, 0);
+        resolve(JSON.parse(output.trim()).result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+  child.stdin.end(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }) + "\n",
+  );
+  return result;
+}
+
+test("stdio rejects relative, symlink, public, oversized, directory and artifact-root configurations", async (t) => {
+  const f = await fixture(t);
+  const file = f.dir + "/host-config.json";
+  f.write(file, f.config);
+  const link = f.dir + "/config-link.json";
+  fs.symlinkSync(file, link);
+  const publicFile = f.dir + "/public-config.json";
+  f.write(publicFile, f.config);
+  fs.chmodSync(publicFile, 0o644);
+  const oversized = f.dir + "/oversized-config.json";
+  fs.writeFileSync(oversized, " ".repeat(65537), { mode: 0o600 });
+  const artifactConfig = f.config.artifactRoots[0] + "/host-config.json";
+  f.write(artifactConfig, f.config);
+  for (const configFile of [
+    path.relative(process.cwd(), file),
+    link,
+    publicFile,
+    oversized,
+    f.dir,
+    artifactConfig,
+  ]) {
+    const result = await stdioCall(t, configFile, "threads_prepare", f.args);
+    assert.equal(result.isError, true);
+    assert.equal(
+      JSON.parse(result.content[0].text).reason,
+      "host_configuration_unavailable",
+    );
+    assert(!JSON.stringify(result).includes(configFile));
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test("stdio accepts private host config, preserves disabled defaults and marks connector blockers as errors", async (t) => {
+  const f = await fixture(t);
+  const { allowCreateContainers, allowPublish, ...config } = f.config;
+  assert.equal(allowCreateContainers, true);
+  assert.equal(allowPublish, true);
+  const file = f.dir + "/host-config.json";
+  f.write(file, config);
+  const prepared = await stdioCall(t, file, "threads_prepare", f.args);
+  assert.equal(prepared.isError, false);
+  assert.equal(JSON.parse(prepared.content[0].text).state, "prepared_locally");
+  const blocked = await stdioCall(t, file, "threads_create_container", f.args);
+  assert.equal(blocked.isError, true);
+  assert.equal(
+    JSON.parse(blocked.content[0].text).reason,
+    "container_creation_disabled",
+  );
+  assert.equal(f.calls.length, 0);
 });
