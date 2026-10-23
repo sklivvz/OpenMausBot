@@ -81,7 +81,7 @@ existing browser skills were not replaced. No business list was changed, no
 outreach sent, and no bot or Docker process interrupted. Installed capability is
 not evidence that Blake has used it successfully on a subsequent task.
 
-Perk, Threads, Bluesky and Selver remain source implementations with passing
+At that deployment, Perk, Threads, Bluesky and Selver remained source implementations with passing
 synthetic verification. Their authenticated runtime rollout and trusted write
 authority integration are pending. Bolt's documentation is integrated; no Bolt
 connector or current authenticated browser walkthrough is claimed.
@@ -90,3 +90,41 @@ Both remotes were fetched. The automation source was pushed to `fork/main` with
 lint, typecheck and locale hooks passing. The fetched `origin/main` changes were
 not merged as part of this connector increment, and the running app server was
 not rebuilt or replaced.
+
+## Service package rollout, 24 October Tallinn time
+
+At 21:01:41 UTC on 23 October (00:01:41 Tallinn on 24 October), the final
+readback verified source release `8f5c75720`: 18 package files under
+`/data/.openmausbot/providers/service-connectors/releases/8f5c75720`, with
+`current` pointing to that directory. Three MCP servers were registered and
+probed successfully, exposing 14 tool definitions in aggregate.
+
+| Component | Runtime state |
+| --- | --- |
+| Bluesky | Enabled only for Liz; her tool scope permits the new preparation tool and denies publication, reconciliation and authentication tools. Connector `allowPublish` is false. New `bluesky-post-preparation` skill enabled with exact text and no warnings. |
+| Selver | Source layout and dependencies deployed. New standalone offline preview and `selver-cart-preview` skill enabled for The Dude. No session, cart-read or mutation configuration provisioned. |
+| Perk | Bundle and native credential adapter deployed; MCP registered disabled. OAuth enrollment and live account/schema qualification remain pending. No upstream sign-in or draft search started. |
+| Threads | Bundle deployed; MCP registered disabled. Account ID/token, media hosting and trusted grant integration remain pending; no placeholder identity configured. |
+
+Bluesky's public DID document was retrieved via HTTPS and matched the handle
+recorded in the installed publishing skill. Its PDS was pinned from that
+document. This establishes public identity metadata, not account authentication.
+No app password, session token or social grant was provisioned.
+
+The preview's 18 synthetic tests passed. A disposable real app verified all
+three MCP registrations, restricted selection and installation/readback of all
+four new offline/preparation skills; fixture log:
+`/var/folders/m8/7zpq1vyn0g138lf533b16n000000gn/T/openmausbot-verification-evidence/server-1792789152272-31597.log`.
+
+Live checks were configuration/skill/file readbacks only. They verified every
+deployed file hash, exact bot selection, publication denial and enabled skill
+metadata. They did not create synthetic live posts, preparations, cart receipts
+or orders. Original bot/server configuration, status and final readback are in
+`/data/.openmausbot/providers/service-connectors/rollback-8f5c75720/`.
+The paired maintenance session was revoked and temporary staging removed.
+No bot interruption, browser control or server restart occurred.
+
+Rollback removes the two added skills, restores the saved Liz selection/scope,
+removes the three new registrations and removes this release plus its newly
+created uncredentialed configuration. Preserve any later operation state or
+credentials before cleanup; do not overwrite unrelated changes with the backup.
