@@ -4,6 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { jevBackend } from '../../server/decider/jev.ts';
 import { threadRefUrl } from '../../src/lib/thread-refs.ts';
+import { createAttentionReader } from './attention.ts';
 
 function sourceUrls(text: string): string[] {
   return [...new Set((text.match(/https?:\/\/[^\s<>"\\[\]()]+/g) ?? []).map(value => value.replace(/[.,;!?]+$/, '')).filter(value => {
@@ -29,6 +30,7 @@ const groups = {
 const schema = (properties = {}) => ({ type: 'object', properties, additionalProperties: false });
 const projects = { '6hjrmJ99PmfVmfwJ': 'Accounting', '6hjrcrRM8XH9hVJQ': 'Legal', '6hjrccFccMCw7QFf': 'Marketing', '6hjrccFMwC8f5RgH': 'Operations', '6hjrcc9gJ5995XhG': 'Sales' };
 export const toolDefinitions = [
+  { name: 'read_attention_scan', description: 'Run the authorized fixed read-only intake scan of work email, personal email, Slack mentions/direct messages and urgent Todoist tasks. Code collects every source page; follow returned nextCursor to read the cached report. No shell, arbitrary queries, messages or record writes. Preserve source failures and the last complete baseline.', inputSchema: schema({ cursor: { type: 'string' } }) },
   { name: 'read_work_queue', description: 'Read the complete fresh Todoist inventory in compact pages, with advisory Jev grouping. Full descriptions stay in the snapshot: call read_task_description from page 0 for each candidate before including it. Use only returned cursors. Does not edit tasks or establish approval.', inputSchema: schema({ cursor: { type: 'string' } }) },
   { name: 'read_task_description', description: 'Read a candidate task description from page 0, then follow more=true. Full description coverage is required for every task included in get_briefing. Optionally pin the snapshotId.', inputSchema: { ...schema({ snapshotId: { type: 'string' }, taskId: { type: 'string' }, page: { type: 'integer', minimum: 0 } }), required: ['taskId', 'page'] } },
   { name: 'get_review_coverage', description: 'Verify every task was indexed from the complete source and every compact inventory page was returned. Full descriptions are held by the tool; read candidate descriptions before get_briefing.', inputSchema: schema() },
@@ -50,6 +52,7 @@ export const toolDefinitions = [
 ].map(t => ({ ...t, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } }));
 
 export function createBridge({ fetchImpl = fetch, config = () => JSON.parse(fs.readFileSync(path.join(os.homedir(), '.openmausbot/config.json'), 'utf8')), now = Date.now, queueUrl = 'http://127.0.0.1:8798/review', appUrl = 'http://127.0.0.1:8799' } = {}) {
+  const attention = createAttentionReader(fetchImpl, queueUrl, now);
   let snapshot: any;
   let loading: Promise<any> | undefined;
   function pageRows(tasks: any[]) {
@@ -100,6 +103,7 @@ export function createBridge({ fetchImpl = fetch, config = () => JSON.parse(fs.r
   return async function call(name: string, args: any = {}) {
     const def = toolDefinitions.find(t => t.name === name);
     if (!def || !args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).some(k => !(k in def.inputSchema.properties))) throw Error('Invalid tool arguments');
+    if (name === 'read_attention_scan') return attention(args);
     if (name === 'list_work_threads' || name === 'read_work_context') {
       const { bots } = await read(appUrl + '/api/bots?messages=0');
       const allowed = bots.filter((b: any) => Object.values(projects).includes(b.section) || b.name === 'Bill Lumbergh');
