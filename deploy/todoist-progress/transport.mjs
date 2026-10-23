@@ -1,4 +1,4 @@
-import { createRpc } from '../legal-queue/queue.mjs';
+import { createRpc } from '../legal-queue/transport.mjs';
 export function createProgressRpc(options) {
   const origin = new URL(options.origin);
   if (origin.username || origin.password || origin.hash || origin.search || (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(origin.hostname)))) throw Error('Invalid progress connector origin');
