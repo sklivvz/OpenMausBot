@@ -34,7 +34,7 @@ COPY --chmod=0555 attention-scan /usr/local/bin/attention-scan
 COPY --chmod=0555 attention-scan-next /usr/local/bin/attention-scan-next
 COPY --chmod=0555 task-queue /usr/local/bin/task-queue
 COPY --chmod=0555 operations-queue /usr/local/bin/operations-queue
-RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils python3 python-is-python3 ripgrep \
     && rm -rf /var/lib/apt/lists/*
 COPY --chmod=0555 design-export /usr/local/bin/design-export
 COPY --chmod=0555 claude-design-mcp.cjs /usr/local/bin/claude-design-mcp
@@ -42,5 +42,6 @@ COPY --chmod=0555 claude-with-artifacts /usr/local/bin/claude-with-artifacts
 COPY --chmod=0555 work-review-mcp.cjs /usr/local/bin/work-review-mcp
 COPY --chmod=0555 marketing-calendar-audit /usr/local/bin/marketing-calendar-audit
 COPY --chmod=0555 newsletter-template-preflight /usr/local/bin/newsletter-template-preflight
+COPY --chmod=0555 newsletter-template-prepare /usr/local/bin/newsletter-template-prepare
 COPY --chmod=0555 slop-detector-mcp.cjs /usr/local/bin/slop-detector-mcp
 USER maus

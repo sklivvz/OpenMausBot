@@ -156,3 +156,10 @@ test('personal actions require a retrieved destination, with Todoist only as sup
   const waiting: any = await f.call('get_briefing', { items: [{ ...item, bucket: 'waiting_others' }] });
   assert.ok(waiting.markdown.includes('[Review proposal](https://app.todoist.com/app/task/task-alpha)'));
 });
+
+test('missing conversation returns current scoped candidates without issuing a source receipt', async () => {
+  const task={...row('task'),projectId:'6hjrccFccMCw7QFf'};
+  const f=fixture([task],{bots:[{id:'lead',name:'Fixture lead',section:'Marketing',tasks:[{threadId:'current',title:'Current proposal',updatedAt:timestamp}]},{id:'private',name:'Other',section:'Private',tasks:[{threadId:'hidden',title:'Private',updatedAt:timestamp}]}]});
+  await f.call('read_work_queue');
+  await assert.rejects(f.call('read_work_context',{taskId:'task',threadId:'obsolete'}),(error:Error)=>{assert.match(error.message,/Do not repeat this ID/);assert.match(error.message,/current/);assert.doesNotMatch(error.message,/hidden/);return true;});
+});

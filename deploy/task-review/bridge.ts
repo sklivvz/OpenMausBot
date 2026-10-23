@@ -114,9 +114,16 @@ export function createBridge({ fetchImpl = fetch, config = () => JSON.parse(fs.r
           .sort((a: any, b: any) => b.updatedAt - a.updatedAt).slice(0, 25) };
       }
       if (!snapshot || now() - snapshot.loadedAt > 1800000) throw Error('Snapshot expired; start read_work_queue again');
-      if (!snapshot.tasks.some((t: any) => t.id === args.taskId)) throw Error('Task is not in this snapshot');
+      const task = snapshot.tasks.find((t: any) => t.id === args.taskId);
+      if (!task) throw Error('Task is not in this snapshot');
       const owner = allowed.find((b: any) => (b.tasks ?? []).some((t: any) => t.threadId === args.threadId));
-      if (!owner) throw Error('Invalid thread; use a current threadId returned by list_work_threads');
+      if (!owner) {
+        const section = projects[task.projectId as keyof typeof projects];
+        const candidates = allowed.filter((b: any) => b.section === section)
+          .flatMap((b: any) => (b.tasks ?? []).map((t: any) => ({ threadId: t.threadId, title: t.title?.slice(0, 180), updatedAt: t.updatedAt })))
+          .sort((a: any, b: any) => b.updatedAt - a.updatedAt).slice(0, 5);
+        throw Error(`Invalid thread; no source was read. Do not repeat this ID. Use list_work_threads for project ${task.projectId}. Current candidates: ${JSON.stringify(candidates)}`);
+      }
       const page = args.page ?? 0;
       if (!Number.isInteger(page) || page < 0) throw Error('Invalid context page');
       const { messages } = await read(appUrl + `/api/threads/${encodeURIComponent(args.threadId)}/messages?limit=40`);
