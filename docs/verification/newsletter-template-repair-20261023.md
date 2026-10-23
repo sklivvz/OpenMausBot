@@ -71,3 +71,34 @@ disabled and no live application or credentials mounted. This exercises Keila's
 Liquid engine, not its full provider UI, delivery or email-client rendering.
 The exact correction was delivered to Liz's existing production thread for
 installation and fresh provider readback.
+
+## Personalisation and complete review handoff
+
+The saved master initially used `contact.first_name | default: 'there' | escape`.
+Solid 1.2.2 preserves whitespace-only names, producing a blank greeting instead
+of the fallback. The corrected chain is
+`contact.first_name | default: '' | strip | default: 'there' | escape`.
+
+Run the native fixture with `--personalized` to combine the five article/image
+cases with eight recipient cases: named, absent, nil, empty, whitespace-only,
+padded, Unicode and HTML metacharacters. The old saved master failed the
+whitespace case. All forty cases passed after the correction in the same
+network-disabled Docker fixture. The tested bytes have SHA-256
+`904b123272f01025c0e1cf71c5c639354c9fbad5ce9bd4b530c2e869529c328c`.
+Liz reopened the saved provider master and returned that exact hash at
+2026-10-23 11:47:01 UTC. This proves the tested template reached the provider;
+it does not prove delivery or rendering in recipients' email clients.
+
+The newsletter skill now requires the complete native rendered HTML, full-length
+desktop/mobile captures and version evidence for design review. An outer-page
+screenshot can clip a scrolling preview iframe. The producer must capture the
+whole email, including later articles, CTA and footer. A designer can review
+that complete artifact without another provider login; provider persistence and
+visual inspection remain separate claims. Keep the existing review assignment
+and supply revised evidence rather than creating duplicate review tasks.
+
+The skill replacement/readback and a fake-provider turn passed in an isolated
+app fixture. Log:
+`/var/folders/m8/7zpq1vyn0g138lf533b16n000000gn/T/openmausbot-verification-evidence/server-1792756096041-145.log`.
+The replacement was then installed on Liz and read back exactly, with the prior
+skill backed up privately. No application restart was required.

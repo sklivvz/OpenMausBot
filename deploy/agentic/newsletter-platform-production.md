@@ -83,6 +83,16 @@ isolated renderer before relying on it, including one article without an image.
 The real campaign preview must then show exactly the actual issue's article count
 and order. A new issue must work by changing its data, without editing the master.
 
+Recipient personalisation belongs in the reusable master using `contact` fields;
+article/date/CTA values belong to `campaign.data`. Do not hard-code the preview
+recipient's name into issue content. A first-name greeting with a fallback uses
+`{{ contact.first_name | default: '' | strip | default: 'there' | escape }}`.
+Trimming before the fallback handles names containing only whitespace and keeps
+padded names readable. Preserve accents and escape HTML-sensitive characters.
+A preview showing one sample name does not verify missing-name behavior. The
+native maintenance fixture's `--personalized` cases cover named, missing, nil,
+empty, whitespace-only, padded, Unicode and HTML-sensitive values.
+
 Before installing a template, run:
 
 ```
@@ -105,8 +115,9 @@ Edna again. Only an actually missing or invalid design contribution needs her.
 
 Save in the existing project, then reopen the saved template and capture the actual
 stored HTML. Run the same check against that fresh readback, with the original
-designer reference, and compare hashes. Check that every original placeholder,
-section and image position is still visible in the native template preview.
+or reviewed platform reference appropriate to the adaptation, and compare hashes.
+Check that the intended reusable sections, placeholders/data bindings and image
+positions are present in the native preview.
 Use exact editor replacement, not append. Read the editor back before Save and
 target the actual Save control in the template form, never a generic submit
 button that can select Delete.
@@ -114,12 +125,12 @@ Return the native template ID/link and both check receipts. A filled unsaved edi
 or preview is not proof of persistence. Do not claim the whole newsletter is ready
 when only its template is installed.
 
-For an authorized issue, select that template and populate the campaign's named
-slot values with the current exact copy and artwork, retaining the default
+For an authorized issue, select that template and populate its campaign slot
+values or `campaign.data` with the current exact copy and artwork, retaining the
 markup/styles. Subject and preheader are edition-specific. Inspect the actual
 combined desktop/mobile preview; prove that no editorial placeholder, broken
 asset, placeholder link or old edition remains. Verify links, sender and recipient
-settings against the brief. The reusable template must still contain its defaults
+settings against the brief. The reusable template must retain its defaults/logic
 after campaign assembly. Preserve scoped publication
 authorization already given. A structural check is neither visual acceptance nor
 permission to send. Reconcile uncertain sends by provider receipt before retrying.
@@ -138,3 +149,19 @@ thread and a lead's new handoff may refer to the same template or campaign.
 Reconcile their latest user instructions and let the existing writer finish its
 scoped operation; another thread must not edit that object concurrently or undo
 the correction. Return the native object ID and current source version to Darcy.
+
+A visual-review handoff contains the complete native rendered email, full-length
+desktop/mobile captures, campaign/template links, source hash and readback time.
+Top-of-viewport screenshots do not cover later articles, CTA or footer. Account
+for a preview iframe's internal scrolling; a screenshot of the outer page may
+still clip the email. Export the actual saved preview HTML, without editor forms,
+credentials or tokens, for a reviewer to inspect as a static artifact if needed.
+Keep rendered asset URLs/styles and record the originating provider version.
+
+The production owner verifies provider persistence and bindings; the designer
+reviews the complete rendered artifact. A reviewer needing a separate account
+login is not automatically a blocker for visual review when the production owner
+can supply that evidence. Preserve actual access restrictions and state precisely
+what the reviewer could inspect. Keep one existing review and update its evidence
+version for corrections; do not create parallel reviewers or silently submit an
+old rendering after changing the master. Respect a user-directed pause of the lead.

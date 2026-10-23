@@ -1,13 +1,30 @@
 Mix.install([{:solid, "== 1.2.2"}])
 
-[template_path, output_dir] = System.argv()
+[template_path, output_dir | options] = System.argv()
+unless options in [[], ["--personalized"]], do: raise("Usage: verify-keila-liquid.exs TEMPLATE_HTML OUTPUT_DIRECTORY [--personalized]")
 source = File.read!(template_path)
 {:ok, template} = Solid.parse(source)
 File.mkdir_p!(output_dir)
 
 cases = [{"zero", 0, :nil}, {"one", 1, :nil}, {"three", 3, :nil}, {"empty-image", 3, :empty}, {"missing-image", 3, :missing}]
+contacts =
+  if options == ["--personalized"] do
+    [
+      {"named", %{"first_name" => "Jane"}, "Hi Jane,"},
+      {"missing-name", %{}, "Hi there,"},
+      {"nil-name", %{"first_name" => nil}, "Hi there,"},
+      {"empty-name", %{"first_name" => ""}, "Hi there,"},
+      {"whitespace-name", %{"first_name" => "  "}, "Hi there,"},
+      {"padded-name", %{"first_name" => "  Jane  "}, "Hi Jane,"},
+      {"unicode-name", %{"first_name" => "Zoë"}, "Hi Zoë,"},
+      {"escaped-name", %{"first_name" => "A<B>"}, "Hi A&lt;B&gt;,"}
+    ]
+  else
+    [{"default", %{}, nil}]
+  end
 
-for {name, count, absent} <- cases do
+for {case_name, count, absent} <- cases, {contact_name, contact, greeting} <- contacts do
+  name = "#{case_name}-#{contact_name}"
   articles =
     for n <- 1..max(count, 1), count > 0 do
       article = %{
@@ -27,13 +44,14 @@ for {name, count, absent} <- cases do
 
   assigns = %{
     "campaign" => %{
-      "subject" => "Fixture issue", "preview_text" => "Fixture preheader",
+      "id" => "fixture-campaign", "subject" => "Fixture issue", "preview_text" => "Fixture preheader",
       "data" => %{
         "articles" => articles, "issue_date" => "Fixture date",
         "action_url" => "https://example.invalid/action", "action_label" => "Fixture action"
       }
     },
-    "unsubscribe_link" => "https://example.invalid/unsubscribe"
+    "unsubscribe_link" => "https://example.invalid/unsubscribe",
+    "contact" => contact
   }
 
   {:ok, rendered, []} = Solid.render(template, assigns)
@@ -45,6 +63,8 @@ for {name, count, absent} <- cases do
   if Regex.match?(~r/<img\b[^>]*\bsrc\s*=\s*["']\s*["']/i, html), do: raise("#{name}: empty image source")
   if Regex.match?(~r/\{\{|\{%/, html), do: raise("#{name}: unresolved Liquid")
   if String.contains?(html, "<keep>"), do: raise("#{name}: article body is unescaped")
+  if greeting && !String.contains?(html, greeting), do: raise("#{name}: personalized greeting or fallback differs")
+  if greeting && String.contains?(html, "A<B>"), do: raise("#{name}: recipient name is unescaped")
 
   for {article, i} <- Enum.with_index(articles, 1) do
     unless String.contains?(html, "Fixture body #{i} &lt;keep&gt; &amp; quotes"), do: raise("#{name}: article body missing or changed")
