@@ -21,6 +21,14 @@ def checks(receipt):
 
 
 class VerifierTests(unittest.TestCase):
+    def test_inline_markup_preserves_words_and_blocks_separate_text(self):
+        html = b"<p>Exact app<strong>roved</strong> copy.</p><p>Hello <em>Ada</em> &amp; team</p>"
+        spec = manifest(html)
+        spec["requirements"]["required_text"].append("copy. Hello Ada")
+        result = checks(verify(html, spec))
+        self.assertEqual(result["required_text"], "pass")
+        self.assertEqual(result["personalization"], "pass")
+
     def test_valid_structure_never_claims_visual_or_delivery_approval(self):
         result = verify(HTML, manifest())
         self.assertEqual(result["status"], "needs_review")

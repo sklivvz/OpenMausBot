@@ -12,6 +12,7 @@ VERSION = "1.0.0"
 MAX_HTML_BYTES = 2 * 1024 * 1024
 MAX_MANIFEST_BYTES = 128 * 1024
 MAX_ITEMS = 100
+TEXT_BOUNDARIES = {"address", "article", "aside", "blockquote", "br", "dd", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre", "section", "table", "td", "th", "tr", "ul"}
 
 
 def digest(value):
@@ -34,6 +35,8 @@ class Document(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
+        if tag in TEXT_BOUNDARIES and not self.excluded:
+            self.text.append("\n")
         if tag in ("script", "style"):
             self.excluded.append(tag)
         if values.get("id"):
@@ -48,6 +51,8 @@ class Document(HTMLParser):
     def handle_endtag(self, tag):
         if self.excluded and self.excluded[-1] == tag:
             self.excluded.pop()
+        if tag in TEXT_BOUNDARIES and not self.excluded:
+            self.text.append("\n")
 
     def handle_data(self, data):
         if not self.excluded:
@@ -134,7 +139,7 @@ def verify(html_bytes, manifest):
         doc = Document()
         doc.feed(html)
         doc.close()
-        text = " ".join(" ".join(doc.text).split())
+        text = " ".join("".join(doc.text).split())
         required = requirements.get("required_text", [])
         missing = [index for index, item in enumerate(required) if " ".join(item.split()) not in text]
         add("required_text", "fail" if missing else "pass" if required else "unknown", "Text-node presence after whitespace normalization; not visual visibility", {"missing_requirement_indexes": missing})
