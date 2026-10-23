@@ -42,3 +42,50 @@ part of the recovery brief.
 
 Business outcomes require live evidence after deployment; fixture success is
 not a claim of improved judgment or business completion.
+
+## Basic execution tools
+
+The live image lacked Python and ripgrep. The runtime-tools image now includes
+Python 3.11.2, the `python` alias and ripgrep 13.0.0. The standard local Dockerfile
+includes these packages for future builds. The Docker build context now includes
+both newsletter utilities; its old allowlist omitted them.
+
+Codex 0.163.0 failed ordinary sandboxed reads because Docker's default seccomp
+profile denied its nested namespaces. The reviewed local profile derives from a
+pinned Moby default and adds only the calls needed by the nested sandbox. See
+`deploy/local/seccomp/README.md` for provenance and the precise added rules.
+It preserves bot approval modes and the inner filesystem/network restrictions.
+No host capability is added, and seccomp is not disabled.
+
+The actual replacement image was tested with no live volume, credentials or
+network. `deploy/local/verify-sandbox.sh` verifies available utilities, real Codex
+workspace read/write, denied writes to an otherwise writable outside directory,
+and denied sandbox network access. On this installed CLI the observed command
+is `codex sandbox -- COMMAND`; the documented extra `linux` argument was treated
+as an executable name. The legacy Landlock switch was also rejected by this
+version's socket-isolation requirement. Neither alternative was deployed.
+
+```sh
+docker run --rm -i --network none -e OMB_SANDBOX_FIXTURE=1 \
+  --security-opt seccomp=deploy/local/seccomp/codex-nested.json \
+  --user 0:0 --entrypoint /bin/sh \
+  openmausbot-local:runtime-tools-20261023 -s < deploy/local/verify-sandbox.sh
+node --experimental-strip-types --test deploy/task-review/bridge.test.ts
+```
+
+Ten work-review checks pass. A rejected missing conversation now returns current,
+scoped candidates instead of leaving the caller to repeat the stale ID. The two
+observed failing IDs also returned HTTP 404 from the application; they were not
+valid conversations denied by the bridge.
+
+Portfolio admission is temporarily held during runtime replacement, allowing
+active app turns and teammate returns to settle. The original paused flags are
+recorded so only maintenance-created holds are removed afterward. The app is
+recreated only after the live inventory reports no busy or waiting-for-teammate
+work. Existing settings, data volumes, credentials and Ask/Auto/Full policies are
+preserved; the prior image and profile remain available for rollback.
+
+The prior routine `completed` label still represents execution settlement, not
+verified business success. Successful sandbox qualification does not establish
+that a later travel check or briefing achieves its business outcome. Review
+those actual scheduled runs separately; do not create synthetic live tasks.

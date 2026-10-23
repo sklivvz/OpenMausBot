@@ -35,6 +35,8 @@ services:
       - "127.0.0.1:8090:80"
       - "[::1]:8090:80"
   omb:
+    security_opt:
+      - seccomp=./deploy/local/seccomp/codex-nested.json
     volumes:
       - ./deploy/local/work-review-mcp.cjs:/usr/local/bin/work-review-mcp:ro
       - ./deploy/local/newsletter-template-preflight:/usr/local/bin/newsletter-template-preflight:ro
