@@ -1,0 +1,5 @@
+#!/bin/sh
+# Claude Code 2.1.302 defaults Artifact off in headless sessions; this opt-in retains its policy and permission checks.
+export CLAUDE_CODE_ARTIFACT=1
+export CLAUDE_CODE_ARTIFACT_AUTO_OPEN=0
+exec /usr/local/bin/claude "$@"

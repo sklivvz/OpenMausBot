@@ -296,7 +296,7 @@ export class RuntimeCoordinator implements Coordinator {
       text: deniedInput ? `Person input is unavailable for this bot: ${deniedInput}` : result.text,
       ...(result.evidence ? { evidence: result.evidence } : {}),
       ...(cards && personInputAllowed ? { needsInput: { question: cards.question, cards: cards.ids } } : {}),
-      ...(result.cap ? { continue: { note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}) } } : {}) };
+      ...(result.cap ? { continue: { note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}), ...(result.cap.waitFor ? { waitFor: result.cap.waitFor } : {}) } } : {}) };
     this.runtime.end(id, end);
   }
 
@@ -460,7 +460,12 @@ export class RuntimeCoordinator implements Coordinator {
         : a.status === "needs_input" && a.parentId !== undefined && !a.cards?.length
           ? `Question for requesting bot: ${a.question ?? "unspecified question"}`
           : host.validate(view(a, parent), parent && this.project(parent)),
-      canStart: a => !host.busy(this.project(a)),
+      canStart: a => {
+        const node = this.project(a);
+        const dependency = a.continuation?.waitFor;
+        if (dependency && host.dependencyReady?.(dependency, node) !== true) return "Blocked: waiting for the host to verify the saved dependency.";
+        return !host.busy(node);
+      },
       run: (a, input, signal) => this.run(a, input, signal),
       park: (a, question, restored) => host.park(this.project(a), question, restored),
       report: (a, parent) => host.report(view(a, parent), parent && this.project(parent)),
@@ -486,7 +491,8 @@ export class RuntimeCoordinator implements Coordinator {
     const root = a.parentId === undefined;
     const body = resumed
       ? composeResume(a, this.host.names(node, parent && this.project(parent)),
-        settled.map(child => composeReport(this.readable(child, a, node), this.host.names(view(child, a), node))))
+        settled.map(child => composeReport(this.readable(child, a, node), this.host.names(view(child, a), node))),
+        (input.blocked ?? []).map(child => composeReport(this.readable(child, a, node), this.host.names(view(child, a), node))))
       : root
         ? composeRootTurn(a, { turn: input.turn === "resume" ? "first" : input.turn, restartNote: "", ...(input.answer !== undefined ? { answer: input.answer } : {}),
           ...(input.continuation ? { continuation: input.continuation } : {}) })
@@ -496,7 +502,7 @@ export class RuntimeCoordinator implements Coordinator {
     const result = await this.host.run(node, resumed, signal,
       { text: `${input.restartNote}${body}`, note: `${input.restartNote}${note}`, restartNote: input.restartNote, turn: input.turn });
     if (signal.aborted) return { kind: "failed", outcome: "stopped", text: result.text };
-    if (result.cap) return { kind: "continue", text: result.text, note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}), ...evidence(result) };
+    if (result.cap) return { kind: "continue", text: result.text, note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}), ...(result.cap.waitFor ? { waitFor: result.cap.waitFor } : {}), ...evidence(result) };
     if (result.cards) return this.host.personInputAllowed?.(node) === false
       ? { kind: "failed", outcome: "denied", text: `Person input is unavailable for this bot: ${result.cards.question}`, ...evidence(result) }
       : { kind: "needs_input", question: result.cards.question, cards: result.cards.ids, ...evidence(result) };

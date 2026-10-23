@@ -40,3 +40,9 @@ deploy/podman/.env
 deploy/podman/.env.*
 !deploy/podman/.env.example
 /.env
+
+# Generated local deployment tools; rebuild with pnpm build:local-tools.
+/deploy/local/slop-detector-mcp.cjs
+/deploy/local/work-review-mcp.cjs
+/deploy/local/marketing-calendar-audit
+/deploy/observability/observer.cjs

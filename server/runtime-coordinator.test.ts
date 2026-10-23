@@ -1305,3 +1305,83 @@ describe("RuntimeCoordinator: outward restart policy, answerNode, continuation o
     expect(w.host.runs[0]!.composed.turn).toBe("continued");
   });
 });
+
+describe("host dependencies", () => {
+  const waitFor = { kind: "browser_control" as const, session: "fixture-browser" };
+  const blocked = { ok: false, text: "Browser control is held", cap: { note: "Control returned; inspect before retrying.", waitFor } };
+
+  it("retains a child's ownership through restart and resumes once after a verified release", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-dependency-"));
+    let w = world(() => blocked, {}, dir);
+    try {
+      const { node } = send(w, chief, "dependency-root", undefined, builder, "Publish the approved fixture post");
+      w.coordinator.tick(); await flush();
+      ended(w, "dependency-root");
+      for (let i = 0; i < 4; i++) w.coordinator.tick();
+      expect(w.host.runs).toHaveLength(1);
+      expect(w.coordinator.node(node.id)).toMatchObject({ parentId: "dependency-root", status: "queued", continuation: { waitFor }, reported: false });
+      expect(w.host.reports).toHaveLength(0);
+      w.coordinator.close();
+      w = world(undefined, {}, dir);
+      let released = false;
+      w.host.dependencyReady = (dependency) => dependency.kind === "browser_control" && dependency.session === waitFor.session && released;
+      w.coordinator.tick(); await flush();
+      expect(w.host.runs).toHaveLength(0);
+      expect(w.coordinator.node(node.id)?.continuation?.waitFor).toEqual(waitFor);
+      released = true;
+      w.coordinator.tick(); await flush();
+      expect(w.host.runs.filter(run => run.node.id === node.id)).toHaveLength(1);
+      expect(w.host.runs[0]?.text).toContain("inspect before retrying");
+      expect(w.coordinator.node(node.id)).toMatchObject({ status: "completed", executions: 2, parentId: "dependency-root" });
+      w.coordinator.tick(); await flush();
+      expect(w.host.reports.filter(report => report.child.id === node.id)).toHaveLength(1);
+      expect(w.coordinator.node("dependency-root")?.status).toBe("completed");
+    } finally { w.coordinator.close(); await removeTempDir(dir); }
+  });
+
+  it("fails closed without a resolver and honours Stop before the dependency clears", async () => {
+    const w = world();
+    try {
+      begun(w, chief, "dependency-root");
+      w.coordinator.endTurn("dependency-root", blocked);
+      w.coordinator.tick(); await flush();
+      expect(w.host.runs).toHaveLength(0);
+      expect(w.coordinator.node("dependency-root")?.continuation?.waitFor).toEqual(waitFor);
+      w.coordinator.cancelDirect(chief.threadId);
+      w.host.dependencyReady = () => true;
+      w.coordinator.tick(); await flush();
+      expect(w.host.runs).toHaveLength(0);
+      expect(w.coordinator.node("dependency-root")?.status).toBe("cancelled");
+    } finally { w.coordinator.close(); }
+  });
+});
+
+it("wakes the requester once for a child's sign-in blocker, retains both objectives, then reports completion", async () => {
+  let childTurns = 0;
+  const w = world(node => node.botId === builder.botId && childTurns++ === 0
+    ? { ok: true, text: "Sign-in required", cards: { question: "Sign in to the fixture social account", ids: ["fixture-signin"] } }
+    : { ok: true, text: node.botId === builder.botId ? "Publication verified" : "Please use the existing sign-in request" });
+  try {
+    const { node } = send(w, chief, "signin-root", undefined, builder, "Publish the approved post");
+    ended(w, "signin-root");
+    w.coordinator.tick(); await flush();
+    expect(w.coordinator.node(node.id)).toMatchObject({ status: "waiting", cards: ["fixture-signin"], executions: 1 });
+    w.coordinator.tick(); await flush();
+    const lead = w.host.runs.filter(run => run.node.id === "signin-root");
+    expect(lead).toHaveLength(1);
+    expect(lead[0]?.text).toContain("A teammate needs input");
+    expect(lead[0]?.text).toContain("fixture-signin");
+    expect(lead[0]?.text).toContain("Publish the approved post");
+    expect(lead[0]?.text).not.toContain("Your downstream room requests have settled");
+    expect(w.coordinator.node("signin-root")?.status).toBe("waiting");
+    for (let i = 0; i < 4; i++) { w.coordinator.tick(); await flush(); }
+    expect(w.host.runs).toHaveLength(2);
+    expect(w.coordinator.answerNode(node.id, "The fixture account is signed in")).toBe(true);
+    w.coordinator.tick(); await flush();
+    w.coordinator.tick(); await flush();
+    expect(w.coordinator.node(node.id)).toMatchObject({ status: "completed", executions: 2 });
+    expect(w.coordinator.node("signin-root")?.status).toBe("completed");
+    expect(w.host.runs.filter(run => run.node.id === "signin-root")).toHaveLength(2);
+    expect(w.host.reports.filter(report => report.child.id === node.id)).toHaveLength(1);
+  } finally { w.coordinator.close(); }
+});

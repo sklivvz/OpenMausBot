@@ -1,0 +1,11 @@
+# Jev copy preflight
+
+`detect_slop` is a stdio MCP tool for one complete marketing asset. It uses the existing direct Jev connection in `~/.openmausbot/config.json`; credentials are read at call time and never returned. The caller supplies the exact draft, brief, channel, source facts and any approved reference. It does not retrieve sources, rewrite files or publish.
+
+The seven checks cover choppy rhythm, generic copy, inflated language, formulaic rhetoric, awkward language, regional idioms and claims unsupported by the supplied facts. Each category has a defect probability and a separately selected source passage. Quotes and UTF-16 offsets come from the original draft, never generated text. The receipt includes SHA-256 hashes of the draft and full review input. An edit invalidates the draft receipt.
+
+`needs_revision` requires a defect probability of at least 0.8 and a located passage with probability at least 0.6. `needs_review` includes ambiguous or unlocalized signals. `no_flags` is not editorial sign-off. Probabilities are uncalibrated model estimates. Missing source facts are explicitly not assessed; authentication, timeout and malformed-result failures return `unavailable`, never a pass. Requests exceeding the limits are rejected without truncation. One strongest passage per category is returned, not an exhaustive list of occurrences.
+
+Build with `node deploy/slop-detector/build.mjs`. The local Dockerfile installs the generated `deploy/local/slop-detector-mcp.cjs` as `/usr/local/bin/slop-detector-mcp`. Register that absolute command with empty args/env as `slop-detector`, enable it, and select it for the intended bots through the app. Existing approval modes remain authoritative. The supplied skills place the check before editorial handoff and keep marketing strategy and design ownership separate.
+
+Verification on 22 October 2026: six deterministic contract/failure tests and an isolated app fixture covering MCP discovery, profile/skill persistence, selection and guarded handoffs. Real Jev 1.14.0 review of recorded Mastodon v3 and v4 drafts flagged their rhythm/phrasing; v5 returned no flags. These three examples establish initial behavior, not general detection accuracy. Session evidence is in `.omb-scratch/slop-detector-20261022/`.

@@ -1,5 +1,7 @@
 :80 {
 	map {host} {upstream_scheme} {
+		macbook-pro.taile9623d.ts.net https
+		maus.cecconi.tech https
 		{$OMB_HTTPS_HOST:https-disabled.invalid} {$OMB_UPSTREAM_SCHEME:http}
 		default http
 	}

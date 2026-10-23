@@ -36,7 +36,7 @@ describe("server-observed Selver cart", () => {
   it("refuses to capture an expired browser token", async () => {
     const { context } = fixture();
     context.fetch = async () => ({ ok: false, status: 401 });
-    await expect(runInNewContext(SELVER_SESSION_CAPTURE, context)).rejects.toThrow("account verification failed");
+    await expect(runInNewContext(SELVER_SESSION_CAPTURE, context)).resolves.toEqual({ state: "backendRejected" });
   });
 
   it("rejects a stale account label when Selver says the session is logged out", async () => {

@@ -1,0 +1,26 @@
+services:
+  attention-scan:
+    image: ${OMB_LOCAL_IMAGE:-openmausbot-local:latest}
+    entrypoint: ["node", "/opt/attention-scan/server.mjs"]
+    user: "1001:1001"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    network_mode: service:caddy
+    volumes:
+      - ./deploy/attention-scan:/opt/attention-scan:ro
+    environment:
+      OMB_COMPOSIO_BROKER_URL: ${OMB_COMPOSIO_BROKER_URL:?Connector service required}
+      OMB_COMPOSIO_BROKER_TOKEN: ${OMB_COMPOSIO_BROKER_TOKEN:?Connector token required}
+      SCAN_GMAIL_WORK: test
+      SCAN_GMAIL_PERSONAL: personal
+      SCAN_SLACK: work
+      SCAN_TODOIST: work
+      SCAN_SLACK_USER: U0AMR0U80KH
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8798/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

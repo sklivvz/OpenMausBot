@@ -1,0 +1,17 @@
+{
+  "baseImage": "openmausbot-local:selver-auth-check-live",
+  "baseImageId": "sha256:7cd24ddbf3937623ae1d0b2d370e486adda24aefafe6fd014abd073416996e5a",
+  "image": "openmausbot-local:agentic-minimal-20261023",
+  "files": {
+    "index.js": {
+      "before": "a55f0dcbb98d30825ab5b2cfda2eb2e8664119774e7380887d0c8700087d60ec",
+      "after": "142da5449b59513b55da3a57bcbea0d78b958106ba3d3a9ff414f070b61084e1",
+      "patch": "index.patch"
+    },
+    "drivers/agents-proxy.js": {
+      "before": "856874d067d19f229d2aa2f3315e0b1e4754f55e74026e95d71ce759ad7d2572",
+      "after": "d1d3d437c7435337368181bc46185f4cc8ed352ec011240b589a7c5318a76d5f",
+      "patch": "agents-proxy.patch"
+    }
+  }
+}

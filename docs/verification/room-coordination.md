@@ -134,10 +134,11 @@ the scripted engine; `server/room-coordination.e2e.test.ts` reads the same
 rows for every hand-off it checks (a refused call leaves no hand-off row; a
 restart leaves the sender's root resumed once, never rerun).
 
-Outside a room, a conversation has one thread with each recipient, titled
-“@Clive · work”. The first request opens it; every later request from that
-conversation — a follow-up, a change of plan, rework — goes into it, so the
-recipient has the earlier work in its own history. If the recipient is still
+Consultations and notices outside a room can share one thread with each recipient,
+titled “@Clive · work”. Direct work assignments each open a fresh thread, including
+when the caller requests `standing`; their briefs must include the context and
+artifact paths required to execute. Consultations and notices use the shared
+thread unless `new` is requested. If the recipient is still
 working there, the request waits and runs next; the same work never runs twice
 in parallel. A different conversation of the sender gets its own thread.
 Successful reported work closes in the sidebar but remains readable, and
@@ -155,6 +156,12 @@ Receipts remain visible when tool calls are hidden. Files are not copied between
 computers: briefs must include accessible absolute paths or the required content.
 Returned reports stay available to subsequent model turns behind the compact
 receipt, subject to the bounded retention and fresh peer/section access checks.
+When a room lead addresses specialists outside that room, omitting `group_id`
+routes the recipients into direct threads. When every recipient is a room
+member, the current room remains the default. An explicit room selection still
+requires membership and the existing team access checks. Specialists need not
+join the leadership room to execute its leads' work.
+
 Direct-chat receipts use the existing avatar/thread pill, opening the exact
 recipient task without changing other tasks.
 

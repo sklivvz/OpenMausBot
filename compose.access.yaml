@@ -1,0 +1,41 @@
+name: openmausbot-access
+
+services:
+  tunnel:
+    image: cloudflare/cloudflared@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 127.0.0.1:2000
+      - run
+      - --token-file
+      - /run/secrets/tunnel-token
+    secrets:
+      - source: tunnel-token
+        target: tunnel-token
+    networks:
+      - app
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  app:
+    external: true
+    name: openmausbot_default
+
+secrets:
+  tunnel-token:
+    file: ${OMB_TUNNEL_TOKEN_FILE:-${HOME}/.config/openmausbot-access/tunnel-token}

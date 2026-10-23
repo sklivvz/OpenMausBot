@@ -115,7 +115,7 @@ async function composioStub() {
 
 async function scenario(test: (f: any) => Promise<void>, options: { env?: Record<string, string>; fake?: Record<string, string>; scripted?: boolean } = {}) {
   const parentEnv: NodeJS.ProcessEnv = { ...process.env, ...options.fake };
-  const session = await launchVerificationServer(parentEnv, undefined, undefined, undefined, undefined, { scripted: options.scripted !== false });
+  const session = await launchVerificationServer(parentEnv, undefined, undefined, undefined, undefined, { scripted: options.scripted !== false }, [], undefined, undefined, process.env.OMB_VERIFICATION_ENTRY);
   const url = session.info.url;
   const dataDir = session.info.dataDir;
   let server: ChildProcess = session.child;
@@ -124,7 +124,7 @@ async function scenario(test: (f: any) => Promise<void>, options: { env?: Record
     await waitForExit(server, { signal });
     const env = { ...verificationServerEnvironment(parentEnv, dataDir, Number(new URL(url).port)), ...extraEnv };
     const log = openSync(session.info.logPath, "a", 0o600);
-    server = spawn(process.execPath, verificationServerArgs(env), { cwd: ROOT, env, stdio: ["ignore", log, log] });
+    server = spawn(process.execPath, verificationServerArgs(env, process.env.OMB_VERIFICATION_ENTRY), { cwd: ROOT, env, stdio: ["ignore", log, log] });
     restarted = true;
     closeSync(log);
     await expect.poll(async () => {
@@ -654,6 +654,7 @@ it("T10 parks a teammate's turn on its credential card, tells the Chief at once,
   const brief = "T10-BRIEF: set up the Grok model for the export; ask for the key you need.";
   f.script(f.clive.id,
     { key: "C0", match: ["T10-JOB"], steps: [{ arguments: { bot_ids: [mira.id], message: brief } }], reply: "C0: Mira is on it." },
+    { key: "CB", match: ["A teammate needs input", "provide xAI API key"], reply: "T10-BLOCKED: please answer Mira's existing credential request; I still own the export." },
     { key: "C1", match: [SETTLED, REPORT_FROM_MIRA, "T10-RESULT"], reply: "T10-FINAL: the export model is set up." });
   f.script(mira.id,
     { key: "M2", match: ["T10-BRIEF", SECRET_PROVIDED], reply: "T10-RESULT: the key is in and the export runs." },
@@ -670,7 +671,11 @@ it("T10 parks a teammate's turn on its credential card, tells the Chief at once,
   expect(f.eventsOf(child.id)).toContain("parked");
   await expect.poll(async () => (await f.chips(job, "needs your input")).length, { timeout: 15_000 }).toBe(1);
   expect(chipText((await f.chips(job, "needs your input"))[0])).toContain("provide");
-  expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0"]);
+  await f.final(job, "T10-BLOCKED");
+  await expect.poll(() => f.roots()[0].status, { timeout: 15_000 }).toBe("waiting");
+  await f.settle(500);
+  expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0", "CB"]);
+  expect(f.own(f.turn("CB"))).toContain(card.id);
   expect(f.roots()[0].status).toBe("waiting");
   expect((await f.task(mira.id, work)).busy).toBe(false);
   expect((await f.api("PUT", "/api/config", { xai: { key: "xai-fixture-key" } })).status).toBe(200);
@@ -682,7 +687,7 @@ it("T10 parks a teammate's turn on its credential card, tells the Chief at once,
   expect(f.eventsOf(child.id)).toEqual(expect.arrayContaining(["parked", "answered", "started", "settled"]));
   expect(f.turns(mira.id).map((record: any) => record.planKey)).toEqual(["M1", "M2"]);
   expect(f.own(f.turn("M2"))).toContain(SECRET_PROVIDED);
-  expect(f.roots()[0]).toMatchObject({ status: "completed", executions: 2 });
+  expect(f.roots()[0]).toMatchObject({ status: "completed", executions: 3 });
   expect((await f.messages(work)).find((message: any) => message.id === card.id).secret).toMatchObject({ provided: true, resumed: true });
   expect(await f.chips(job, "needs your input")).toHaveLength(1);
 }), hostTimeout(90_000));
@@ -724,3 +729,29 @@ it("T11 does not rerun a cut turn that already pushed: the root ends with what i
     rmSync(home, { recursive: true, force: true });
   }
 }, hostTimeout(90_000));
+
+it("isolates two publishing assignments to one executor into distinct work threads", () => scenario(async (f) => {
+  const executor = (await f.cli("new-bot", "--name", "Publisher", "--section", "Marketing")).bot;
+  await f.api("PATCH", `/api/bots/${f.clive.id}`, { chiefOfStaff: true, managedSections: ["Marketing"], acknowledgePeerScope: true });
+  f.script(f.clive.id,
+    { key: "I0", match: ["ISOLATE-JOB"], steps: [
+      { arguments: { bot_ids: [executor.id], message: "CHANNEL-A-ONLY: publish the approved A fixture", thread: "standing" } },
+      { arguments: { bot_ids: [executor.id], message: "CHANNEL-B-ONLY: publish the approved B fixture" } },
+    ], reply: "Both assignments dispatched" },
+    { key: "I1", match: [SETTLED, "A verified", "B verified"], reply: "ISOLATE-DONE" });
+  f.script(executor.id,
+    { key: "A", match: ["CHANNEL-A-ONLY"], gateFile: f.gate("release"), reply: "A verified" },
+    { key: "B", match: ["CHANNEL-B-ONLY"], gateFile: f.gate("release"), reply: "B verified" });
+  await f.say(f.clive.id, f.clive.activeTaskId, "ISOLATE-JOB: own the two channel publications");
+  const children = () => f.db().assignments.filter((row: any) => row.parentId);
+  await expect.poll(() => children().length, { timeout: 20_000 }).toBe(2);
+  const [a, b] = children();
+  expect(a.assignee.destination.kind).toBe("work_thread");
+  expect(b.assignee.destination.kind).toBe("work_thread");
+  expect(a.assignee.destination.threadId).not.toBe(b.assignee.destination.threadId);
+  expect(a.parentId).toBe(b.parentId);
+  f.open("release");
+  await f.final(f.clive.activeTaskId, "ISOLATE-DONE");
+  expect(f.own(f.turn("A"))).not.toContain("CHANNEL-B-ONLY");
+  expect(f.own(f.turn("B"))).not.toContain("CHANNEL-A-ONLY");
+}), hostTimeout(60_000));

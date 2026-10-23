@@ -32,6 +32,15 @@ type Spec = Pick<BrowserSpawnSpec, "command" | "env"> & { args?: readonly string
 
 function selverConnectError(message: string) { return { isError: true, content: [{ type: "text", text: message }] }; }
 
+const SELVER_STATE_GUIDANCE: Record<string, string> = {
+  mobileApprovalPending: "Smart-ID approval is pending on the person's phone. Wait for the browser to return, then check again.",
+  signInForm: "The Partnerkaart sign-in form is open. Complete and submit it before checking again.",
+  contactConfirmationRequired: "Selver requires contact details confirmation before account access. The account cart is unavailable until that form is completed.",
+  signedOut: "Selver is signed out. Start Smart-ID sign-in before checking again.",
+  backendRejected: "Selver's /api/user/me rejected the browser token. Start sign-in again; do not use this token for cart requests.",
+  wrongSite: "The browser is not on Selver or Partnerkaart. Open Selver before checking again.",
+};
+
 export function chromeTarget(session: string, spec: { command: string; args?: readonly string[] } | undefined): BrowserTarget | null {
   const key = spec?.command === CHROME_ENGINE ? spec.args?.[0] : undefined;
   return key ? { session, key } : null;
@@ -229,7 +238,7 @@ export class RuntimeRouter {
         ? { name: "agent_browser_eval", arguments: { expression: SELVER_SESSION_CAPTURE, world: "page" } }
         : { name: "agent_browser_eval", arguments: { script: SELVER_SESSION_CAPTURE } };
       const result = await (target ? this.#chrome.service.agentRpc(target, "tools/call", evalCall, beforeDispatch) : this.#old.agentRpc(session, spec, "tools/call", evalCall, beforeDispatch));
-      if ((result as { isError?: unknown })?.isError === true) return selverConnectError("Selver is not signed in or account verification failed. Complete sign-in in the browser, then check again.");
+      if ((result as { isError?: unknown })?.isError === true) return selverConnectError("Selver browser inspection failed. Check the browser tool result and retry; no cart session was provisioned.");
       const content = (result as { content?: unknown })?.content;
       const raw = Array.isArray(content) ? content.find((part) => typeof (part as { text?: unknown })?.text === "string") as { text: string } | undefined : undefined;
       let parsed: unknown;
@@ -237,7 +246,9 @@ export class RuntimeRouter {
         parsed = JSON.parse(raw?.text ?? "");
         if (typeof parsed === "string") parsed = JSON.parse(parsed);
       } catch { return selverConnectError("Selver account verification returned an invalid result."); }
-      const { token, account } = (parsed && typeof parsed === "object" ? parsed : {}) as { token?: unknown; account?: unknown };
+      const { state, token, account } = (parsed && typeof parsed === "object" ? parsed : {}) as { state?: unknown; token?: unknown; account?: unknown };
+      if (typeof state === "string" && state in SELVER_STATE_GUIDANCE) return selverConnectError(JSON.stringify({ authenticated: false, state, message: SELVER_STATE_GUIDANCE[state] }));
+      if (state !== "authenticated") return selverConnectError("Selver account verification returned an unknown state.");
       if (typeof token !== "string" || !token || typeof account !== "string" || !account) return selverConnectError("Selver account verification returned an invalid result.");
       await mkdir(directory, { recursive: true, mode: 0o700 });
       const temporary = join(directory, `${ctx.botId}.${randomUUID()}.tmp`);

@@ -1,7 +1,7 @@
 import { RuntimeCoordinator } from "./runtime-coordinator.ts";
 import type { WorkOrigin } from "./peer-provenance.ts";
 import type { LegacyThreadResolver } from "./runtime/import-legacy.ts";
-import type { Assignment, EnvelopeNames, Level, Limits, Mode, Origin, Outcome, Owner, Reply, Requester, StatusView, TurnEvidence } from "./runtime/types.ts";
+import type { Assignment, EnvelopeNames, Level, Limits, Mode, Origin, Outcome, Owner, Reply, Requester, StatusView, TurnEvidence, WaitDependency } from "./runtime/types.ts";
 
 /** One coordinate_bots call, as the internal route hands it to the server. */
 export type CoordinateBotsCall = {
@@ -53,7 +53,7 @@ export interface HandoffView {
   outcomeDetail?: string;
   question?: string;
   cards?: string[];
-  continuation?: { note: string; handoffPath?: string; count: number };
+  continuation?: { note: string; handoffPath?: string; waitFor?: WaitDependency; count: number };
   goalRunId?: string;
 }
 
@@ -72,7 +72,7 @@ export interface HostTurnResult {
   ok: boolean;
   text: string;
   evidence?: TurnEvidence;
-  cap?: { note: string; handoffPath?: string };
+  cap?: { note: string; handoffPath?: string; waitFor?: WaitDependency };
   cards?: { question: string; ids: string[] };
 }
 
@@ -114,6 +114,8 @@ export interface CoordinatorHost {
   /** Recheck addresses and route permission immediately before every dispatch. */
   validate(node: HandoffView, parent?: HandoffView): string | undefined;
   busy(node: HandoffView): boolean;
+  /** A missing resolver leaves a saved dependency waiting. */
+  dependencyReady?(dependency: WaitDependency, node: HandoffView): boolean;
   /** For a root this is the person's own conversation continuing: person-visible, never internal. */
   run(node: HandoffView, resumed: boolean, signal: AbortSignal, composed: ComposedTurn): Promise<HostTurnResult>;
   report(child: HandoffView, parent?: HandoffView): void;

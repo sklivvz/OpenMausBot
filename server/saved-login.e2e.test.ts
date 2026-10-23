@@ -2,8 +2,10 @@
 import { mkdtempSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+import { WebSocketServer } from "ws";
 
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
@@ -45,11 +47,12 @@ async function browserFixture(url: string) {
       engineArgs.push(args);
       if (args[0] !== "--version") proxies.add(proxy ?? "none");
       const data = await page.engine(args);
-      return reply({ success: true, data: data && "port" in data ? { ...data, port } : data });
+      return reply({ success: true, data: data && "port" in data ? { ...data, port, connected: true } : data });
     } catch (error) {
       return reply({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
+  const sockets = new WebSocketServer({ server: bridge });
   await new Promise<void>((ready) => bridge.listen(port, "127.0.0.1", ready));
 
   const tools = mkdtempSync(join(tmpdir(), "omb-saved-login-e2e-"));
@@ -76,7 +79,7 @@ else if (args[0] === "mcp") {
 else bridge("/engine", { args, proxy: process.env.AGENT_BROWSER_PROXY }).then((text) => { process.stdout.write(text); process.exit(0); }, () => process.exit(1));
 `, { mode: 0o755 });
 
-  const fixture = await launchVerificationServer({}, undefined, undefined, { binaryPath, executablePath: join(tools, "chrome") }, undefined, { scripted: true });
+  const fixture = await launchVerificationServer({}, undefined, undefined, { binaryPath, executablePath: join(tools, "chrome") }, undefined, { scripted: true }, [], undefined, undefined, process.env.OMB_VERIFICATION_ENTRY);
   const base = fixture.info.url;
   const planPath = join(fixture.info.dataDir, "room-plan.json");
   const evidence = () => existsSync(`${planPath}.evidence.jsonl`)
@@ -95,6 +98,8 @@ else bridge("/engine", { args, proxy: process.env.AGENT_BROWSER_PROXY }).then((t
     close: async () => {
       page.close();
       await fixture.close();
+      for (const socket of sockets.clients) socket.terminate();
+      await new Promise<void>(done => sockets.close(() => done()));
       await new Promise((done) => bridge.close(done));
       await removeTempDir(tools);
     },
@@ -201,3 +206,61 @@ it.skipIf(process.platform === "win32")("fills a login saved for example.com on 
     await browser.close();
   }
 }, 120_000);
+
+it.skipIf(process.platform === "win32")("parks a browser tool call during human control and resumes its same assignment after handback", async () => {
+  const browser = await browserFixture("https://example.com/login");
+  const { api, fixture } = browser;
+  const viewerAbort = new AbortController();
+  const assignments = () => {
+    const db = new DatabaseSync(join(fixture.info.dataDir, "runtime.db"), { readOnly: true });
+    try { return db.prepare("SELECT json FROM assignments").all().map(row => JSON.parse(String(row.json))); }
+    finally { db.close(); }
+  };
+  try {
+    await api("PATCH", "/api/config", { features: { browser: true } });
+    const bot = (await api("POST", "/api/bots", { name: "Blocked Publisher" })).body.bot;
+    await api("PATCH", `/api/bots/${bot.id}`, { computer: "browser", browserProfile: "guest" });
+    writeFileSync(browser.planPath, JSON.stringify({ [bot.id]: { steps: [
+      { tool: "request_sign_in", arguments: { site: "https://example.com/login", reason: "Fixture login" } },
+    ], reply: "Waiting for the fixture sign-in" } }));
+    await runControlOmb(["send", "--bot", bot.id, "--task", bot.threadId, "--text", "Sign in to the fixture", "--url", browser.base]);
+    await expect.poll(() => assignments().find(row => row.assignee.destination.threadId === bot.threadId)?.status, { timeout: 20_000 }).toBe("needs_input");
+    const card = (await api("GET", `/api/threads/${bot.threadId}/messages`)).body.messages.find((m: any) => m.signIn);
+    expect(card).toBeDefined();
+    const response = await fetch(`${browser.base}/api/bots/${bot.id}/browser/live`, { signal: viewerAbort.signal });
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    let stream = "";
+    while (!stream.includes('"viewerId"')) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error(`Fixture viewer closed: ${stream}`);
+      stream += new TextDecoder().decode(chunk.value);
+    }
+    const viewerId = JSON.parse(stream.split("\n").find(line => line.startsWith("data:") && line.includes('"viewerId"'))!.slice(5)).viewerId;
+    expect((await api("POST", `/api/bots/${bot.id}/browser/action`, { viewerId, type: "take" })).status).toBe(200);
+    const work = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Isolated publication" })).body.task;
+    writeFileSync(browser.planPath, JSON.stringify({ [bot.id]: { steps: [
+      { server: "browser", tool: "agent_browser_get_url", arguments: {} },
+    ], reply: "Unexpected completion while held" } }));
+    await runControlOmb(["send", "--bot", bot.id, "--task", work.threadId, "--text", "Inspect the fixture page", "--url", browser.base]);
+    const node = () => assignments().find(row => row.assignee.destination.threadId === work.threadId);
+    await expect.poll(() => node()?.continuation?.waitFor?.kind, { timeout: 20_000 }).toBe("browser_control");
+    const id = node().id;
+    expect(node()).toMatchObject({ id, status: "queued", executions: 1 });
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(node()).toMatchObject({ id, status: "queued", executions: 1 });
+    writeFileSync(browser.planPath, JSON.stringify({ [bot.id]: { reply: "Continued after control returned" } }));
+    expect((await api("POST", `/api/bots/${bot.id}/sign-in-cards/${card.id}/done`, { threadId: bot.threadId })).status).toBe(200);
+    await expect.poll(() => node()?.status, { timeout: 20_000 }).toBe("completed");
+    expect(node()).toMatchObject({ id, executions: 2, result: "Continued after control returned" });
+    const messages = (await api("GET", `/api/threads/${work.threadId}/messages`)).body.messages;
+    expect(messages.filter((m: any) => m.tool?.name?.startsWith("Blocked: a person controls"))).toHaveLength(1);
+    writeFileSync(`${fixture.info.logPath}.browser-blocker.json`, JSON.stringify({ assignments: assignments(), messages }, null, 2));
+    console.log(`Browser blocker evidence: ${fixture.info.logPath}.browser-blocker.json`);
+  } catch (error) {
+    console.error("Browser blocker fixture:", JSON.stringify(assignments(), null, 2));
+    console.error("Fixture evidence:", JSON.stringify(browser.evidence(), null, 2).slice(-10000));
+    console.error("Fixture log:", fixture.info.logPath);
+    throw error;
+  } finally { viewerAbort.abort(); await browser.close(); }
+}, 60_000);

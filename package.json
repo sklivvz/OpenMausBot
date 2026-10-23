@@ -54,6 +54,7 @@
     "gen:bodies": "node --experimental-strip-types scripts/gen-mascot-bodies.ts",
     "gen:halloween": "node --experimental-strip-types scripts/gen-halloween-bodies.ts",
     "build:server": "tsc -p tsconfig.server.build.json && node scripts/bundle-server.mjs",
+    "build:local-tools": "node scripts/build-local-tools.mjs",
     "build:companion": "tsc -p tsconfig.companion.build.json && node scripts/mark-module-scope.mjs dist-companion",
     "build:speech": "node electron/build-speech-helper.mjs",
     "build:cua": "node scripts/prepare-cua.mjs",

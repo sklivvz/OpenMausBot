@@ -1,0 +1,24 @@
+services:
+  legal-queue:
+    image: ${OMB_LOCAL_IMAGE:-openmausbot-local:latest}
+    entrypoint: ["node", "/opt/legal-queue/server.mjs"]
+    user: "1001:1001"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    network_mode: service:caddy
+    volumes:
+      - ./deploy/legal-queue:/opt/legal-queue:ro
+      - legal-queue-state:/state
+    environment:
+      OMB_COMPOSIO_BROKER_URL: ${OMB_COMPOSIO_BROKER_URL:?Connector service required}
+      OMB_COMPOSIO_BROKER_TOKEN: ${OMB_COMPOSIO_BROKER_TOKEN:?Connector token required}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8797/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  legal-queue-state:
