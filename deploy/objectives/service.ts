@@ -71,7 +71,7 @@ while (running) {
   const candidates = [...available.filter(active), ...available.filter(c => !active(c)).sort((a, b) => (a.state.lastStartedAt ?? 0) - (b.state.lastStartedAt ?? 0))];
   for (const controller of candidates) {
     if (!controller.state.request?.accepted && busyBots.has(controller.config.botId)) continue;
-    if (!active(controller) && available.filter(c => active(c) && c.state.status !== "waiting").length >= capacity) continue;
+    if (!active(controller) && controller.state.status === "ready" && available.filter(c => active(c) && c.state.status !== "waiting").length >= capacity) continue;
     if (!source && controller.config.portfolio && !active(controller)) continue;
     const before = JSON.stringify([controller.state.status, controller.state.cycle, controller.state.detail]);
     await controller.tick();
