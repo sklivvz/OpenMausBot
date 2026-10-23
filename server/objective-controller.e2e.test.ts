@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { deliveryObservations } from "./objective-portfolio.ts";
 import { ObjectiveController, atomicJson, loopbackApi, type ObjectiveConfig } from "./objective-controller.ts";
 
 it("continues one business objective across real guarded requests and a controller restart without another user message", async () => {
@@ -22,7 +23,7 @@ it("continues one business objective across real guarded requests and a controll
     let clock = Date.now();
     let controller = new ObjectiveController(config, directory, api, () => clock);
     controller.updateSource([{ id: "first", projectId: "fixture-project" }, { id: "second", projectId: "fixture-project" }]);
-    const portfolio = (first: string, second: string, wakeAt?: number) => [{ id: "first-outcome", title: "First business outcome", sourceRefs: ["fixture-user"], taskIds: ["first"], priority: 3, state: first, next: "Verify outcome", evidence: ["first-artifact"] }, { id: "second-outcome", title: "Second business outcome", sourceRefs: ["fixture-user"], taskIds: ["second"], priority: 2, state: second, next: "Advance outcome", evidence: ["second-artifact"], ...(wakeAt ? { wakeAt, dependencies: [{ outcome: "Acceptance", owner: "Fixture reviewer", condition: "Review window opens" }] } : {}) }];
+    const portfolio = (first: string, second: string, wakeAt?: number) => [{ id: "first-outcome", title: "First business outcome", sourceRefs: ["fixture-user"], taskIds: ["first"], priority: 3, state: first, next: "Verify outcome", evidence: ["first-artifact"], delivery: { outcome: "First usable fixture artifact", owner: "Fixture lead", scope: "Fixture only", acceptance: "Artifact supplied for review", timingSource: "Fixture estimate", dueAt: clock + 120_000, checkAt: clock + 30_000, status: "delivered", evidenceRefs: ["first-artifact"] } }, { id: "second-outcome", title: "Second business outcome", sourceRefs: ["fixture-user"], taskIds: ["second"], priority: 2, state: second, next: "Advance outcome", evidence: ["second-artifact"], ...(wakeAt ? { wakeAt, dependencies: [{ outcome: "Acceptance", owner: "Fixture reviewer", condition: "Review window opens" }] } : {}) }];
     mkdirSync(join(config.checkpointDirectory, config.id), { recursive: true });
     const settle = async () => {
       const sendId = controller.state.request!.sendId;
@@ -42,6 +43,7 @@ it("continues one business objective across real guarded requests and a controll
     await controller.tick();
     controller = new ObjectiveController(config, directory, api, () => clock);
     await controller.tick(); expect(controller.state.cycle).toBe(2);
+    expect(deliveryObservations(controller.state.checkpoint?.objectives, clock)[0]).toMatchObject({ status: "delivery_claimed", businessSuccess: "unverified", owner: "Fixture lead" });
     clock += 60_000;
     await controller.tick(); expect(controller.state.cycle).toBe(3);
     sendId = await settle();

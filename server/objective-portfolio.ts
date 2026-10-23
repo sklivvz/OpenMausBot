@@ -1,3 +1,15 @@
+export interface DeliveryCommitment {
+  outcome: string;
+  owner: string;
+  scope: string;
+  acceptance: string;
+  timingSource: string;
+  dueAt: number;
+  checkAt: number;
+  status: "active" | "delivered" | "missed";
+  evidenceRefs: string[];
+}
+
 export interface PortfolioObjective {
   id: string;
   title: string;
@@ -9,6 +21,7 @@ export interface PortfolioObjective {
   evidence: string[];
   dependencies?: Array<{ outcome: string; owner: string; condition: string }>;
   wakeAt?: number;
+  delivery?: DeliveryCommitment;
 }
 
 const text = (s: unknown): s is string => typeof s === "string" && s.trim().length > 0;
@@ -27,6 +40,7 @@ export function validatePortfolio(value: unknown, taskIds: string[], previous: P
     if (o.state === "waiting" && (!Number.isFinite(o.wakeAt) || o.wakeAt! <= 0 || !o.dependencies?.length ||
       !o.dependencies.every(d => text(d.outcome) && text(d.owner) && text(d.condition)))) throw new Error(`Waiting objective ${o.id} lacks owned dependencies or its next wake`);
     if ((o.state === "verification" || o.state === "stopped") && !o.evidence.length) throw new Error(`Objective ${o.id} needs acceptance or user-stop evidence`);
+    if (o.delivery !== undefined) validateDelivery(o.delivery);
     ids.add(o.id);
     for (const id of o.taskIds) covered.add(id);
   }
@@ -35,6 +49,28 @@ export function validatePortfolio(value: unknown, taskIds: string[], previous: P
   const dropped = previous.filter(o => !ids.has(o.id));
   if (dropped.length) throw new Error(`Objectives disappeared without disposition: ${dropped.map(o => o.id).join(", ")}`);
   return objectives;
+}
+
+function validateDelivery(d: DeliveryCommitment): void {
+  if (!d || ![d.outcome, d.owner, d.scope, d.acceptance, d.timingSource].every(text) ||
+    !Number.isFinite(d.dueAt) || !Number.isFinite(d.checkAt) || d.checkAt <= 0 || d.checkAt >= d.dueAt ||
+    !["active", "delivered", "missed"].includes(d.status) || !strings(d.evidenceRefs) ||
+    (d.status === "delivered" && !d.evidenceRefs.length)) {
+    throw new Error("Delivery commitment requires outcome, owner, scope, acceptance, timing source, an earlier check, deadline, status and evidence for delivery claims");
+  }
+}
+
+export function deliveryObservations(objectives: PortfolioObjective[] | undefined, now: number) {
+  return (objectives ?? []).map(o => {
+    const d = o.delivery;
+    const base = { objectiveId: o.id, businessSuccess: "unverified" as const };
+    if (!d) return { ...base, status: "unrecorded" as const };
+    try { validateDelivery(d); } catch { return { ...base, status: "invalid_record" as const }; }
+    const status = o.state === "stopped" ? "stopped" : d.status === "delivered" ? "delivery_claimed" :
+      d.status === "missed" ? "miss_reported" : now >= d.dueAt ? "overdue" : now >= d.checkAt ? "check_due" : "upcoming";
+    return { ...base, status, dueAt: d.dueAt, checkAt: d.checkAt, owner: d.owner, outcome: d.outcome,
+      timingSource: d.timingSource, evidenceRefs: d.evidenceRefs };
+  });
 }
 
 export function portfolioContinuation(objectives: PortfolioObjective[], now: number): { state: "ready" | "waiting"; wakeAt?: number } {

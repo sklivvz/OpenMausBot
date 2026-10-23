@@ -143,6 +143,14 @@ Compare similar work and preserve difficult cases. Lower token use is useful onl
 
 ## Delivery method
 
+Time budgets are delivery commitments. Leads plan specialist contributions and
+integration to achieve the requested result by the agreed time, inspect progress
+early and report a risk with the next resolving action. They preserve original
+commitments when an estimate changes. A time budget does not expand authority,
+turn review into editing or authorize interrupting active agents at expiry.
+Recorded deadlines can be observed mechanically; acceptance still requires the
+appropriate business evidence.
+
 Every increment delivers a concrete business benefit. Marco decides whether a proposal has value; the frontier assistant estimates the effort and makes implementation choices. Technical foundations, schemas, tests and tools support an increment. They are not themselves substitutes for its business value.
 
 Select one useful outcome, execute, observe and adapt. Do not pre-plan the eventual system or require the technical architecture to be settled at each step. The six layers define responsibilities. Services, interfaces, skills and implementation structure develop from what actual work teaches us.
