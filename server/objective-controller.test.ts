@@ -84,3 +84,30 @@ it("holds acceptance claims without converting them into completed business outc
   const f = setup(); await f.controller.tick(); f.checkpoint("verification"); f.phase("settled"); await f.controller.tick();
   expect(f.controller.state.status).toBe("verification"); f.restart(); await f.controller.tick(); expect(f.sends).toHaveLength(1);
 });
+
+it("recovers a proven capacity failure once with the configured fallback and preserves history", async () => {
+  const root = mkdtempSync(join(tmpdir(), "omb-objective-recovery-")); roots.push(root);
+  const config: ObjectiveConfig = { id: "recovery", botId: "owner", threadId: "thread", approvalMode: "full", objective: "Finish accepted outcomes", instructions: "Reconcile prior work", initialLeafId: null, checkpointDirectory: join(root, "checkpoints"), recoveryModels: [{ instanceId: "claude", model: "configured-fallback" }] };
+  const sends: any[] = [], patches: any[] = [];
+  const api = async (method: string, path: string, body?: any) => {
+    if (method === "PATCH") { patches.push(body); return {}; }
+    if (method === "POST") { sends.push(body); return {}; }
+    if (path.includes("/requests/")) return { phase: "untracked", activeTurnId: null, activeLeafId: "failed-leaf", messages: [
+      { sendId: sends.at(-1).sendId },
+      { kind: "activity", tool: { name: "error: Selected model is at capacity. Please try a different model.", ok: false } },
+      { turnSucceeded: false },
+    ] };
+    return { activeLeafId: sends.length ? "failed-leaf" : null };
+  };
+  let controller = new ObjectiveController(config, root, api);
+  await controller.tick(); await controller.tick();
+  expect(patches).toEqual([{ modelSelection: config.recoveryModels![0] }]);
+  expect(controller.state.status).toBe("ready");
+  controller = new ObjectiveController(config, root, api);
+  await controller.tick();
+  expect(sends[1].expectedActiveLeafId).toBe("failed-leaf");
+  expect(sends[1].text).toContain("reconcile prior effects");
+  await controller.tick();
+  expect(controller.state.status).toBe("maintenance");
+  expect(patches).toHaveLength(1);
+});

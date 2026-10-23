@@ -12,6 +12,7 @@ export interface ObjectiveConfig {
   instructions: string;
   initialLeafId: string | null;
   checkpointDirectory: string;
+  recoveryModels?: Array<{ instanceId: string; model: string; effort?: string }>;
   portfolio?: { projectIds: string[]; intakeOnly?: boolean };
 }
 
@@ -39,6 +40,7 @@ export interface ObjectiveState {
   updatedAt: number;
   sourceFingerprint?: string;
   lastStartedAt?: number;
+  recoveries?: number;
 }
 
 type Api = (method: string, path: string, body?: unknown) => Promise<any>;
@@ -116,13 +118,13 @@ export class ObjectiveController {
       checkpoint,
       JSON.stringify({ sendId, state: "ready", progress: "What changed toward the objective", evidence: ["Actual artifact or operation receipt"], next: "Concrete next outcome to advance" }),
       "state=ready continues automatically after your work and all teammate returns settle. state=waiting additionally requires dependencies:[{outcome,owner,condition}] and wakeAt (Unix milliseconds in the future). Waiting is allowed only after independent ready work is exhausted; include verification of that in progress. state=verification requests objective acceptance with evidence; it does not establish business success. Use coordinate_bots for any review/delegation before settling. Do not invent evidence. Update and read back existing Todoist records at meaningful progress.",
-      this.state.checkpoint ? `Previous checkpoint (claims, verify against source): ${JSON.stringify(this.state.checkpoint)}` : "Recover the existing accepted work and checkpoints before starting.",
+      this.state.checkpoint ? `Previous checkpoint (claims, verify against source): ${JSON.stringify({ path: join(this.config.checkpointDirectory, this.config.id, `${this.state.checkpoint.sendId}.json`), progress: this.state.checkpoint.progress, next: this.state.checkpoint.next, objectives: this.state.checkpoint.objectives?.map(({ id, title, state, next }) => ({ id, title, state, next })) })}` : "Recover the existing accepted work and checkpoints before starting.",
       this.state.detail ? `Controller observation: ${this.state.detail}` : "",
     ].filter(Boolean).join("\n\n");
   }
   private readCheckpoint(sendId: string): ObjectiveCheckpoint {
     const raw = readFileSync(join(this.config.checkpointDirectory, this.config.id, `${sendId}.json`), "utf8");
-    if (Buffer.byteLength(raw) > 32_768) throw new Error("Checkpoint exceeds 32 KiB");
+    if (Buffer.byteLength(raw) > 131_072) throw new Error("Checkpoint exceeds 128 KiB");
     const value = JSON.parse(raw);
     if (this.config.portfolio) {
       value.objectives = validatePortfolio(value.objectives, this.state.request?.taskIds ?? [], this.state.checkpoint?.objectives ?? [], this.clock());
@@ -149,12 +151,24 @@ export class ObjectiveController {
           this.transition(snapshot.phase, "Runtime still owns this request or its dependencies."); return;
         }
         if (snapshot.phase !== "settled") {
+          const failed = snapshot.messages?.findLast((m: any) => m.turnSucceeded !== undefined);
+          const capacityError = snapshot.messages?.findLast((m: any) => m.kind === "activity" && m.tool?.name?.startsWith("error: "));
+          const fallback = this.config.recoveryModels?.[this.state.recoveries ?? 0];
+          if (fallback && snapshot.activeTurnId === null && failed?.turnSucceeded === false &&
+            capacityError?.tool?.name === "error: Selected model is at capacity. Please try a different model.") {
+            await this.api("PATCH", `/api/bots/${this.config.botId}/tasks/${this.config.threadId}`, { modelSelection: fallback });
+            this.state.recoveries = (this.state.recoveries ?? 0) + 1;
+            this.state.leafId = snapshot.activeLeafId;
+            delete this.state.request;
+            this.transition("ready", `Provider capacity failure; selected configured fallback ${fallback.instanceId}/${fallback.model}. Preserve the failed turn's artifacts and reconcile prior effects before advancing unfinished work.`);
+            return;
+          }
           this.transition("maintenance", "Request did not settle successfully; ownership or provider recovery requires review."); return;
         }
         this.state.leafId = snapshot.activeLeafId;
         try {
           const checkpoint = this.readCheckpoint(request.sendId);
-          const fingerprint = createHash("sha256").update(JSON.stringify({ progress: checkpoint.progress, evidence: checkpoint.evidence, next: checkpoint.next })).digest("hex");
+          const fingerprint = createHash("sha256").update(JSON.stringify({ progress: checkpoint.progress, evidence: checkpoint.evidence, next: checkpoint.next, objectives: checkpoint.objectives })).digest("hex");
           this.state.unchanged = fingerprint === this.state.fingerprint ? this.state.unchanged + 1 : 0;
           this.state.fingerprint = fingerprint;
           this.state.checkpoint = checkpoint;
