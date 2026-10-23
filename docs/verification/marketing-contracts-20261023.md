@@ -13,7 +13,8 @@ at the conflicting section and read back. Liz's campaign and account-readiness
 skills were updated without changing their enabled state. Donna's takeout skill
 and profile now preserve food constraints and require renewed concrete basket
 approval after a stop or rejection. The ordering thread was changed to Ask with
-no remembered permissions. These are instruction changes and containment, not
+no remembered permissions. Donna's default for future conversations was also
+changed to Ask and read back after her active turn finished. These are instruction changes and containment, not
 proof of future compliant purchases or completed marketing objectives.
 
 An isolated server with a temporary home and fake provider verified profile
