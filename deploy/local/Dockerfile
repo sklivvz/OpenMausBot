@@ -45,4 +45,7 @@ COPY --chmod=0555 newsletter-template-preflight /usr/local/bin/newsletter-templa
 COPY --chmod=0555 newsletter-template-prepare /usr/local/bin/newsletter-template-prepare
 COPY --chmod=0555 slop-detector-mcp.cjs /usr/local/bin/slop-detector-mcp
 COPY --chmod=0555 keila-drafts-mcp.cjs /usr/local/bin/keila-drafts-mcp
+COPY --chmod=0555 review-packet-mcp.cjs /usr/local/bin/review-packet-mcp
+COPY --chmod=0555 execution-tools-mcp.cjs /usr/local/bin/execution-tools-mcp
+COPY --chmod=0555 assembled-output-verify /usr/local/bin/assembled-output-verify
 USER maus

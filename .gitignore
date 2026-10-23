@@ -52,3 +52,7 @@ deploy/podman/.env.*
 /deploy/objectives/controller.mjs
 
 /deploy/local/keila-drafts-mcp.cjs
+/deploy/local/review-packet-mcp.cjs
+/deploy/local/execution-tools-mcp.cjs
+/deploy/local/assembled-output-verify
+__pycache__/
