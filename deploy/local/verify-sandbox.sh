@@ -7,6 +7,8 @@ python3 --version
 rg --version
 test -x /usr/local/bin/claude-with-artifacts
 test -x /usr/local/bin/newsletter-template-prepare
+test -x /usr/local/bin/claude-design-mcp
+test -x /usr/local/bin/slop-detector-mcp
 mkdir -p /fixture/work /fixture/outside
 chmod 777 /fixture/work /fixture/outside
 cat > /fixture/probe.mjs <<'JS'
