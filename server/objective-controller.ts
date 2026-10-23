@@ -144,6 +144,24 @@ export class ObjectiveController {
     }
     return validateCheckpoint(value, sendId, at);
   }
+  private async recoverProviderFailure(snapshot: any): Promise<boolean> {
+    if (!this.state.request?.accepted || snapshot.phase !== "untracked" || snapshot.activeTurnId !== null ||
+      snapshot.messages?.some((m: any) => m.requestCancelled)) return false;
+    const failed = snapshot.messages?.findLast((m: any) => m.turnSucceeded !== undefined);
+    const error = snapshot.messages?.findLast((m: any) => m.kind === "activity" && m.tool?.name?.startsWith("error: "))?.tool?.name ?? "";
+    const unavailable = error === "error: Selected model is at capacity. Please try a different model." ||
+      /^error: This Claude account has reached its (?:weekly|5-hour|usage) limit(?:[.,]| \()/.test(error) ||
+      /^error: Your ChatGPT account \(used by Codex\) reached its Codex usage limit\./.test(error);
+    const fallback = this.config.recoveryModels?.[this.state.recoveries ?? 0];
+    if (!fallback || failed?.turnSucceeded !== false || !unavailable) return false;
+    await this.api("PATCH", `/api/bots/${this.config.botId}/tasks/${this.config.threadId}`, { modelSelection: fallback });
+    this.state.recoveries = (this.state.recoveries ?? 0) + 1;
+    this.state.leafId = snapshot.activeLeafId;
+    delete this.state.request;
+    delete this.state.nextReconcileAt;
+    this.transition("ready", `Provider availability failure; selected configured fallback ${fallback.instanceId}/${fallback.model}. Preserve the failed turn's artifacts and reconcile prior effects before advancing unfinished work.`);
+    return true;
+  }
   private async reconcileConversation(): Promise<void> {
     if (this.clock() < (this.state.nextReconcileAt ?? 0)) return;
     this.state.nextReconcileAt = this.clock() + 30_000;
@@ -151,6 +169,14 @@ export class ObjectiveController {
     const task = bots.find((b: any) => b.id === this.config.botId)?.tasks?.find((t: any) => t.threadId === this.config.threadId);
     if (!task) { this.transition("intervened", "The objective conversation is no longer available."); return; }
     if (task.busy || task.waitingForTeammates) { this.save(); return; }
+    if (this.state.request?.accepted) {
+      try {
+        const snapshot = await this.api("GET", `/api/bots/${this.config.botId}/requests/${this.state.request.sendId}?threadId=${this.config.threadId}`);
+        if (await this.recoverProviderFailure(snapshot)) return;
+      } catch (error) {
+        if ((error as { status?: number }).status !== 409) throw error;
+      }
+    }
     const messages: WireMessage[] = [];
     let before: string | undefined, leafId: string | null | undefined;
     for (let page = 0; page < 20; page++) {
@@ -204,20 +230,7 @@ export class ObjectiveController {
           this.transition(snapshot.phase, "Runtime still owns this request or its dependencies."); return;
         }
         if (snapshot.phase !== "settled") {
-          const failed = snapshot.messages?.findLast((m: any) => m.turnSucceeded !== undefined);
-          const capacityError = snapshot.messages?.findLast((m: any) => m.kind === "activity" && m.tool?.name?.startsWith("error: "));
-          const unavailable = capacityError?.tool?.name === "error: Selected model is at capacity. Please try a different model." ||
-            /^error: This Claude account has reached its (?:weekly|5-hour|usage) limit[.,]/.test(capacityError?.tool?.name ?? "");
-          const fallback = this.config.recoveryModels?.[this.state.recoveries ?? 0];
-          if (fallback && snapshot.activeTurnId === null && failed?.turnSucceeded === false &&
-            unavailable) {
-            await this.api("PATCH", `/api/bots/${this.config.botId}/tasks/${this.config.threadId}`, { modelSelection: fallback });
-            this.state.recoveries = (this.state.recoveries ?? 0) + 1;
-            this.state.leafId = snapshot.activeLeafId;
-            delete this.state.request;
-            this.transition("ready", `Provider availability failure; selected configured fallback ${fallback.instanceId}/${fallback.model}. Preserve the failed turn's artifacts and reconcile prior effects before advancing unfinished work.`);
-            return;
-          }
+          if (await this.recoverProviderFailure(snapshot)) return;
           this.transition("maintenance", "Request did not settle successfully; ownership or provider recovery requires review."); return;
         }
         this.state.leafId = snapshot.activeLeafId;
