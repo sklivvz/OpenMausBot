@@ -99,9 +99,9 @@ test('activity excludes missing telemetry and reports actual running state separ
 });
 test('briefing rendering requires full coverage and enforces limits, unique links and remainder arithmetic', async () => {
   const tasks = Array.from({ length: 6 }, (_, n) => ({ ...row('task-' + n), projectId: '6hjrmJ99PmfVmfwJ' }));
-  const f = fixture(tasks, { snapshot: { ...snapshot(tasks), projects: { '6hjrmJ99PmfVmfwJ': { open: 6 } } }, bots: [{ name: 'Accountant', section: 'Accounting', tasks: [{ threadId: 'source-thread' }] }] });
+  const f = fixture(tasks, { snapshot: { ...snapshot(tasks), projects: { '6hjrmJ99PmfVmfwJ': { open: 6 } } }, bots: [{ id: 'accountant', name: 'Accountant', section: 'Accounting', tasks: [{ threadId: 'source-thread' }] }] });
   const receipts: string[] = [];
-  const item = (n: number) => ({ taskIds: ['task-' + n], label: 'Invoice decision', bucket: 'on_you', summary: 'Review the prepared invoice recommendation.', sourceRef: 'thread fixture, current user decision and prepared invoice inspected', verifiedNextAction: true, evidenceIds: [receipts[n]] });
+  const item = (n: number) => ({ taskIds: ['task-' + n], label: 'Invoice decision', bucket: 'on_you', summary: 'Review the prepared invoice recommendation.', sourceRef: 'thread fixture, current user decision and prepared invoice inspected', verifiedNextAction: true, evidenceIds: [receipts[n]], actionTarget: { receiptId: receipts[n] } });
   await assert.rejects(f.call('get_briefing', { items: [item(0)] }), /Incomplete/);
   let p: any = await f.call('read_work_queue'); while (p.nextCursor) p = await f.call('read_work_queue', { cursor: p.nextCursor });
   await assert.rejects(f.call('get_briefing', { items: [{ ...item(0), evidenceIds: ['invented'] }] }), /real retrieval receipt/);
@@ -114,6 +114,8 @@ test('briefing rendering requires full coverage and enforces limits, unique link
   await assert.rejects(f.call('get_briefing', { items: [{ ...item(0), verifiedNextAction: false }] }), /verify/);
   const rendered: any = await f.call('get_briefing', { items: [{ ...item(0), taskIds: ['task-0', 'task-1'], evidenceIds: receipts.slice(0, 2) }, item(2)] });
   assert.ok(rendered.markdown.includes('## Accounting — 6 open'));
+  assert.ok(rendered.markdown.includes('[Invoice decision](openmausbot://thread/source-thread?bot=accountant)'));
+  assert.ok(rendered.markdown.includes('[Todoist 1](https://app.todoist.com/app/task/task-0)'));
   assert.ok(rendered.markdown.includes('*and 3 more open.*'));
   assert.equal((rendered.markdown.match(/https:\/\/app.todoist.com\/app\/task\//g) ?? []).length, 3);
   assert.ok(rendered.markdown.includes('An idle process does not establish spare capacity'));
@@ -126,4 +128,31 @@ test('source retrieval is scoped and excludes Bill summaries and routine prompts
   await f.call('read_work_queue');
   await assert.rejects(f.call('read_work_context', { taskId: 'a', threadId: 'private' }), /Invalid thread/);
   await assert.rejects(f.call('read_work_context', { taskId: 'a', threadId: 'bill' }), /no context/);
+});
+
+test('personal actions require a retrieved destination, with Todoist only as supporting context', async () => {
+  const tasks = ['task-alpha', 'task-beta'].map(id => ({ ...row(id), projectId: '6hjrcrRM8XH9hVJQ' }));
+  const f = fixture(tasks, { bots: [{ id: 'legal', name: 'Counsel', section: 'Legal', tasks: [{ threadId: 'proposal' }] }], messages: [
+    { id: 'proposal-message', role: 'bot', kind: 'text', text: 'Review [Proposal](https://docs.example.test/proposal?v=2) for signature. Context https://app.todoist.com/app/task/task-alpha' },
+    { id: 'later', role: 'bot', kind: 'text', text: 'x'.repeat(7500) + ' https://docs.example.test/unread' },
+  ] });
+  await f.call('read_work_queue');
+  for (const t of tasks) await f.call('read_task_description', { taskId: t.id, page: 0 });
+  const source: any = await f.call('read_work_context', { taskId: 'task-alpha', threadId: 'proposal' });
+  const other: any = await f.call('read_work_context', { taskId: 'task-beta', threadId: 'proposal' });
+  assert.equal(source.conversationUrl, 'openmausbot://thread/proposal?bot=legal');
+  assert.deepEqual(source.artifactCandidates, ['https://docs.example.test/proposal?v=2']);
+  const item = { taskIds: ['task-alpha'], label: 'Review proposal', summary: 'Decide whether the prepared terms are acceptable.', bucket: 'on_you', sourceRef: 'Current proposal message', verifiedNextAction: true, evidenceIds: [source.receiptId] };
+  await assert.rejects(f.call('get_briefing', { items: [item] }), /actionTarget/);
+  await assert.rejects(f.call('get_briefing', { items: [{ ...item, actionTarget: { receiptId: 'invented' } }] }), /actionTarget/);
+  await assert.rejects(f.call('get_briefing', { items: [{ ...item, evidenceIds: [source.receiptId, other.receiptId], actionTarget: { receiptId: other.receiptId } }] }), /this task group/);
+  for (const artifactUrl of ['https://app.todoist.com/app/task/task-alpha', 'https://docs.example.test/unread', 'https://invented.example.test', 'javascript:alert(1)']) {
+    await assert.rejects(f.call('get_briefing', { items: [{ ...item, actionTarget: { receiptId: source.receiptId, artifactUrl } }] }), /exact non-Todoist URL/);
+  }
+  const rendered: any = await f.call('get_briefing', { items: [{ ...item, actionTarget: { receiptId: source.receiptId, artifactUrl: source.artifactCandidates[0] } }] });
+  assert.ok(rendered.markdown.includes('[Review proposal](https://docs.example.test/proposal?v=2)'));
+  assert.ok(rendered.markdown.includes('[Conversation](openmausbot://thread/proposal?bot=legal)'));
+  assert.ok(rendered.markdown.includes('[Todoist](https://app.todoist.com/app/task/task-alpha)'));
+  const waiting: any = await f.call('get_briefing', { items: [{ ...item, bucket: 'waiting_others' }] });
+  assert.ok(waiting.markdown.includes('[Review proposal](https://app.todoist.com/app/task/task-alpha)'));
 });
