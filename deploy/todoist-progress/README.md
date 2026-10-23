@@ -43,8 +43,11 @@ It verifies the resulting Todoist state separately.
 
 ## Workflow
 
-1. Inspect `{taskId, projectId}`. Code reads every task page with duplicate/cursor,
-   count and duration bounds and returns `taskSha256` plus current progress.
+1. Inspect `{taskId, projectId}`. Code uses the connector’s verified
+   `ids: [taskId]` filter with a bounded limit and returns `taskSha256` plus current
+   progress. The result must contain only that task, in the selected project,
+   without a continuation cursor. An ignored filter, duplicate result or incomplete
+   response fails; the tool never falls back to scanning the whole queue.
 2. Update with `{taskId, projectId, operationId, expectedTaskSha256, owner,
    status, nextAction, evidenceIds, blocker?, followUp?}`. Use a stable operation
    ID for this exact update. The allowed working states are `ready`, `in_progress`,
@@ -103,9 +106,16 @@ node --experimental-strip-types --test deploy/todoist-progress/progress.test.ts
 Fourteen isolated tests cover exact preservation/readback, unchanged and repeated
 operations, suffix preservation, stale snapshots, identity conflicts, lost responses,
 uncertain-write bypass prevention, changed preserved fields, evidence/scope/hold
-requirements, malicious delimiters, exclusive locks, incomplete paging, actual
+requirements, malicious delimiters, exclusive locks, incomplete/ignored targeted filtering, actual
 connector framing and credential redirect isolation. The full workflow runs
 against a synthetic loopback HTTP connector with temporary task data and private
 receipts; no production data or account is used. Strict targeted TypeScript and
 lint pass. These tests establish mechanical behavior, not semantic correctness of
 supplied progress or measured production token savings.
+
+The `ids` input was verified from the configured connector’s actual
+`COMPOSIO_GET_TOOL_SCHEMAS` response on 23 October 2026. It accepts an array of
+string task IDs; the provider’s default page limit is 50. Inspection, pre-write
+validation and readback each make one filtered read, rather than rereading every
+queue page. This is a request-count improvement; production latency and token
+savings have not been measured.

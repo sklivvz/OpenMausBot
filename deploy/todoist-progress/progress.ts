@@ -38,24 +38,14 @@ export function createTodoistProgress({ rpc, receiptDir, allowedProjects, verify
   fs.mkdirSync(receiptDir, { recursive: true, mode: 0o700 });
   async function read(target: z.infer<typeof targetSchema>): Promise<Task> {
     need(allowedProjects.includes(target.projectId), 'Project is outside this tool scope');
-    const started = Date.now();
-    const tasks: Task[] = [], seen = new Set<string>(), cursors = new Set<string>();
-    let cursor: string | undefined;
-    for (let page = 0; page < 100; page++) {
-      need(Date.now() - started < 120000, 'Task snapshot timed out without a complete result');
-      const raw = await rpc('TODOIST_GET_ALL_TASKS', { limit: 5, ...(cursor ? { cursor } : {}) }) as { tasks?: Task[]; next_cursor?: unknown; has_more?: unknown };
-      need(Array.isArray(raw?.tasks), 'Incomplete task snapshot');
-      for (const task of raw.tasks) { need(id.safeParse(task.id).success && typeof task.content === 'string' && typeof task.project_id === 'string' && !seen.has(task.id), 'Invalid or overlapping task pages'); seen.add(task.id); tasks.push(task); }
-      if (!raw.next_cursor) {
-        need(!raw.has_more, 'Incomplete task pagination');
-        const task = tasks.find(t => t.id === target.taskId && t.project_id === target.projectId);
-        need(task && task.is_completed !== true && task.checked !== true && task.is_deleted !== true, 'Task is not currently open in the selected project');
-        need(task.description === undefined || typeof task.description === 'string', 'Invalid task description');
-        return task;
-      }
-      need(typeof raw.next_cursor === 'string' && !cursors.has(raw.next_cursor), 'Repeated task cursor'); cursor = raw.next_cursor; cursors.add(cursor);
-    }
-    throw Error('Task snapshot exceeded its bounded page limit');
+    const raw = await rpc('TODOIST_GET_ALL_TASKS', { ids: [target.taskId], limit: 5 }) as { tasks?: Task[]; next_cursor?: unknown; has_more?: unknown };
+    need(Array.isArray(raw?.tasks) && raw.tasks.length <= 1, 'Invalid targeted task snapshot');
+    need(!raw.next_cursor && !raw.has_more, 'Targeted task response is incomplete; no broader lookup was attempted');
+    need(raw.tasks.every(task => task.id === target.taskId && typeof task.content === 'string' && typeof task.project_id === 'string'), 'Connector ignored the requested task filter');
+    const task = raw.tasks[0];
+    need(task && task.project_id === target.projectId && task.is_completed !== true && task.checked !== true && task.is_deleted !== true, 'Task is not currently open in the selected project');
+    need(task.description === undefined || typeof task.description === 'string', 'Invalid task description');
+    return task;
   }
   async function inspect(raw: unknown) {
     const target = targetSchema.parse(raw), task = await read(target);
@@ -119,6 +109,6 @@ export function createTodoistProgress({ rpc, receiptDir, allowedProjects, verify
   } };
 }
 export const progressToolDefinitions = [
-  { name: 'inspect_todoist_progress', description: 'Read a complete current Todoist snapshot and return the exact task hash and managed progress block. No model or task changes.', inputSchema: z.toJSONSchema(targetSchema), annotations: { readOnlyHint: true } },
+  { name: 'inspect_todoist_progress', description: 'Read only the requested Todoist task and return its exact hash and managed progress block. No model or task changes.', inputSchema: z.toJSONSchema(targetSchema), annotations: { readOnlyHint: true } },
   { name: 'update_todoist_progress', description: 'Update only the managed progress block of an open task using host-verified evidence. Preserves task fields, rejects stale snapshots, suppresses unchanged writes, and verifies readback. Does not close tasks or infer approval. Reuse operationId for uncertain outcomes.', inputSchema: z.toJSONSchema(progressSchema), annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true } },
 ];
