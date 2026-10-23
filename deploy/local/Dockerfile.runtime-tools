@@ -9,4 +9,5 @@ COPY --chmod=0555 operations-queue /usr/local/bin/operations-queue
 COPY --chmod=0555 attention-scan /usr/local/bin/attention-scan
 COPY --chmod=0555 attention-scan-next /usr/local/bin/attention-scan-next
 COPY --chmod=0555 marketing-calendar-audit /usr/local/bin/marketing-calendar-audit
+COPY --chmod=0555 newsletter-template-preflight /usr/local/bin/newsletter-template-preflight
 USER maus

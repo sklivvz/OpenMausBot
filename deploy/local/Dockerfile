@@ -41,5 +41,6 @@ COPY --chmod=0555 claude-design-mcp.cjs /usr/local/bin/claude-design-mcp
 COPY --chmod=0555 claude-with-artifacts /usr/local/bin/claude-with-artifacts
 COPY --chmod=0555 work-review-mcp.cjs /usr/local/bin/work-review-mcp
 COPY --chmod=0555 marketing-calendar-audit /usr/local/bin/marketing-calendar-audit
+COPY --chmod=0555 newsletter-template-preflight /usr/local/bin/newsletter-template-preflight
 COPY --chmod=0555 slop-detector-mcp.cjs /usr/local/bin/slop-detector-mcp
 USER maus
