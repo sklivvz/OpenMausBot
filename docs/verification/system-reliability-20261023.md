@@ -50,6 +50,12 @@ Python 3.11.2, the `python` alias and ripgrep 13.0.0. The standard local Dockerf
 includes these packages for future builds. The Docker build context now includes
 both newsletter utilities; its old allowlist omitted them.
 
+The pre-replacement container diff also found Design and copy-detector MCP
+executables installed outside the original image. The runtime-tools Dockerfile
+now retains both. Design matched the deployed checksum; the rebuilt detector
+matched the deployed code after excluding generated dependency-path comments.
+The sandbox fixture additionally checks that both executables are present.
+
 Codex 0.163.0 failed ordinary sandboxed reads because Docker's default seccomp
 profile denied its nested namespaces. The reviewed local profile derives from a
 pinned Moby default and adds only the calls needed by the nested sandbox. See
@@ -89,3 +95,13 @@ The prior routine `completed` label still represents execution settlement, not
 verified business success. Successful sandbox qualification does not establish
 that a later travel check or briefing achieves its business outcome. Review
 those actual scheduled runs separately; do not create synthetic live tasks.
+
+## Observed continuation before runtime replacement
+
+Finance and Legal reconciled to ready, PMO continued to cycle 2, and Marketing
+continued in its new thread at cycle 4. Marketing delegated bounded contributions
+to Liz, Chandler, Blake and Luis. Legal delegated source assessment to Vinny,
+who returned a persisted source matrix. These are execution and artifact
+observations, not acceptance of the parent business objectives. The independent
+observer remained healthy and caught up. The personal portfolio retained its
+explicit stopped state.
