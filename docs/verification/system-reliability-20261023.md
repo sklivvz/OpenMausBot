@@ -149,3 +149,11 @@ Thirty-four controller/reconciliation checks passed, including an isolated live
 fixture recovering from maintenance through a real provider error and guarded
 continuation. This does not add fallback providers to configurations lacking them
 or claim to restore a provider's exhausted account quota.
+
+At 17:53 UTC, the deployed controller selected Marketing's configured Sonnet
+fallback and Legal's configured Opus fallback. Both became ready while Finance
+and Sales occupied the two execution slots. PMO was ready to correct an incomplete
+checkpoint; its next complete portfolio accounting was still unverified.
+Personal remained stopped, all maintenance holds were absent, and the source
+inventory was fresh. App CPU was approximately 28% and memory 2.9 GiB in this
+single sample; this is not a sustained-load qualification.
