@@ -5012,9 +5012,9 @@ describe("harness HTTP API", () => {
       expect(statSync(result.path).mode & 0o777).toBe(0o600);
     }
 
-    const unsupported = await fetch(`${BASE}/api/files?name=payload.zip`, {
+    const unsupported = await fetch(`${BASE}/api/files?name=payload.7z`, {
       method: "POST",
-      headers: { "content-type": "application/zip" },
+      headers: { "content-type": "application/x-7z-compressed" },
       body: Buffer.from("archive"),
     });
     expect(unsupported.status).toBe(400);

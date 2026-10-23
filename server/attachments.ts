@@ -65,8 +65,10 @@ const IMAGE_MIMES: Record<string, string> = {
   "image/webp": ".webp",
 };
 
-/** No archives, binaries, HTML, SVG or scripts. The claimed mime picks the extension; an attacker's filename never does. */
+/** ZIP uploads remain opaque files, never extracted here. The claimed mime picks the extension; an attacker's filename never does. */
 const FILE_MIMES: Readonly<Record<string, string>> = {
+  "application/zip": ".zip",
+  "application/x-zip-compressed": ".zip",
   "video/mp4": ".mp4",
   "video/webm": ".webm",
   "video/quicktime": ".mov",

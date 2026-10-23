@@ -107,6 +107,7 @@ export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const FILE_MAX_BYTES = 25 * 1024 * 1024;
 
 const DOCUMENT_MIMES: Readonly<Record<string, string>> = {
+  zip: "application/zip",
   txt: "text/plain",
   md: "text/markdown",
   markdown: "text/markdown",
@@ -751,7 +752,7 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
   const rejectedNames = results.flatMap((result) => result.rejectedNames);
   const uploadErrors = results.flatMap((result) => result.uploadError ? [result.uploadError] : []);
   const pathless = rejectedNames.length
-    ? `Unable to attach ${rejectedNames.join(", ")}. Choose a supported image, document, or audio file.`
+    ? `Unable to attach ${rejectedNames.join(", ")}. Choose a supported image, document, ZIP archive, or audio file.`
     : null;
   const failed = uploadErrors.length ? uploadErrors.join("; ") : null;
   return {
