@@ -105,3 +105,29 @@ who returned a persisted source matrix. These are execution and artifact
 observations, not acceptance of the parent business objectives. The independent
 observer remained healthy and caught up. The personal portfolio retained its
 explicit stopped state.
+
+## Deployment receipt
+
+The session resumed after a separate DeepSeek-model deployment had replaced the
+app image. Its explicit Compose image override initially took precedence over
+the environment setting. The initial Compose success did not deploy the repair:
+live verification still found missing Python and ripgrep. The repair was rebuilt
+on that newer image, preserving its application-server SHA-256
+`6c9ba97292d34f014484cfd755f9a8e305ed9a884ca246bfa82ad9a15ff91b33`.
+The combined image passed the isolated sandbox fixture again before deployment.
+
+At 17:46:30 UTC on 23 October, the idle app was replaced with
+`openmausbot-local:runtime-tools-deepseek-20261023`, image
+`sha256:feab9726fe4b2304237b138a02f0e2363da380e9ed46d0fe82135e4e3293f0ec`.
+Both API and Docker health checks passed. The actual container has Python,
+ripgrep, Design, copy-detector, newsletter and review tools. Its seccomp profile
+matches the qualified profile. Before/after comparison preserved all 15 bots'
+models, approval settings and task records, together with every data mount.
+
+At 17:46:54 UTC, all six maintenance-created admission holds were removed after
+checking their original contents. The personal portfolio remained stopped.
+Private deployment receipts and the prior Compose override are retained in the
+maintenance worktree; the prior image remains available. The Compose override
+now inherits the image selected by the local environment instead of shadowing it.
+The independent DeepSeek source work remains in its owner's worktree; this repair
+does not claim that work was committed or merged upstream.
