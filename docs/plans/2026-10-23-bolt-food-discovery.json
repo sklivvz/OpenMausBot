@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-23",
+  "scope": [
+    "grocery",
+    "restaurant_delivery",
+    "restaurant_pickup"
+  ],
+  "excluded": [
+    "dine_out"
+  ],
+  "status": "recorded_flow_discovered_customer_api_unqualified",
+  "productionChanges": false,
+  "browserControlled": false,
+  "evidence": [
+    {
+      "id": "E01",
+      "kind": "current_configuration",
+      "summary": "Donna has takeout-ordering and browser-task-recovery; Dude has grocery-plan-reconciliation and browser-task-recovery; neither returned bolt-food-order. GET only.",
+      "source": {
+        "method": "GET",
+        "paths": [
+          "/api/bots/8929a449-0acd-4a66-a97b-10a9284ed555/skills",
+          "/api/bots/714b23fe-e272-4d2d-b437-25d3019ca7f1/skills"
+        ],
+        "skillSha256": "77bd123f2d40123c9251d2e888d3f6864fb421c412622f7c7604a2501c9be759"
+      }
+    },
+    {
+      "id": "E02",
+      "kind": "historical_agent_instruction",
+      "summary": "Original bolt-food-order creation/update records describe browser flow and session recovery. Instructions are not proof every stated step succeeded.",
+      "threadId": "bcd7b092-6860-44b6-af9c-93054a5e451f",
+      "messageIds": [
+        "584c4cec-2ef5-4d89-9079-a9abea578698",
+        "b54ff996-226e-4cc6-8e75-b8a48ea8fc43",
+        "3be5e9d5-78fc-4292-b0c2-36ae5aabb24d"
+      ]
+    },
+    {
+      "id": "E03",
+      "kind": "historical_tool_output",
+      "summary": "Checkout snapshot: item subtotal120 cents, small-order680, service152, delivery329, payable1281; delivery tiers and pay control observed.",
+      "threadId": "bcd7b092-6860-44b6-af9c-93054a5e451f",
+      "messageIds": [
+        "9ec0fcb1-9c17-4501-b5ad-969cfefb4cf6"
+      ]
+    },
+    {
+      "id": "E04",
+      "kind": "historical_tool_output",
+      "summary": "DOM inspection recovered checkout confirm, basket entry and quantity controls.",
+      "threadId": "bcd7b092-6860-44b6-af9c-93054a5e451f",
+      "messageIds": [
+        "2d86f13d-e8c6-41d8-b13c-4690bf5f72e7",
+        "024893db-c1c5-4665-ae32-5f886ce3120d"
+      ]
+    },
+    {
+      "id": "E05",
+      "kind": "historical_tool_output",
+      "summary": "Product Add button DOM contains split Add and formatted price children and stable-looking data-testid.",
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "messageIds": [
+        "ae2174ea-3946-423e-84ee-bd31c5757aaf"
+      ]
+    },
+    {
+      "id": "E06",
+      "kind": "historical_tool_output",
+      "summary": "Product cards, in-store search and dish-detail close test IDs; close was a DIV.",
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "messageIds": [
+        "af999345-1591-4ba4-89e1-f478faded15f",
+        "a118aff1-6178-4daa-8652-765b3ce00406",
+        "7f6d2cb8-94c3-449c-8790-eb389141f3aa"
+      ]
+    },
+    {
+      "id": "E07",
+      "kind": "historical_tool_output",
+      "summary": "Switching branch displayed Start a new order? with explicit removal of previous branch order.",
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "messageIds": [
+        "90a5a0a1-ae72-4075-bf50-a6d9e4d22bff",
+        "3eb55341-21a7-4a06-9214-586b53d086c7"
+      ]
+    },
+    {
+      "id": "E08",
+      "kind": "historical_tool_output",
+      "summary": "Main, grocery and in-store-search basket entry controls coexist; labels differ by view.",
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "messageIds": [
+        "8184163c-f71d-415d-8eb1-68134d2b461d"
+      ]
+    },
+    {
+      "id": "E09",
+      "kind": "historical_tool_output",
+      "summary": "Submission click followed by Processing order, then active order and Preparing your order. No new submission during discovery.",
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "messageIds": [
+        "7a44b2c3-b618-4a27-8bd3-19074b7fca2e",
+        "faf7f940-00ff-476a-8d13-ea9370ebb51a",
+        "7300fbdb-1944-4a0b-9cbb-bdd7e9f09d89"
+      ]
+    },
+    {
+      "id": "E10",
+      "kind": "historical_tool_output",
+      "summary": "Worker order lookup showed both Log in or sign up and No orders; signed-out absence is not a failed-order result.",
+      "threadId": "1b93cd28-c6a8-42d5-b153-704167b6682f",
+      "messageIds": [
+        "2b002697-571b-4bba-b00e-bd7ab75e0d4c",
+        "819a38d2-72ab-47c2-8ad7-8662b0b61096"
+      ]
+    },
+    {
+      "id": "E11",
+      "kind": "historical_tool_output",
+      "summary": "Covered controls, absent state-specific selectors, busy navigation and evaluation variable redeclaration.",
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "messageIds": [
+        "77fafad9-720d-466f-9240-6738a54c2b5b",
+        "fb664230-e9f2-4ef3-ae28-691ad6070640",
+        "28c0d8eb-e244-4a68-a25c-3ebf13b33e21",
+        "403c1ced-9181-4cb4-92ec-18f648ab9f3a",
+        "0ca14fd3-1c00-42ae-a813-906438518821",
+        "3687879b-7d64-49af-8b56-18a2c6cf2009",
+        "43ef0f81-026a-4c4e-8070-72f2c65482c9",
+        "72b791a9-9bfb-4c56-a5f8-94da94be340b",
+        "25490d39-aab8-414b-95b5-a71fe886dc3b"
+      ]
+    },
+    {
+      "id": "E12",
+      "kind": "historical_tool_output",
+      "summary": "Checkout positive rows subtotal2800/service199/delivery539 cents do not alone equal payable3138; full signed breakdown required.",
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "messageIds": [
+        "8015eb9e-c100-4c88-96a6-4a048e6e721a"
+      ]
+    },
+    {
+      "id": "E13",
+      "kind": "current_public_http",
+      "summary": "Unauthenticated food.bolt.eu HTTP request returned403; web text reader returned JavaScript-required shell. No workaround attempted.",
+      "source": {
+        "url": "https://food.bolt.eu/",
+        "authenticated": false
+      }
+    },
+    {
+      "id": "P01",
+      "kind": "public_vendor_documentation",
+      "summary": "Public web ordering, groceries and pickup description.",
+      "source": {
+        "url": "https://bolt.eu/en/food/"
+      }
+    },
+    {
+      "id": "P02",
+      "kind": "public_vendor_documentation",
+      "summary": "Grocery store selection and fulfilment description.",
+      "source": {
+        "url": "https://bolt.eu/en/food/market/"
+      }
+    },
+    {
+      "id": "P03",
+      "kind": "public_vendor_documentation",
+      "summary": "Separate delivery, small-order and service fees.",
+      "source": {
+        "url": "https://bolt.eu/en/support/articles/360007249339/"
+      }
+    },
+    {
+      "id": "P04",
+      "kind": "public_vendor_documentation",
+      "summary": "Deprecated merchant/POS documentation, not customer checkout contract.",
+      "source": {
+        "url": "https://developer.bolt.eu/delivery/main/"
+      }
+    },
+    {
+      "id": "P05",
+      "kind": "public_vendor_documentation",
+      "summary": "Scheduled delivery described; account web capability unverified.",
+      "source": {
+        "url": "https://bolt.eu/en/support/articles/360007268239/"
+      }
+    },
+    {
+      "id": "P06",
+      "kind": "public_vendor_documentation",
+      "summary": "Market-specific cancellation/change guidance; not Tallinn qualification.",
+      "source": {
+        "url": "https://bolt.eu/en-pl/support/articles/4405062492690/"
+      }
+    }
+  ],
+  "browserRoutes": [
+    {
+      "url": "https://food.bolt.eu/en/<cityId>-<city>/",
+      "kind": "page_navigation_not_api",
+      "qualification": "historical_tool_result"
+    },
+    {
+      "url": "https://food.bolt.eu/en/<cityId>-<city>/p/<branchId>-<slug>/",
+      "kind": "page_navigation_not_api",
+      "qualification": "historical_tool_result"
+    },
+    {
+      "url": "https://food.bolt.eu/en/<cityId>-<city>/p/<branchId>/smc/<categoryId>/",
+      "kind": "page_navigation_not_api",
+      "qualification": "historical_tool_result"
+    },
+    {
+      "url": "https://food.bolt.eu/en/<cityId>-<city>/checkout/<branchId>/",
+      "kind": "page_navigation_not_api",
+      "qualification": "historical_tool_result"
+    },
+    {
+      "url": "https://food.bolt.eu/en/<cityId>-<city>/activeOrder/<orderId>/",
+      "kind": "page_navigation_not_api",
+      "qualification": "historical_tool_result"
+    },
+    {
+      "url": "https://food.bolt.eu/en/profile/details/",
+      "kind": "page_navigation_not_api",
+      "qualification": "historical_tool_result"
+    },
+    {
+      "url": "https://food.bolt.eu/en/profile/orders/",
+      "kind": "page_navigation_not_api",
+      "qualification": "historical_tool_result"
+    }
+  ],
+  "customerApiContracts": [],
+  "apiQualificationGaps": [
+    "account/session",
+    "geocoding/destination",
+    "branch/catalogue pagination",
+    "product/modifier schema",
+    "cart read/write and version",
+    "quote fees/discounts/expiry",
+    "submit idempotency/error semantics",
+    "order lookup/status/refunds",
+    "grocery substitutions/weight/deposits",
+    "payment challenge/redirect"
+  ],
+  "windowCounts": [
+    {
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "fromUTC": "2026-10-23T07:35:00Z",
+      "untilUTC": "2026-10-23T08:15:00Z",
+      "label": "grocery preparation including retail comparison",
+      "toolNamePrefix": "agent_browser_",
+      "calls": 113,
+      "toolOkFalse": 9
+    },
+    {
+      "threadId": "2db95434-3573-4d6c-8328-4f66558fdd09",
+      "fromUTC": "2026-10-23T10:10:00Z",
+      "untilUTC": "2026-10-23T10:35:00Z",
+      "label": "restaurant meal work",
+      "toolNamePrefix": "agent_browser_",
+      "calls": 113,
+      "toolOkFalse": 4
+    }
+  ],
+  "windowCountLimitations": [
+    "Not a token estimate.",
+    "Not necessarily Bolt-only calls.",
+    "tool.ok=false does not count every semantic failure.",
+    "Only the specified transcript windows were counted."
+  ],
+  "nextSlices": [
+    {
+      "priority": 1,
+      "outcome": "Approval remains tied to exact complete basket and payable total.",
+      "mechanism": "snapshot normalization, integer arithmetic, manifest and authority diff",
+      "status": "proposed"
+    },
+    {
+      "priority": 2,
+      "outcome": "Preparing a basket avoids repeated popup/selector discovery.",
+      "mechanism": "bounded browser state machine and explicit recovery outcomes",
+      "status": "proposed"
+    },
+    {
+      "priority": 3,
+      "outcome": "Compare complete eligible baskets with cached evidence.",
+      "mechanism": "requirements coverage, pack arithmetic, freshness and narrow optional Jev classification",
+      "status": "proposed"
+    },
+    {
+      "priority": 4,
+      "outcome": "One approved basket has one reconciled submission and tracked fulfilment.",
+      "mechanism": "protected commit service, durable receipts and order reconciliation",
+      "status": "requires_protocol_qualification"
+    },
+    {
+      "priority": 5,
+      "outcome": "Established operations run without browser reasoning.",
+      "mechanism": "qualified BFF primitives behind narrow MCP",
+      "status": "requires_captured_customer_contracts"
+    }
+  ]
+}
