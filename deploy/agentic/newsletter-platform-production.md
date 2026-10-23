@@ -68,6 +68,9 @@ and renders Liquid after merging slots. Use a real loop, for example
 `{% for article in campaign.data.articles %}...{% endfor %}`, around the designer's
 article markup, with issue-specific fields in the campaign's data. Bind the date
 and optional article image/link fields, and omit the image element when absent.
+In Keila's Solid engine, use `if article.image_url and article.image_url != blank`;
+`image_url != blank` alone rendered an empty-src image for a nil URL in the native
+fixture. Check nil, missing and empty image values, not just two articles with images.
 Use escaped text values. No fixed issue date, launch artwork or preview annotation
 belongs in that repeating master. Explicit user corrections to the supplied
 example take precedence over preserving those example bytes. Keep the original
