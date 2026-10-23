@@ -6,7 +6,7 @@ import { jevBackend } from '../../server/decider/jev.ts';
 import { threadRefUrl } from '../../src/lib/thread-refs.ts';
 
 function sourceUrls(text: string): string[] {
-  return [...new Set((text.match(/https?:\/\/[^\s<>"\\\[\]()]+/g) ?? []).map(value => value.replace(/[.,;!?]+$/, '')).filter(value => {
+  return [...new Set((text.match(/https?:\/\/[^\s<>"\\[\]()]+/g) ?? []).map(value => value.replace(/[.,;!?]+$/, '')).filter(value => {
     try {
       const url = new URL(value);
       return !url.username && !url.password && !/(^|\.)todoist\.com$/i.test(url.hostname);
