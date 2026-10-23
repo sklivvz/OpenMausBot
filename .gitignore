@@ -45,6 +45,7 @@ deploy/podman/.env.*
 /deploy/local/slop-detector-mcp.cjs
 /deploy/local/work-review-mcp.cjs
 /deploy/local/marketing-calendar-audit
+/deploy/local/newsletter-template-preflight
 /deploy/observability/observer.cjs
 
 /deploy/objectives/controller.mjs
