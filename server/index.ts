@@ -2144,7 +2144,7 @@ const directFollowupTurns = new ProviderTurnGenerationRegistry<DirectTurnOutcome
 const directFollowupSettlers = new Map<string, { threadId: string; settle?: () => void }>();
 const directCoordinationSettlers = new Map<string, { nodeId: string; settle: (outcome: DirectTurnOutcome) => void }>();
 const computerParks = new Map<string, string>();
-const parkedSeats = new Map<string, string>();
+const browserControlParks = new Map<string, string>();
 const COMPUTER_FREE_NOTE = "OpenMausBot computer update: the computer this conversation waited for is free again. Continue the task that parked waiting for it.";
 const STEP_CAP_NOTE = "Your previous turn stopped at the step limit; continue from where it stopped.";
 const teamSetupDecisionText = (request: TeamSetupRequest): string =>
@@ -2233,18 +2233,26 @@ function reconcileParkedNode(node: HandoffView): boolean {
 function hostTurnResult(node: HandoffView | undefined, generation: string, outcome: DirectTurnOutcome): DirectTurnOutcome {
   const seat = computerParks.get(generation);
   computerParks.delete(generation);
+  const browserSession = browserControlParks.get(generation);
+  browserControlParks.delete(generation);
   if (!node) return outcome;
   const result: DirectTurnOutcome = { ...outcome, evidence: { ...outcome.evidence, ...turnEvidence(turnRows(node)) } };
   if (node.goalRunId) return result;
   if (seat) {
-    parkedSeats.set(node.id, seat);
     // A seat wait is not work: progress-unknown, never a no-progress strike.
     const { okToolCalls: _unknown, ...evidence } = result.evidence ?? {};
-    return { ...result, evidence, cap: { note: COMPUTER_FREE_NOTE } };
+    return { ...result, evidence, cap: { note: COMPUTER_FREE_NOTE, waitFor: { kind: "resource", resource: seat } } };
   }
   if (result.cap) return result;
   const cards = resumableCards(node.threadId, node.startedAt ?? node.createdAt, node.groupId ? node.botId : undefined);
-  if (!cards.length) return result;
+  if (!cards.length) {
+    if (!browserSession) return result;
+    const { okToolCalls: _unknown, ...evidence } = result.evidence ?? {};
+    return { ...result, evidence, cap: {
+      note: "The person handed browser control back. Continue the same objective from the saved conversation. Take a fresh snapshot and verify whether any earlier action already happened before repeating it.",
+      waitFor: { kind: "browser_control", session: browserSession },
+    } };
+  }
   parkedNodesToReconcile.add(node.id);
   return { ...result, cards: { question: `Waiting on the person: ${cards.map((card) => card.waits).join("; ")}`, ids: cards.map((card) => card.id) } };
 }
@@ -2531,6 +2539,27 @@ function noteTeammatesLeftRunning(threadId: string, running: HandoffView[]): voi
       ...(task ? { threadRef: { botId: node.botId, threadId: node.threadId, title: task.title } } : {}),
     });
   }
+}
+
+function parkBrowserControl(capability: InternalCapability, session: string): void {
+  if (!internalCapabilityIsActive(capability) || browserControlParks.has(capability.generation)) return;
+  const node = coordinator.node(directCoordinationSettlers.get(capability.generation)?.nodeId ?? capability.generation);
+  if (!node || node.goalRunId || node.groupId) return;
+  browserControlParks.set(capability.generation, session);
+  const owner = turnResourceOwners.get(capability.threadId);
+  if (owner?.generation === capability.generation) owner.computerParkedOn = `browser:${session}`;
+  store.appendMessage(capability.threadId, { role: "bot", kind: "activity", tool: {
+    name: "Blocked: a person controls this browser. This assignment will resume when control is handed back; the next turn will check the page before retrying.", ok: true,
+  } });
+  if (node.parentId) {
+    const parent = coordinator.node(node.parentId);
+    if (parent) store.appendMessage(parent.threadId, { role: "bot", kind: "activity", tool: {
+      name: `${store.bot(node.botId)?.name ?? "Teammate"} is waiting for browser control. The assignment remains owned and will resume automatically.`, ok: true,
+    } });
+  }
+  void interruptParkedTurn(capability.botId, capability.threadId).catch(error => {
+    console.error("Could not park browser turn:", error instanceof Error ? error.message : String(error));
+  });
 }
 
 async function interruptParkedTurn(botId: string, threadId: string): Promise<void> {
@@ -4216,7 +4245,6 @@ function runRoomRootTurn(node: HandoffView, group: GroupRecord, bot: BotRecord, 
   if (composed.turn === "rerun") {
     store.appendMessage(node.threadId, { role: "bot", kind: "activity", from: { botId: bot.id, name: bot.name, color: bot.color }, tool: { name: "Resuming after a restart", ok: true } });
   }
-  parkedSeats.delete(node.id);
   return runRoomNode(node, group, bot, signal, undefined, (operation, result, coordination) =>
     runGroupMemberTurn(group.id, node.threadId, bot.id, 0, new Set(), composed.text, error => { result.stopReason = error; }, () => operation.cancelled,
       () => groupProviderHandshakeStarted(operation), () => groupProviderHandshakeSettled(operation), undefined,
@@ -4225,7 +4253,6 @@ function runRoomRootTurn(node: HandoffView, group: GroupRecord, bot: BotRecord, 
 
 function runRootTurn(node: HandoffView, bot: BotRecord, signal: AbortSignal, composed: ComposedTurn): Promise<HostTurnResult> {
   if (composed.turn === "rerun") store.appendMessage(node.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
-  parkedSeats.delete(node.id);
   const owner = directRequestOwners.get(node.threadId);
   const ownRequest = owner && !owner.stopped && owner.generations.has(node.id) ? owner : undefined;
   return new Promise<HostTurnResult>(resolve => {
@@ -4278,9 +4305,10 @@ const coordinator: Coordinator = createCoordinator({
       : !node.parentId && node.groupId ? roomRootProblem(node)
       : roomHandoffProblem(node, parent) ??
       (parent && store.bot(parent.botId)?.approvePeerComms && !fullAccessForSource(parent.botId, parent.threadId) && !node.approvalGranted ? "Sender now requires peer approval; submit a new approved request" : undefined),
+    dependencyReady: dependency => dependency.kind === "resource"
+      ? turnResources.free(dependency.resource)
+      : browserRuntime.heldBy(dependency.session) === null && turnResources.free(`browser:${dependency.session}`),
     busy: n => {
-      const seat = parkedSeats.get(n.id);
-      if (seat && !turnResources.free(seat)) return true;
       if (n.groupId) return Boolean(store.bot(n.botId)?.busy || groupThreadIsWorking(n.groupId, n.threadId));
       if (canAdmitDirectTurn(n.botId, n.threadId)) return false;
       noteQueuedBehindPerson(n);
@@ -4301,7 +4329,6 @@ const coordinator: Coordinator = createCoordinator({
     },
     report: (child, parent) => {
       if (!parent) {
-        parkedSeats.delete(child.id);
         const followupEnded = followupEndedRoots.has(child.id);
         const followupLine = followupEndedRoots.get(child.id);
         followupEndedRoots.delete(child.id);
@@ -12740,6 +12767,7 @@ async function fillLoginForTurn(bot: BotRecord, capability: InternalCapability, 
     return { ok: outcome.ok, text: outcome.text };
   } catch (error) {
     if (error instanceof Error && error.message === BROWSER_CONTROL_REFUSAL) {
+      parkBrowserControl(capability, session);
       return { ok: false, text: "The person is using this browser right now. Wait for them to hand it back, then call fill_login again." };
     }
     const reason = error instanceof Error ? error.message : String(error);
@@ -14311,7 +14339,10 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           if (body.method === "tools/call" && !claimTurnResource(internalCapability, `browser:${browser.session}`)) {
             throw Object.assign(new Error("another thread is using this browser — pause browser work until that thread finishes"), { status: 409 });
           }
-        }, stepContext(bot, internalCapability, () => liveTurnByThread.get(internalCapability.threadId) ?? null));
+        }, stepContext(bot, internalCapability, () => liveTurnByThread.get(internalCapability.threadId) ?? null)).catch((error: unknown) => {
+          if (error instanceof Error && error.message === BROWSER_CONTROL_REFUSAL) parkBrowserControl(internalCapability, browser.session);
+          throw error;
+        });
         requireActiveInternalCapability();
         return json(res, 200, { result });
       }
@@ -14895,15 +14926,6 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         const problem = roomHandoffProblem(address);
         if (problem) return refuse(403, problem);
         if (call.consult && call.reply === "none") return refuse(400, "consult asks a question whose answer comes back to you; leave reply out");
-        const groupId = call.groupId ?? source?.id;
-        const destination = groupId ? store.group(groupId) : undefined;
-        if (groupId && !destination) return refuse(404, "No such room; use list_room_targets.");
-        const fresh = !destination && call.thread === "new";
-        const folder = inMyFolderCwd(call.inMyFolder, fresh, store.taskByThread(internalSender.id, address.threadId)?.cwd, DATA_DIR);
-        if (folder.error) return refuse(400, folder.error);
-        if (fresh && !EXTERNAL && internalCapability.openedThreads >= MAX_THREADS_OPENED_PER_TURN) {
-          return refuse(429, `You have already opened ${MAX_THREADS_OPENED_PER_TURN} threads this turn, which is the limit. Do not retry — finish your turn and tell the person which threads you still wanted to open, so they can open them or ask you again.`);
-        }
         const botIds: string[] = [];
         for (const raw of call.botIds) {
           const resolved = resolveTeammate(store.bots, internalSender, raw);
@@ -14911,6 +14933,15 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           botIds.push(resolved.id);
         }
         if (new Set(botIds).size !== botIds.length) return refuse(400, "bot_ids name the same teammate twice — send each teammate once");
+        const groupId = call.groupId ?? (source && botIds.every(id => source.memberIds.includes(id)) ? source.id : undefined);
+        const destination = groupId ? store.group(groupId) : undefined;
+        if (groupId && !destination) return refuse(404, "No such room; use list_room_targets.");
+        const fresh = !destination && (call.thread === "new" || (!call.consult && call.reply !== "none"));
+        const folder = inMyFolderCwd(call.inMyFolder, fresh, store.taskByThread(internalSender.id, address.threadId)?.cwd, DATA_DIR);
+        if (folder.error) return refuse(400, folder.error);
+        if (fresh && !EXTERNAL && internalCapability.openedThreads >= MAX_THREADS_OPENED_PER_TURN) {
+          return refuse(429, `You have already opened ${MAX_THREADS_OPENED_PER_TURN} threads this turn, which is the limit. Do not retry — finish your turn and tell the person which threads you still wanted to open, so they can open them or ask you again.`);
+        }
         const targets = botIds.map(botId => ({ groupId: destination?.id,
           threadId: destination ? destination.id === source?.id ? address.threadId : destination.threadId : store.bot(botId)?.threadId ?? "", botId,
         }));
@@ -14973,7 +15004,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
             }
             const routed = lane ? { botId: target.botId, threadId: lane.threadId } : target;
             const { node, duplicate } = coordinator.enqueue(address, generation, internalCapability.roomHandoffId, routed, call.message, {
-              mode, reply, thread: lane ? "new" : call.thread, approvalGranted, rework: call.rework, ...(lane ? {} : { requestBatchKey }),
+              mode, reply, thread: lane || fresh ? "new" : call.thread, approvalGranted, rework: call.rework, ...(lane ? {} : { requestBatchKey }),
               ...(call.doneWhen ? { doneWhen: call.doneWhen } : {}),
             });
             if (duplicate && createdThread) store.deleteTask(target.botId, createdThread);

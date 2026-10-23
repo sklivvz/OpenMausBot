@@ -54,7 +54,7 @@ The park-and-resume cases prove:
   ones.)
 - Nothing waits outside the runtime: the card-resume lanes and the room
   re-run queue are gone. A parked root waits through the runtime's admission
-  (the host's busy hook holds it until the seat frees).
+  (the host checks the persisted resource dependency before admission).
 
 Waiting is bounded by the computer wait ceiling (`OMB_COMPUTER_WAIT_MAX_MS`,
 30 minutes by default). At the ceiling the turn parks instead of failing, and
@@ -65,3 +65,31 @@ interleave. This is automatic waiting, not simultaneous control of one screen.
 
 These fixtures do not contact Boat or operate the user's desktop. They verify
 server behavior and transcript state, not visual rendering or a live Boat.
+
+## Browser takeover and delegated input
+
+```sh
+node node_modules/vitest/vitest.mjs run server/saved-login.e2e.test.ts
+node node_modules/vitest/vitest.mjs run server/runtime-roots.e2e.test.ts
+node node_modules/vitest/vitest.mjs run server/runtime-coordinator.test.ts
+```
+
+The saved-login fixture takes control through the real browser viewer protocol,
+then attempts a tool call from another direct assignment. The assignment parks
+with a durable `browser_control` dependency, without repeated provider turns.
+Handing control back resumes the same assignment, with instructions to inspect
+the page before repeating an uncertain action. Existing sign-in cards take
+precedence over a browser-control wait. Goal runs and room turns are not covered
+by this direct browser takeover recovery.
+
+The coordinator tests reload a dependency from SQLite, keep it blocked when no
+resolver is installed, release it once, and preserve Stop after release. The
+runtime-roots fixture also checks that a child's input card wakes its waiting
+lead once, carrying the original objective and exact card/thread references.
+The child remains unfinished until its existing card is answered; the lead
+returns to waiting instead of completing the objective.
+
+For a packaged artifact, set `OMB_VERIFICATION_ENTRY` to its absolute `index.js`
+path when running these fixtures. They still use the launcher's temporary home,
+fake providers and loopback ports. This never selects the live application's
+data or port.

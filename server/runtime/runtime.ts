@@ -149,7 +149,7 @@ export class Runtime {
     const outcome: RunResult = result.needsInput
       ? { kind: "needs_input", question: result.needsInput.question, ...(result.needsInput.cards ? { cards: result.needsInput.cards } : {}), ...evidence }
       : result.continue
-        ? { kind: "continue", text: result.text, note: result.continue.note, ...(result.continue.handoffPath ? { handoffPath: result.continue.handoffPath } : {}), ...evidence }
+        ? { kind: "continue", text: result.text, note: result.continue.note, ...(result.continue.handoffPath ? { handoffPath: result.continue.handoffPath } : {}), ...(result.continue.waitFor ? { waitFor: result.continue.waitFor } : {}), ...evidence }
         : result.ok
           ? { kind: "completed", text: result.text, ...evidence }
           : { kind: "failed", outcome: "provider_error", text: result.text, ...evidence };
@@ -283,12 +283,15 @@ export class Runtime {
       const n = this.store.get(snapshot.id);
       if (!n || n.status !== "waiting") continue;
       const kids = awaited(this.store.children(n.id));
-      if (kids.length === 0 || !kids.every(c => isTerminal(c) && c.reportedAt !== undefined)) continue;
-      if (!n.parentId && n.reply === "poll") {
+      const blockedIds = new Set(kids.filter(c => c.status === "needs_input" && c.cards?.length && c.reply === "resume").map(c => c.id));
+      const blockerDue = n.reply !== "poll" && this.store.inbox({ threadId: n.assignee.destination.threadId }, true)
+        .some(item => item.kind === "needs_input" && blockedIds.has(item.assignmentId));
+      if (!blockerDue && (kids.length === 0 || !kids.every(c => isTerminal(c) && c.reportedAt !== undefined))) continue;
+      if (!blockerDue && !n.parentId && n.reply === "poll") {
         this.settle(n, "completed", "done");
       } else {
         n.status = "resume";
-        this.store.update(n, { kind: "resume_due", at: now, detail: "resume" });
+        this.store.update(n, { kind: "resume_due", at: now, detail: blockerDue ? "resume: child needs input" : "resume" });
         this.touch(n);
       }
     }
@@ -342,6 +345,9 @@ export class Runtime {
       const children = this.store.children(n.id);
       // Every settled result, not only new ones: the host keeps reports out of the transcript it replays.
       const settled = awaited(children).filter(isTerminal);
+      const pending = this.store.inbox({ threadId: n.assignee.destination.threadId }, true);
+      const blocked = awaited(children).filter(child => child.status === "needs_input" && child.cards?.length && child.reply === "resume"
+        && pending.some(item => item.kind === "needs_input" && item.assignmentId === child.id));
       const names = this.names(n, parent);
       const turn: RunInput["turn"] = resumed ? "resume" : n.restart === "rerun" ? "rerun" : n.answer !== undefined ? "answered"
         : n.continuation ? "continued" : "first";
@@ -353,6 +359,7 @@ export class Runtime {
         ...(n.answer !== undefined ? { answer: n.answer } : {}),
         ...(n.continuation ? { continuation: { note: n.continuation.note, ...(n.continuation.handoffPath ? { handoffPath: n.continuation.handoffPath } : {}) } } : {}),
         ...(settled.length ? { settled } : {}),
+        ...(blocked.length ? { blocked } : {}),
         level: n.level, mode: n.mode,
       };
       const ids = new Set(children.map(c => c.id));
@@ -432,7 +439,7 @@ export class Runtime {
         return;
       }
       n.status = "queued"; n.lastActivityAt = now;
-      n.continuation = { note: result.note, ...(result.handoffPath ? { handoffPath: result.handoffPath } : {}), count: continuations(this.store, n.id) + 1 };
+      n.continuation = { note: result.note, ...(result.handoffPath ? { handoffPath: result.handoffPath } : {}), ...(result.waitFor ? { waitFor: result.waitFor } : {}), count: continuations(this.store, n.id) + 1 };
       if (root && root.id !== n.id) root.lastActivityAt = now;
       this.store.transaction(() => {
         this.store.update(n, { kind: "continued", at: now, detail: `queued: ${clip(result.note, DETAIL_MAX)}` });

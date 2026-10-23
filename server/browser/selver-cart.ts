@@ -50,19 +50,21 @@ export const SELVER_CART_TOOL = {
 } as const;
 
 export const SELVER_SESSION_CAPTURE = `(async()=>{
-  if(location.origin!=='https://www.selver.ee')throw Error('Open the Selver storefront first');
+  if(location.origin==='https://sso.partnerkaart.ee')return{state:document.body.innerText.includes('Katkesta')?'mobileApprovalPending':'signInForm'};
+  if(location.origin!=='https://www.selver.ee')return{state:'wrongSite'};
+  if(document.body.innerText.includes('Palun kinnita oma andmed!'))return{state:'contactConfirmationRequired'};
   const store=document.querySelector('#app')?.__vue__?.$store;
   const token=store?.getters['user/getUserToken'];
-  if(store?.getters['user/isLoggedIn']!==true||typeof token!=='string'||!token)throw Error('Selver account is not signed in');
+  if(store?.getters['user/isLoggedIn']!==true||typeof token!=='string'||!token)return{state:'signedOut'};
   const url=new URL('/api/user/me',location.origin);
   url.searchParams.set('token',token);
   const response=await fetch(url,{credentials:'include',cache:'no-store'});
-  if(!response.ok)throw Error('Selver account verification failed');
+  if(!response.ok)return{state:'backendRejected'};
   const body=await response.json();
-  if(body.code!==200)throw Error('Selver account verification was rejected');
+  if(body.code!==200)return{state:'backendRejected'};
   const account=[body.result?.firstname,body.result?.lastname].filter(Boolean).join(' ').trim();
-  if(!account||store.getters['user/isLoggedIn']!==true||store.getters['user/getUserToken']!==token)throw Error('Selver account changed during verification');
-  return{token,account};
+  if(!account||store.getters['user/isLoggedIn']!==true||store.getters['user/getUserToken']!==token)return{state:'backendRejected'};
+  return{state:'authenticated',token,account};
 })()`;
 
 export const SELVER_CONNECT_TOOL = {

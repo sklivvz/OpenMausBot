@@ -71,7 +71,10 @@ const assignmentSchema = z.object({
   budgets: z.object({ since: z.number(), requests: z.number(), executions: z.number(), wakes: z.number() }).optional(),
   // The schema strips any field it does not name: every optional Assignment field must be listed here.
   cards: z.array(z.string()).optional(),
-  continuation: z.object({ note: z.string(), handoffPath: z.string().optional(), count: z.number().int().nonnegative() }).optional(),
+  continuation: z.object({ note: z.string(), handoffPath: z.string().optional(), waitFor: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("resource"), resource: z.string().min(1) }),
+    z.object({ kind: z.literal("browser_control"), session: z.string().min(1) }),
+  ]).optional(), count: z.number().int().nonnegative() }).optional(),
   guard: z.object({ stale: z.number().int().nonnegative(), errors: z.array(z.string()) }).optional(),
   approved: z.boolean().optional(),
   batchKey: z.string().optional(),

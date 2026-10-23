@@ -1,0 +1,42 @@
+# Local override for this Apple silicon Mac.
+#
+# The published ghcr.io image is linux/amd64 only, which would run emulated here.
+# Instead the sandbox builds on a locally built linux/arm64 image
+# (`docker build --target server -t openmausbot-native:latest .`), so no platform
+# pin is needed. Two loopback addresses are published because `localhost` resolves
+# to ::1 first on macOS and an IPv4-only publish refuses those connections.
+#
+# Connected apps reach the sandbox through the managed service: the packaged
+# desktop app registers one installation per install and hands the token to its
+# own child server, which a separate container never receives, so the sandbox
+# carries its own installation from the same service in .env instead. Connections
+# live under that installation's Composio user, so reconnecting Gmail and the rest
+# happens in the app while the sandbox is the active server. A COMPOSIO_API_KEY
+# (project key) takes priority over the broker whenever one is set.
+services:
+  observability:
+    extends:
+      file: compose.observability.yaml
+      service: observability
+  legal-queue:
+    extends:
+      file: compose.legal-queue.yaml
+      service: legal-queue
+  attention-scan:
+    extends:
+      file: compose.attention.yaml
+      service: attention-scan
+  caddy:
+    ports: !override
+      - "127.0.0.1:8090:80"
+      - "[::1]:8090:80"
+  omb:
+    environment:
+      COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:-}
+      OMB_COMPOSIO_BROKER_URL: ${OMB_COMPOSIO_BROKER_URL:-}
+      OMB_COMPOSIO_BROKER_TOKEN: ${OMB_COMPOSIO_BROKER_TOKEN:-}
+volumes:
+  observability-state:
+    external: true
+    name: ${OMB_OBSERVER_STATE_VOLUME:-${COMPOSE_PROJECT_NAME:-openmausbot}_observability-state}
+  legal-queue-state:

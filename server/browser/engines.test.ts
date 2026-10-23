@@ -148,7 +148,7 @@ describe("the runtime router", () => {
     const directory = mkdtempSync(join(tmpdir(), "omb-selver-connect-"));
     const runtime = new RuntimeRouter(old as unknown as BrowserRuntime, chrome as unknown as ChromeEngine, { dataDir: directory });
     const context = { botId: "bot-1", botName: "Dude", threadId: "thread-1", generation: "gen-1", turnId: () => null, record: false };
-    old.agentRpc.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ token: "fixture-secret", account: "Marco Cecconi" }) }] } as never);
+    old.agentRpc.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ state: "authenticated", token: "fixture-secret", account: "Marco Cecconi" }) }] } as never);
     try {
       const result = await runtime.agentRpc("s", AGENT_BROWSER, "tools/call", { name: "agent_browser_selver_connect", arguments: {} }, undefined, context) as { content: Array<{ text: string }> };
       expect(JSON.stringify(result)).not.toContain("fixture-secret");
@@ -162,6 +162,13 @@ describe("the runtime router", () => {
       expect(rejected.isError).toBe(true);
       expect(rejected.content[0]!.text).not.toContain("fixture-secret");
       expect(() => readFileSync(status.sessionFile)).toThrow();
+      for (const state of ["mobileApprovalPending", "contactConfirmationRequired", "backendRejected"]) {
+        old.agentRpc.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ state }) }] } as never);
+        const pending = await runtime.agentRpc("s", AGENT_BROWSER, "tools/call", { name: "agent_browser_selver_connect", arguments: {} }, undefined, context) as { isError: boolean; content: Array<{ text: string }> };
+        expect(pending.isError).toBe(true);
+        expect(JSON.parse(pending.content[0]!.text)).toMatchObject({ authenticated: false, state });
+        expect(() => readFileSync(status.sessionFile)).toThrow();
+      }
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });

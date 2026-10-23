@@ -77,6 +77,9 @@ export type Outcome =
 export type Level = ApprovalMode;
 export type LevelSource = "own" | "chief" | "engine_cap";
 
+/** A host-observed dependency checked before another execution can start. */
+export type WaitDependency = { kind: "resource"; resource: string } | { kind: "browser_control"; session: string };
+
 export interface Assignment {
   id: string;
   rootId: string;
@@ -133,7 +136,7 @@ export interface Assignment {
   cards?: string[];
   /** The next execution continues the last one in place: after a step cap,
    * or a wait the host could not hold (a computer seat). Cleared at dispatch. */
-  continuation?: { note: string; handoffPath?: string; count: number };
+  continuation?: { note: string; handoffPath?: string; waitFor?: WaitDependency; count: number };
   /** While a node continues in place, for the loop guard: `stale` counts consecutive continuations
    * with no successful tool call; `errors` holds the last three tool error texts. */
   guard?: { stale: number; errors: string[] };
@@ -223,6 +226,8 @@ export interface RunInput {
   answer?: string;
   /** The settled children whose results this (resume) turn returns. */
   settled?: Assignment[];
+  /** Children with newly delivered requests for input; they remain unfinished. */
+  blocked?: Assignment[];
   /** For a continued turn: why it continues and, after a step cap, where
    * the steps so far are listed. */
   continuation?: { note: string; handoffPath?: string };
@@ -236,7 +241,7 @@ export type RunResult =
   | { kind: "needs_input"; question: string; cards?: string[]; evidence?: TurnEvidence }
   /** The turn stopped short (a step cap, a seat it could not get) and the
    * same node continues in place with its next execution. */
-  | { kind: "continue"; text: string; note: string; handoffPath?: string; evidence?: TurnEvidence };
+  | { kind: "continue"; text: string; note: string; handoffPath?: string; waitFor?: WaitDependency; evidence?: TurnEvidence };
 
 /** How a host-run root turn ended (Runtime.end). */
 export interface EndResult {
@@ -246,7 +251,7 @@ export interface EndResult {
   /** The turn left the person something to act on: it parks until they do. */
   needsInput?: { question: string; cards?: string[] };
   /** The turn stopped short and continues in place. */
-  continue?: { note: string; handoffPath?: string };
+  continue?: { note: string; handoffPath?: string; waitFor?: WaitDependency };
 }
 
 export interface Owner {

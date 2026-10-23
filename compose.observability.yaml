@@ -1,0 +1,29 @@
+services:
+  observability:
+    image: ${OMB_OBSERVER_IMAGE:-${OMB_LOCAL_IMAGE:-openmausbot-local:latest}}
+    entrypoint: ["node", "/opt/observer/observer.cjs", "collect"]
+    init: true
+    user: "1001:1001"
+    restart: unless-stopped
+    read_only: true
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: "0.25"
+    mem_limit: 192m
+    pids_limit: 32
+    tmpfs:
+      - /data:ro,size=65536,mode=0700
+    volumes:
+      - data:/source:ro
+      - ./deploy/observability:/opt/observer:ro
+      - observability-state:/state
+    healthcheck:
+      test: ["CMD", "node", "/opt/observer/observer.cjs", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  observability-state:
+    external: true
+    name: ${OMB_OBSERVER_STATE_VOLUME:-${COMPOSE_PROJECT_NAME:-openmausbot}_observability-state}

@@ -211,7 +211,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
 }
 
 /** The fixture hooks its environment asks for, then the server. */
-export function verificationServerArgs(childEnv: NodeJS.ProcessEnv): string[] {
+export function verificationServerArgs(childEnv: NodeJS.ProcessEnv, entry = join(ROOT, "server", "index.ts")): string[] {
   const hook = (file: string) => ["--import", pathToFileURL(join(ROOT, "server", "testing", file)).href];
   return [
     "--experimental-strip-types",
@@ -219,7 +219,7 @@ export function verificationServerArgs(childEnv: NodeJS.ProcessEnv): string[] {
     ...(childEnv.OMB_TEST_DESKTOP_OWNER_TOKEN ? hook("desktop-parent.mjs") : []),
     ...(childEnv.OMB_TEST_APPROVAL_CLOCK === "1" ? hook("approval-clock-hooks.mjs") : []),
     ...(childEnv.OMB_TEST_STALL_CLOCK === "1" ? hook("stall-clock-hooks.mjs") : []),
-    join(ROOT, "server", "index.ts"),
+    entry,
   ];
 }
 
@@ -239,6 +239,7 @@ export async function launchVerificationServer(
   boatFixtureApi?: string,
   /** Programmatic web UI qualification against the fixture's static server. */
   staticDir?: string,
+  packagedEntry?: string,
 ): Promise<VerificationServer> {
   if (boatFixtureApi) {
     if (!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(boatFixtureApi)) {
@@ -305,7 +306,7 @@ export async function launchVerificationServer(
   });
   if (boatFixtureApi) childEnv.OMB_BOAT_API = boatFixtureApi;
   if (staticDir) childEnv.OMB_STATIC_DIR = staticDir;
-  const child = spawn(process.execPath, verificationServerArgs(childEnv), {
+  const child = spawn(process.execPath, verificationServerArgs(childEnv, packagedEntry), {
     cwd: ROOT,
     env: childEnv,
     stdio: ["ignore", log, log],

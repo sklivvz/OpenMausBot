@@ -68,6 +68,8 @@ Use only mapped, tested commands:
 - [Welcome flow and guided tour](onboarding.md)
 - [Channels](channels.md)
 - [In-chat team coordination](room-coordination.md)
+- [Leadership contributions and independent observation](agentic-minimal-20261023.md)
+- [Live launch ownership and scheduled continuation](launch-ownership-20261023.md)
 - [Chief access to additional teams](team-access.md)
 - [Engines and Doctor](engines.md)
 - [Cline engine and native loopback qualification](cline.md)

@@ -16,4 +16,30 @@ RUN if [ -n "$GROK_VERSION" ]; then \
       && HOME=/tmp/grok-install grok --version | grep -qF "grok $GROK_VERSION " \
       && rm -rf /tmp/grok-install; \
     fi
+# Gemini CLI. Stable channel of @google/gemini-cli; the command is `gemini`.
+# GEMINI_CLI_VERSION= (empty) leaves it out.
+ARG GEMINI_CLI_VERSION=0.64.0
+RUN if [ -n "$GEMINI_CLI_VERSION" ]; then \
+      HOME=/tmp/omb-build-home npm install -g "@google/gemini-cli@${GEMINI_CLI_VERSION}" \
+      && gemini --version | grep -qF "$GEMINI_CLI_VERSION" \
+      && rm -rf /tmp/omb-build-home /tmp/node-compile-cache; \
+    fi
+# Perplexity CLI. Official release binary, checksum checked, installed as `pplx`.
+# PPLX_TAG= (empty) leaves it out. Tag is the GitHub release, for example v0.2.3.
+COPY install-pplx.sh /tmp/install-pplx.sh
+ARG PPLX_TAG=v0.2.3
+RUN if [ -n "$PPLX_TAG" ]; then sh /tmp/install-pplx.sh "$PPLX_TAG"; fi \
+    && rm -f /tmp/install-pplx.sh
+COPY --chmod=0555 attention-scan /usr/local/bin/attention-scan
+COPY --chmod=0555 attention-scan-next /usr/local/bin/attention-scan-next
+COPY --chmod=0555 task-queue /usr/local/bin/task-queue
+COPY --chmod=0555 operations-queue /usr/local/bin/operations-queue
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0555 design-export /usr/local/bin/design-export
+COPY --chmod=0555 claude-design-mcp.cjs /usr/local/bin/claude-design-mcp
+COPY --chmod=0555 claude-with-artifacts /usr/local/bin/claude-with-artifacts
+COPY --chmod=0555 work-review-mcp.cjs /usr/local/bin/work-review-mcp
+COPY --chmod=0555 marketing-calendar-audit /usr/local/bin/marketing-calendar-audit
+COPY --chmod=0555 slop-detector-mcp.cjs /usr/local/bin/slop-detector-mcp
 USER maus
