@@ -51,8 +51,8 @@ checkpoint content, output quality, or achievement of a live business objective.
 
 ## Deployment and observation
 
-Pending live registration and observation. Source implementation, deployment,
-observed execution and business acceptance must be reported separately.
+Source implementation, deployment, observed execution and business acceptance
+are reported separately below.
 
 ### First live admissions
 
@@ -72,3 +72,31 @@ The three existing fixed read-only launchers were restored without restarting
 the app, and the image recipe now retains them. No scans or domain writes were
 substituted by the frontier. PMO controller activation awaits the verified
 Auto-compatible package; its current routines remain active.
+
+### Continuation repair
+
+The live controllers later stopped in three distinct conditions: new user
+instructions superseded their exact request, a user retried the same request on
+a replacement branch, and repeated checkpoints marked future reviews as ready.
+One controller recorded an unsuccessful request before later user work completed.
+These controller states did not establish that the bots themselves were idle.
+
+The repair reconciles the complete bounded conversation ancestry and successful
+runtime terminal records. It accepts settled user corrections and exact retries,
+preserves Stop and rewind fences, waits for actual dependencies, retains prior
+objective checkpoints and carries historical user updates as context rather than
+new requests to repeat. Scheduled reviews have their own state and wake at their
+recorded time. Conversation changes during a wait trigger reconciliation.
+
+Todoist project membership does not establish ownership: explicit accountable
+owners route cross-project contributions, children inherit only absent ownership,
+and human-owned decisions remain unresolved for bots rather than inheriting
+authority. PMO retains whole-portfolio intake visibility.
+
+The isolated controller fixture includes a real user correction between guarded
+requests, a controller restart, preserved checkpoint evidence and a new guarded
+continuation. It asserts that the original request appears only once. Unit
+fixtures additionally cover exact retries, unrelated branches, Stop, rewinds,
+mid-turn steering, missing ancestry, pending inputs, scheduling and explicit
+cross-team/human ownership. Account-quota recovery uses only configured fallbacks;
+it does not bypass the workspace spend limit or enlarge task permissions.

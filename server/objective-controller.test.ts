@@ -13,11 +13,12 @@ function setup() {
   let phase = "working";
   let cancelled = false;
   let loseResponse = false;
+  let changedLeaf: string | undefined;
   const sends: any[] = [];
   const api = async (method: string, path: string, body?: any) => {
     if (method === "POST") { sends.push(body); if (loseResponse) { loseResponse = false; throw new Error("response lost"); } return {}; }
     if (path.includes("/requests/")) return { phase, activeLeafId: "reply", messages: [{ sendId: sends.at(-1).sendId, requestCancelled: cancelled }] };
-    return { activeLeafId: sends.length ? "reply" : null };
+    return { activeLeafId: changedLeaf ?? (sends.length ? "reply" : null) };
   };
   const make = () => new ObjectiveController(config, root, api, () => now);
   let controller = make();
@@ -26,7 +27,7 @@ function setup() {
     const sendId = sends.at(-1).sendId;
     writeFileSync(join(config.checkpointDirectory, config.id, `${sendId}.json`), JSON.stringify({ sendId, state, progress: "One accepted fixture artifact", evidence: ["fixture-artifact"], next: "Verify next deliverable", ...extra }));
   };
-  return { get controller() { return controller; }, sends, checkpoint, phase: (value: string) => { phase = value; }, time: (value: number) => { now = value; }, cancel: () => { cancelled = true; }, lose: () => { loseResponse = true; }, restart: () => { controller = make(); } };
+  return { get controller() { return controller; }, sends, checkpoint, phase: (value: string) => { phase = value; }, time: (value: number) => { now = value; }, changeLeaf: (value: string) => { changedLeaf = value; }, cancel: () => { cancelled = true; }, lose: () => { loseResponse = true; }, restart: () => { controller = make(); } };
 }
 
 it("continues after settlement, survives restart and never duplicates active work", async () => {
@@ -80,12 +81,31 @@ it("detects repeated ready checkpoints instead of spending indefinitely on uncha
   expect(f.controller.state.detail).toContain("unchanged");
 });
 
+it("reconciles a human update during a future wait without waiting for its old deadline", async () => {
+  const f = setup(); await f.controller.tick();
+  f.checkpoint("waiting", { dependencies: [{ outcome: "Review", owner: "Owner", condition: "Review window" }], wakeAt: 10_000 });
+  f.phase("settled"); await f.controller.tick();
+  f.changeLeaf("new-human-reply"); await f.controller.tick();
+  expect(f.controller.state.status).toBe("intervened");
+  expect(f.sends).toHaveLength(1);
+});
+
+it("reopens a stalled portfolio only when its source evidence changes", async () => {
+  const f = setup(); f.controller.updateSource([], ["initial-source"]);
+  for (let i = 0; i < 4; i++) { await f.controller.tick(); f.checkpoint(); f.phase("settled"); await f.controller.tick(); }
+  expect(f.controller.state.status).toBe("maintenance");
+  f.controller.updateSource([], ["new-source"]); await f.controller.tick();
+  expect(f.controller.state.status).toBe("ready");
+  expect(f.sends).toHaveLength(4);
+  await f.controller.tick(); expect(f.sends).toHaveLength(5);
+});
+
 it("holds acceptance claims without converting them into completed business outcomes", async () => {
   const f = setup(); await f.controller.tick(); f.checkpoint("verification"); f.phase("settled"); await f.controller.tick();
   expect(f.controller.state.status).toBe("verification"); f.restart(); await f.controller.tick(); expect(f.sends).toHaveLength(1);
 });
 
-it("recovers a proven capacity failure once with the configured fallback and preserves history", async () => {
+it.each(["Selected model is at capacity. Please try a different model.", "This Claude account has reached its weekly limit, which resets Oct 24, 12:00 PM (UTC). Until then, switch this bot to another engine or Claude account."])("recovers proven provider unavailability once with the configured fallback: %s", async (providerError) => {
   const root = mkdtempSync(join(tmpdir(), "omb-objective-recovery-")); roots.push(root);
   const config: ObjectiveConfig = { id: "recovery", botId: "owner", threadId: "thread", approvalMode: "full", objective: "Finish accepted outcomes", instructions: "Reconcile prior work", initialLeafId: null, checkpointDirectory: join(root, "checkpoints"), recoveryModels: [{ instanceId: "claude", model: "configured-fallback" }] };
   const sends: any[] = [], patches: any[] = [];
@@ -94,7 +114,7 @@ it("recovers a proven capacity failure once with the configured fallback and pre
     if (method === "POST") { sends.push(body); return {}; }
     if (path.includes("/requests/")) return { phase: "untracked", activeTurnId: null, activeLeafId: "failed-leaf", messages: [
       { sendId: sends.at(-1).sendId },
-      { kind: "activity", tool: { name: "error: Selected model is at capacity. Please try a different model.", ok: false } },
+      { kind: "activity", tool: { name: `error: ${providerError}`, ok: false } },
       { turnSucceeded: false },
     ] };
     return { activeLeafId: sends.length ? "failed-leaf" : null };
