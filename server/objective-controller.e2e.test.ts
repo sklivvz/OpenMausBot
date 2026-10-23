@@ -95,3 +95,52 @@ it("uses configured fallback after a real fixture provider capacity error withou
     await fixture.close();
   }
 }, 60_000);
+
+it("continues after a settled user correction without replaying the previous request", async () => {
+  const fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, { scripted: true }, [], undefined, undefined, process.env.OMB_VERIFICATION_ENTRY);
+  const api = loopbackApi(fixture.info.url);
+  const evidence: unknown[] = [{ fixture: fixture.info }];
+  try {
+    const { bot } = await runControlOmb(["new-bot", "--name", "Reconciliation owner", "--url", fixture.info.url]) as any;
+    const { task } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Correction fixture" });
+    await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { approvalMode: "ask" });
+    writeFileSync(join(fixture.info.dataDir, "room-plan.json"), JSON.stringify({ [bot.id]: { turns: [
+      { reply: "First contribution prepared; unfinished work retained." },
+      { reply: "Applied the user hold to that contribution; the other outcome remains actionable." },
+      { expectContextIncludes: ["Latest instructions and holds supersede", "Defer publication"], reply: "Advanced the independent fixture contribution while preserving the hold." },
+      { reply: "Stopped fixture work." },
+    ] } }));
+    const config: ObjectiveConfig = { id: "reconcile", botId: bot.id, threadId: task.threadId, approvalMode: "ask", objective: "Advance independent fixture outcomes", instructions: "Fixture only", initialLeafId: null, checkpointDirectory: join(fixture.info.dataDir, "checkpoints") };
+    const directory = join(fixture.info.dataDir, "controller");
+    let controller = new ObjectiveController(config, directory, api);
+    await controller.tick();
+    const firstId = controller.state.request!.sendId;
+    const settled = async (sendId: string) => {
+      await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/${sendId}?threadId=${task.threadId}`)).phase, { timeout: 20_000 }).toBe("settled");
+    };
+    await settled(firstId);
+    mkdirSync(join(config.checkpointDirectory, config.id), { recursive: true });
+    atomicJson(join(config.checkpointDirectory, config.id, `${firstId}.json`), { sendId: firstId, state: "ready", progress: "First contribution prepared", evidence: ["fixture/prepared"], next: "Independent contribution" });
+    const correction = await api("POST", `/api/bots/${bot.id}/messages`, { threadId: task.threadId, text: "Defer publication. Advance the other outcome.", sendId: "fixture-correction-1234" });
+    await settled("fixture-correction-1234");
+    await controller.tick();
+    expect(controller.state.status).toBe("intervened");
+    controller = new ObjectiveController(config, directory, api);
+    await controller.tick();
+    expect(controller.state.status, controller.state.detail).toBe("ready");
+    expect(controller.state.checkpoint?.progress).toBe("First contribution prepared");
+    await controller.tick();
+    const resumed = controller.state.request!.sendId;
+    await settled(resumed);
+    expect(resumed).not.toBe(firstId);
+    const current = await api("GET", `/api/bots/${bot.id}/requests/${resumed}?threadId=${task.threadId}`);
+    evidence.push({ correction, current, controller: controller.state });
+    const page = await api("GET", `/api/threads/${task.threadId}/messages?limit=100`);
+    expect(page.messages.filter((m: any) => m.sendId === firstId)).toHaveLength(1);
+    expect(page.messages.filter((m: any) => m.role === "user")).toHaveLength(3);
+  } finally {
+    writeFileSync(`${fixture.info.logPath}.objective-reconciliation.json`, JSON.stringify(evidence, null, 2));
+    console.log(`Reconciliation evidence: ${fixture.info.logPath}.objective-reconciliation.json`);
+    await fixture.close();
+  }
+}, 90_000);

@@ -18,7 +18,7 @@ and the application's guarded admission prevent competing starts.
 
 A checkpoint inventories every retained objective with its source, priority,
 state, next action, evidence and mapped task IDs. Code rejects dropped objectives
-and unmapped source tasks. An objective can be ready, waiting on an owned timed
+and unmapped source tasks. An objective can be ready, scheduled for a recorded review time, waiting on an owned timed
 dependency, awaiting verification, or explicitly stopped with source evidence.
 Any ready objective continues its lead even when another is blocked. A completed
 provider turn is never business acceptance. Semantic source truth, sensible
@@ -27,16 +27,30 @@ priorities and output quality still require reasoning and independent review.
 Checkpoints are claims and are stored separately from the controller's runtime
 observations. The controller follows the exact admitted request through real
 teammate returns. It does not trust an earlier acknowledgement as a final. Lost
-HTTP responses replay the same persisted send identity. Explicit Stop, a changed
-conversation and unproven request ownership prevent automatic resubmission.
-A server-recorded model-capacity failure can use the configured fallback chain,
-once per entry, in the same objective thread. The next turn must reconcile prior
-effects before continuing. Stop takes precedence. Other provider failures, three
-missing/invalid checkpoints or three unchanged ready checkpoints produce a visible
-`maintenance` state with retained unfinished work. The controller does not repair
-arbitrary provider failures
-or classify new human messages. Those cases require orchestration repair; it
-never silently converts them to completion.
+HTTP responses replay the same persisted send identity. Stop and unproven request
+ownership prevent automatic resubmission. A completed user correction on the
+current branch, or a completed exact retry of the same request, can be reconciled
+from runtime provenance. The controller preserves the latest instructions,
+completed effects and retained objectives. Rewinds, different replacement branches,
+input cards, active work and pending teammate returns still prevent admission.
+Conversation changes also wake a scheduled wait. Historical user updates are
+context, not newly authorized requests to repeat.
+
+A server-recorded model-capacity or Claude account-quota failure can use the
+configured fallback chain once per entry in the same thread. Other provider
+failures, three missing/invalid checkpoints or three unchanged ready checkpoints
+remain visible as unfinished maintenance. A stalled portfolio can reconsider new
+source evidence; it does not keep executing an unchanged backlog. Scheduled work
+waits until its recorded time or new evidence; ongoing record maintenance is not
+an endlessly ready objective. The controller does not establish semantic truth or
+repair arbitrary provider failures.
+
+Source routing uses explicit accountable owners, inherited parent ownership and
+project fallback for unresolved records. Cross-team descendants remain visible
+as dependencies, with their own accountable portfolio. An explicit human owner
+never inherits bot authority from a parent. Configure each portfolio's
+`ownerNames` from its actual lead/specialist roster; names route source visibility,
+not permission to execute. PMO intake sees the complete inventory.
 
 ## Deployment
 
@@ -72,7 +86,7 @@ undoes business work already performed.
 ## Verification
 
 ```sh
-pnpm exec vitest run server/objective-controller.test.ts server/objective-portfolio.test.ts server/objective-controller.e2e.test.ts server/guarded-messages-api.test.ts
+pnpm exec vitest run server/objective-controller.test.ts server/objective-portfolio.test.ts server/objective-ownership.test.ts server/objective-reconciliation.test.ts server/objective-controller.e2e.test.ts server/guarded-messages-api.test.ts
 pnpm exec tsc -p tsconfig.server.json --noEmit
 ```
 

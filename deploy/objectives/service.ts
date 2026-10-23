@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { routePortfolioTasks, type OwnershipTask } from "../../server/objective-ownership.ts";
 import { ObjectiveController, atomicJson, loopbackApi, type ObjectiveConfig } from "../../server/objective-controller.ts";
 
 const root = process.env.OMB_OBJECTIVE_STATE ?? "/state";
@@ -10,7 +11,7 @@ const controllers = new Map<string, ObjectiveController>();
 const health = await api("GET", "/api/health");
 if (health.capabilities?.guardedMessages !== 1 || health.capabilities?.guardedRequests !== 1) throw new Error("Guarded message/request capabilities required");
 let running = true;
-let source: { complete: boolean; checkedAt: string; tasks: Array<{ id: string; projectId: string }> } | undefined;
+let source: { complete: boolean; checkedAt: string; tasks: OwnershipTask[] } | undefined;
 let sourceError: string | undefined;
 let nextRead = 0;
 let reading: Promise<void> | undefined;
@@ -22,7 +23,7 @@ process.on("SIGINT", () => { running = false; });
 function refreshSource(): Promise<void> {
   return (async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8798/tasks", { method: "POST", signal: AbortSignal.timeout(150_000) });
+      const response = await fetch("http://127.0.0.1:8798/review", { method: "POST", signal: AbortSignal.timeout(150_000) });
       const data = await response.json() as typeof source;
       if (!response.ok || !data?.complete || !Array.isArray(data.tasks)) throw new Error("Complete task inventory unavailable");
       source = data;
@@ -61,7 +62,9 @@ while (running) {
     const conversations = (botInventory.find(b => b.id === controller.config.botId)?.tasks ?? [])
       .filter((t: any) => t.threadId !== controller.config.threadId && !t.routineRunId && !t.openedBy)
       .map((t: any) => ({ threadId: t.threadId, title: t.title, updatedAt: t.updatedAt })).sort((a: any, b: any) => a.threadId.localeCompare(b.threadId));
-    controller.updateSource(source.tasks, conversations);
+    const owners = [...controllers.values()].map(c => ({ id: c.config.id, names: c.config.portfolio?.ownerNames ?? [], projectIds: c.config.portfolio?.projectIds ?? [] }));
+    const tasks = controller.config.portfolio?.intakeOnly ? source.tasks : routePortfolioTasks(source.tasks, owners, controller.config.id);
+    controller.updateSource(tasks, conversations, true);
   }
   const active = (c: ObjectiveController) => Boolean(c.state.request) && !["maintenance", "stopped", "intervened"].includes(c.state.status);
   const candidates = [...available.filter(active), ...available.filter(c => !active(c)).sort((a, b) => (a.state.lastStartedAt ?? 0) - (b.state.lastStartedAt ?? 0))];

@@ -18,3 +18,12 @@ it("uses the earliest actual dependency and preserves stopped work", () => {
   expect(portfolioContinuation([objective("launch", "waiting"), objective("collateral", "stopped")], 1000)).toEqual({ state: "waiting", wakeAt: 2000 });
   expect(portfolioContinuation([objective("launch", "waiting")], 2000)).toEqual({ state: "ready" });
 });
+it("keeps future scheduled work out of immediate execution and wakes when due", () => {
+  const future = validatePortfolio([{ ...objective("review"), wakeAt: 4000 }], ["review"], [], 1000);
+  expect(future[0].state).toBe("scheduled");
+  expect(portfolioContinuation(future, 1000)).toEqual({ state: "waiting", wakeAt: 4000 });
+  expect(portfolioContinuation(future, 4000)).toEqual({ state: "ready" });
+  expect(portfolioContinuation([...future, objective("execute")], 1000)).toEqual({ state: "ready" });
+  expect(() => validatePortfolio([{ ...objective("review"), state: "scheduled" }], ["review"], [], 1000)).toThrow(/recorded wakeAt/);
+  expect(portfolioContinuation(validatePortfolio([{ ...objective("review", "waiting"), wakeAt: 500 }], ["review"], [], 1000), 1000)).toEqual({ state: "ready" });
+});
