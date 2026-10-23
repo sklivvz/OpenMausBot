@@ -47,3 +47,27 @@ installed and independently read back through the app API. Both utilities were
 installed with matching file hashes without restarting the app. Backups are in
 the existing private maintenance backup directory. This proves deployed tool and
 configuration state, not a successful newsletter send or future agent competence.
+
+## Native rendering check
+
+Liz's initial data-driven template used `article.image_url != blank`. In a
+network-isolated Solid 1.2.2 render, a three-article fixture with a nil image on
+the middle article produced an invalid empty-src image. The tested correction is
+`article.image_url and article.image_url != blank`.
+
+`deploy/marketing-calendar/verify-keila-liquid.exs` exercises zero, one and three
+articles, including nil, empty and missing image fields. It checks article order,
+escaped bodies, expected image counts and unresolved Liquid. All five cases
+passed on the corrected template. Run with Elixir 1.18:
+
+```
+elixir deploy/marketing-calendar/verify-keila-liquid.exs TEMPLATE_HTML OUTPUT_DIRECTORY
+```
+
+The initial dependency installation needs network access. The recorded run used
+`elixir:1.18-slim`, Solid 1.2.2, a temporary fixture directory, one CPU and 2 GiB
+memory. After dependency preparation, verification ran with Docker networking
+disabled and no live application or credentials mounted. This exercises Keila's
+Liquid engine, not its full provider UI, delivery or email-client rendering.
+The exact correction was delivered to Liz's existing production thread for
+installation and fresh provider readback.
