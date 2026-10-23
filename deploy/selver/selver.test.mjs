@@ -35,6 +35,20 @@ test('preview preserves unrelated SKUs, records source audit and explicit remova
   const spec = { ...fixed(), removeSkus: ['BREAD'] };
   assert.deepEqual(plan(spec).target, { MILK: 1 });
 });
+test('standalone offline preview needs no credentials and never treats its hash as approval', t => {
+  const dir = sandbox(t), spec = path.join(dir, 'spec.json'), baseline = path.join(dir, 'baseline.json');
+  fs.writeFileSync(spec, JSON.stringify(fixed()), { mode: 0o600 });
+  fs.writeFileSync(baseline, JSON.stringify(snapshot()), { mode: 0o600 });
+  const cli = fileURLToPath(new URL('./preview.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [cli, spec, baseline], { encoding: 'utf8', env: {} });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.authority, 'not_assessed'); assert.equal(output.remoteEffects, false);
+  assert.deepEqual(output.target, { BREAD: 1, MILK: 1 });
+  fs.writeFileSync(baseline, JSON.stringify({ ...snapshot(), observedAt: '2020-01-01' }));
+  const stale = spawnSync(process.execPath, [cli, spec, baseline], { encoding: 'utf8', env: {} });
+  assert.equal(stale.status, 1); assert.equal(stale.stdout, '');
+});
 test('rejects tampered intent, stale inputs, ambiguous products, invalid steps and incomplete coverage', () => {
   assert.throws(() => makePlan(fixed(), snapshot(), 'b'.repeat(64)), /hash mismatch/);
   assert.throws(() => plan(fixed(), { ...snapshot(), observedAt: '2020-01-01' }), /stale/);

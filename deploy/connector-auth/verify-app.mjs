@@ -32,7 +32,7 @@ try {
   assert.deepEqual(after.mcpServers, mcpServers);
   assert.deepEqual(after.toolScope, toolScope);
   const skills = [];
-  for (const [service, name] of [['websummit', 'websummit-directory-reconciliation'], ['slush', 'slush-evidence-reconciliation']]) {
+  for (const [service, name] of [['websummit', 'websummit-directory-reconciliation'], ['slush', 'slush-evidence-reconciliation'], ['selver', 'selver-cart-preview'], ['bluesky', 'bluesky-post-preparation']]) {
     const text = fs.readFileSync(new URL(`../${service}/skill/${name}/SKILL.md`, import.meta.url), 'utf8');
     await call(`/api/bots/${botId}/skill-template`, 'POST', { name, description: text.match(/^description: (.+)$/m)[1], source: 'local:reviewed-service-automation', enabled: true, warnings: [], text });
     const loaded = await call(`/api/bots/${botId}/skills/${name}`);

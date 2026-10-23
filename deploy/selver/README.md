@@ -30,6 +30,17 @@ enabled by these files.
 
 ## Inputs and preview
 
+For a standalone offline preview without host mutation configuration, run:
+
+```sh
+node deploy/selver/preview.mjs SPEC BASELINE
+```
+
+This entrypoint computes the supplied specification's hash and reports
+`authority:not_assessed`. It makes no provider request, reads no session and
+does not grant authority for the apply command. Its freshness and mechanical
+audit requirements are the same as the configured preview below.
+
 Use the existing audit specification format: `requirements` have `id`, `name`,
 `grams`, nonempty `identityTerms`, and optional `lactoseFree`. Selected `cart`
 lines have `sku`, `name`, `quantity`, `unitPriceEur`, `unit` (`kg` or `packs`),
