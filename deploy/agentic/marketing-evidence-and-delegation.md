@@ -24,18 +24,28 @@ If source messages conflict, resolve their scope and chronology once; do not
 circulate another reconciliation assignment for already established facts.
 
 For newsletters, keep three separate objects:
-- Reusable template: Edna's layout with the platform's editable content area,
-  branding and reusable footer. It contains no issue-specific prose or event.
+- Reusable template: Edna's layout, reusable sections, designed placeholders,
+  branding and footer, wired into the platform's named editable content slots.
+  Default placeholder content inside those slots is valid and seeds campaigns.
+  Preserve the supplied design; do not strip it down to a blank body.
+  A data-driven master may instead use Liquid variables and article loops.
+  User-requested repeating articles require a real loop with each optional image
+  inside it, not a fixed number of sample sections or issue-specific assets.
 - Issue content: Chandler's subject, preheader, entries, links and image references.
 - Campaign: Liz installs the template and combines it with the issue content in
-  the provider's separate campaign fields, then verifies the saved result.
+  the provider's separate campaign fields and slot values, then verifies the
+  saved result. Changing one issue must not change the reusable master.
 
 Edna evaluates visual design and rendering, not editorial quality or copy approval.
 Template design can proceed with labelled placeholders while copy is drafted.
-Do not reject a reusable template because issue content is absent. Do reject a
-populated campaign that still contains placeholders. Liz may mechanically install
+Do not reject a reusable template because issue content is absent or its designed
+placeholders are present. Do reject a populated campaign that still contains
+placeholders. Liz may mechanically install
 Edna's design and populate the platform's fields; she must not invent a replacement
 layout, rewrite copy or put the issue text into the reusable template.
+Platform adaptation includes binding the original design to editable fields or
+campaign data, removing preview-only labels and replacing fixed example content
+when the user requests it. Preserve the visual design, not superseded mistakes.
 
 Darcy owns one coherent brief and integration. Specialists report to Darcy;
 they do not create competing instructions or new work for one another. Revise

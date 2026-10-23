@@ -46,6 +46,7 @@ deploy/podman/.env.*
 /deploy/local/work-review-mcp.cjs
 /deploy/local/marketing-calendar-audit
 /deploy/local/newsletter-template-preflight
+/deploy/local/newsletter-template-prepare
 /deploy/observability/observer.cjs
 
 /deploy/objectives/controller.mjs

@@ -1,5 +1,10 @@
 # Marketing handoffs and purchase containment, 23 October
 
+The empty-content-slot rule in this increment was incorrect and is superseded by
+[the newsletter template repair](newsletter-template-repair-20261023.md). A saved
+empty shell and passing this original checker did not prove that Edna's design
+was preserved.
+
 Observed failures: permanent SOUL text asserted that C08 was unapproved after
 later user decisions; template and populated issue acceptance were conflated;
 Liz's platform skill sent unrelated work through launch-specific sources.

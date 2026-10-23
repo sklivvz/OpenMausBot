@@ -38,6 +38,7 @@ services:
     volumes:
       - ./deploy/local/work-review-mcp.cjs:/usr/local/bin/work-review-mcp:ro
       - ./deploy/local/newsletter-template-preflight:/usr/local/bin/newsletter-template-preflight:ro
+      - ./deploy/local/newsletter-template-prepare:/usr/local/bin/newsletter-template-prepare:ro
     environment:
       COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:-}
       OMB_COMPOSIO_BROKER_URL: ${OMB_COMPOSIO_BROKER_URL:-}
