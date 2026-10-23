@@ -173,6 +173,7 @@ export function jobView(input: JobInput): JobView {
       question: row.question ?? "An approval is waiting in its conversation",
     })),
   };
-  const version = createHash("sha256").update(JSON.stringify(snapshot)).digest("base64url").slice(0, 16);
+  const { since: _since, ...versioned } = snapshot;
+  const version = createHash("sha256").update(JSON.stringify(versioned)).digest("base64url").slice(0, 16);
   return { ...snapshot, now: input.now, version };
 }

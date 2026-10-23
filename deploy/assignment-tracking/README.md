@@ -50,7 +50,8 @@ This module has no default server URL and cannot call production by itself.
 
 ## Native version correction
 
-`server/job-view.ts` now hashes the public snapshot, excluding sampling time,
+`server/job-view.ts` now hashes the public snapshot, excluding sampling time and
+the query's `since` cutoff,
 instead of a subset that omitted returned result text, outcome detail, source
 titles and timestamps. Long-poll and snapshot consumers can now observe those
 changes through `version`. Hidden result content is not hashed into the public
