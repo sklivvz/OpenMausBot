@@ -1,0 +1,10 @@
+{
+  "accountId": "123456789",
+  "credentialFile": "/run/secrets/threads/account.json",
+  "grantDir": "/run/threads-approved-operations",
+  "receiptDir": "/var/lib/threads-receipts",
+  "artifactRoots": ["/workspace/approved-threads-artifacts"],
+  "imageOrigins": ["https://approved-images.example.com"],
+  "allowCreateContainers": false,
+  "allowPublish": false
+}
