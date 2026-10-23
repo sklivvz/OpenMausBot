@@ -32,6 +32,12 @@ It does not grant or change permissions. The exact task, not its bot default,
 must match; Ask callers never silently become Full. Retry receipts continue
 to return the original accepted action before rechecking admission conditions.
 
+`capabilities.guardedAuto: 1` additionally accepts explicit
+`expectedApprovalMode: "auto"` for a task already in Auto. It preserves the task’s
+existing tool rules and approval behavior. Omitted mode still requires strict
+Ask; neither Auto nor Full can be adopted silently. A mode change between
+inspection and admission is refused.
+
 Run the permanent isolated HTTP checks:
 
 ```sh

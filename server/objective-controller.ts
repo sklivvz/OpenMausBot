@@ -7,7 +7,7 @@ export interface ObjectiveConfig {
   id: string;
   botId: string;
   threadId: string;
-  approvalMode: "ask" | "full";
+  approvalMode: "ask" | "auto" | "full";
   objective: string;
   instructions: string;
   initialLeafId: string | null;

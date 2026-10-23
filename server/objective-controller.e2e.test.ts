@@ -5,7 +5,7 @@ import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.
 import { ObjectiveController, atomicJson, loopbackApi, type ObjectiveConfig } from "./objective-controller.ts";
 
 it("continues one business objective across real guarded requests and a controller restart without another user message", async () => {
-  const fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, { scripted: true });
+  const fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, { scripted: true }, [], undefined, undefined, process.env.OMB_VERIFICATION_ENTRY);
   const api = loopbackApi(fixture.info.url);
   const evidence: unknown[] = [{ fixture: fixture.info }];
   try {
