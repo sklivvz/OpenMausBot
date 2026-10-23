@@ -100,3 +100,40 @@ fixtures additionally cover exact retries, unrelated branches, Stop, rewinds,
 mid-turn steering, missing ancestry, pending inputs, scheduling and explicit
 cross-team/human ownership. Account-quota recovery uses only configured fallbacks;
 it does not bypass the workspace spend limit or enlarge task permissions.
+
+## Subsequent recovery checks, 23 October
+
+The reconciler now accepts a proven successful terminal outcome on the original
+request after a maintenance observation, while still requiring the latest turn
+and outcome to match and all live work/input dependencies to settle. Provider
+recovery can leave only the failed leaf as its anchor. The reconciler walks that
+leaf's ancestry to the original user request and accepts only an exact-text retry
+at the same parent; unrelated branches, missing ancestry and Stop remain held.
+The guarded send endpoint remains the final admission fence and is unchanged.
+Ownership parsing also recognizes the `Accountable lead:` label present in the
+current objective records. Explicit human ownership remains unresolved for bot
+execution and does not inherit a parent bot's authority.
+
+Twenty-nine unit tests passed across ownership, reconciliation, portfolio and
+controller modules. The four controller HTTP fixtures passed: the first three
+in the full run, then the late-completion case after its missing fake-provider
+script was supplied. The retry fixture uses the real message-edit/retry route
+following a provider failure. The late-completion fixture preserves an actual
+successful server transcript and recreates the controller's earlier maintenance
+observation in isolated fixture state. It does not inject a success into the
+user's data. The exact deployed package was used for supported fixtures via
+`OMB_VERIFICATION_ENTRY`; the capacity fixture launches the source server as in
+its existing recipe.
+
+During live maintenance, new controller dispatches were temporarily held while
+waiting for an idle permission-update window. That held ready Sales work too
+long. All six temporary holds were removed; no running turn was interrupted.
+Do not repeat a global dispatch hold to install an optional read-tool grant.
+
+Live observations are narrower than business acceptance: Sales resumed at cycle
+8, reviewed its due qualification evidence and dispatched the overdue investor
+slide's missing Finance contribution. Marketing delivered its existing newsletter
+packet, delegated copy and template corrections, and retained the no-send hold.
+Edna's design attempt encountered the shared Claude quota. Edna, Blake and Bill
+were then configured for Sol high; Darcy was also explicitly set to high.
+These model settings and activity do not prove the quality of the final output.

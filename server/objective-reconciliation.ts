@@ -20,9 +20,19 @@ export function reconcileObjectiveConversation(messages: WireMessage[], leafId: 
     cursor = message.parentId ?? null;
   }
   let start = path.findIndex(m => m.id === (sources[0]?.id ?? anchor.leafId));
-  if (start < 0 && sources[0] && anchor.text) {
-    const replacements = path.filter(m => m.role === "user" && !m.steered && !m.aside && !m.peerAsk && m.text === anchor.text && m.parentId === sources[0].parentId);
-    if (replacements.length === 1) start = path.indexOf(replacements[0]);
+  if (start < 0) {
+    let previous: WireMessage | undefined = sources[0] ?? (anchor.leafId ? byId.get(anchor.leafId) : undefined);
+    const priorSeen = new Set<string>();
+    while (previous && previous.role !== "user") {
+      if (priorSeen.has(previous.id)) return hold("Previous objective ancestry is cyclic; no continuation admitted.");
+      priorSeen.add(previous.id);
+      previous = previous.parentId ? byId.get(previous.parentId) : undefined;
+    }
+    if (previous?.requestCancelled) return { status: "stopped", detail: "The previous objective request was stopped. No automatic resume." };
+    if (previous && !previous.steered && !previous.aside && !previous.peerAsk && previous.text) {
+      const replacements = path.filter(m => m.role === "user" && !m.steered && !m.aside && !m.peerAsk && m.text === (anchor.text ?? previous.text) && m.parentId === previous.parentId);
+      if (replacements.length === 1) start = path.indexOf(replacements[0]);
+    }
   }
   if (start < 0) return hold("Current branch does not descend from the objective or an exact retry; reconciliation needs review.");
   const changes = path.slice(start);
@@ -33,10 +43,10 @@ export function reconcileObjectiveConversation(messages: WireMessage[], leafId: 
   const latestTurn = changes.findLast(m => m.turnId);
   const outcome = changes.findLast(m => m.turnSucceeded !== undefined);
   const lastUser = changes.findLast(m => m.role === "user");
-  if (!source || source.id === sources[0]?.id || !terminal?.turnSucceeded || outcome?.turnSucceeded !== true ||
+  if (!source || !terminal?.turnSucceeded || outcome?.turnSucceeded !== true ||
     terminal.requestMessageId !== source.id || latestTurn?.turnId !== terminal.turnId ||
     (lastUser && changes.indexOf(lastUser) > changes.indexOf(terminal))) return hold("New conversation work has no proven successful terminal outcome yet; no replay admitted.");
   const instructions = changes.filter(m => m.role === "user" && !m.relayed && !m.peerAsk && !m.aside && m.text && m.text !== anchor.text).map(m => ({ messageId: m.id, text: m.text! }));
   if (JSON.stringify(instructions).length > 16_000) return hold("Changed user instructions exceed the bounded reconciliation context; review before continuing.");
-  return { status: "ready", leafId: leafId!, sourceMessageId: source.id, instructions, detail: "Reconciled a successful user-directed continuation or exact retry. Latest instructions and holds supersede the old checkpoint; reconcile effects before advancing other objectives." };
+  return { status: "ready", leafId: leafId!, sourceMessageId: source.id, instructions, detail: "Reconciled proven successful completion, a user-directed continuation or an exact retry. Latest instructions and holds supersede the old checkpoint; reconcile effects before advancing other objectives." };
 }
