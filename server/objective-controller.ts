@@ -151,7 +151,7 @@ export class ObjectiveController {
     const error = snapshot.messages?.findLast((m: any) => m.kind === "activity" && m.tool?.name?.startsWith("error: "))?.tool?.name ?? "";
     const unavailable = error === "error: Selected model is at capacity. Please try a different model." ||
       /^error: This Claude account has reached its (?:weekly|5-hour|usage) limit(?:[.,]| \()/.test(error) ||
-      /^error: Your ChatGPT account \(used by Codex\) reached its Codex usage limit\./.test(error);
+      error.startsWith("error: Your ChatGPT account (used by Codex) reached its Codex usage limit.");
     const fallback = this.config.recoveryModels?.[this.state.recoveries ?? 0];
     if (!fallback || failed?.turnSucceeded !== false || !unavailable) return false;
     await this.api("PATCH", `/api/bots/${this.config.botId}/tasks/${this.config.threadId}`, { modelSelection: fallback });
