@@ -20,3 +20,8 @@ it("does not inherit bot authority over an explicitly human-owned contribution",
   const tasks = [{ id: "parent", projectId: "legal-project", description: "Owner: Luis Litt" }, { id: "decision", projectId: "legal-project", parentId: "parent", description: "Owner: Marco" }];
   expect(routePortfolioTasks(tasks, owners, "legal").find(t => t.id === "decision")?.accountablePortfolio).toBe("unresolved");
 });
+
+it("routes an accountable lead across projects and preserves human ownership", () => {
+  const tasks = [{ id: "fundraising", projectId: "legal-project", description: "Accountable lead: Blake.\nLead proposal, not approval." }, { id: "decision", projectId: "legal-project", parentId: "fundraising", description: "Accountable lead: Marco" }];
+  expect(routePortfolioTasks(tasks, owners, "sales")).toMatchObject([{ id: "fundraising", accountablePortfolio: "sales" }, { id: "decision", accountablePortfolio: "unresolved" }]);
+});

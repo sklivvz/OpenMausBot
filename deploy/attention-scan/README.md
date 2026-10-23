@@ -33,11 +33,14 @@ a source, repeating a cursor or receiving an offloaded response explicitly marks
 the source incomplete. A failed source does not discard the others. Complete
 collection does not establish that the model's subsequent triage is correct.
 
-Bill's native shell command grants bind each exact absolute command to his Grok
-instance and company working directory. His approval mode remains Auto. These
-grants do not permit arbitrary Composio calls or other shell commands. The routine
-prompt instructs him to use the installed commands and compare results with the
-previous report. A provider or working-folder change requires updating the grants.
+Bill's unattended routine uses `work-review.read_attention_scan`, not a native
+shell command. Auto mode remains enabled. The MCP collects all fixed scanner
+pages before returning a stable paged report; callers follow returned cursors.
+Source failures remain explicit and do not advance the complete baseline. See
+[the MCP contract](../task-review/README.md). The launchers remain available for
+operator diagnostics; engine/cwd shell grants alone did not prevent the native
+provider from rejecting unattended execution. Standing MCP grants, when used,
+bind the exact read tool to each provider and the MCP configuration fingerprint.
 
 ## Verification
 

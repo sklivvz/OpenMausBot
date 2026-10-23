@@ -17,7 +17,7 @@ test('isolated HTTP scan collects all pages before the agent receives a stable r
     const read = createAttentionReader(fetch, `http://127.0.0.1:${port}`, Date.now);
     const first = await read({});
     assert.deepEqual(calls, ['/scan', '/next']);
-    assert.equal(first.complete, false); assert.equal(first.pagesTotal, 2); assert.equal(first.allPagesRead, false); assert.equal(first.nextCommand, undefined);
+    assert.equal(first.complete, false); assert.equal(first.pagesTotal, 2); assert.equal(first.allPagesRead, false); assert.equal(Object.hasOwn(first, "nextCommand"), false);
     const next = await read({ cursor: first.nextCursor! });
     assert.equal(next.allPagesRead, true); assert.equal(next.complete, false);
     assert.deepEqual(await read({ cursor: first.nextCursor! }), next);

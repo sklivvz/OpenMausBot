@@ -28,10 +28,27 @@ it("requires successful runtime completion covering the latest human input", () 
   expect(check([source, correction, { ...terminal, turnSucceeded: false }]).status).toBe("intervened");
   expect(check([source, correction, { ...terminal, requestMessageId: source.id }]).status).toBe("intervened");
   expect(check([source, correction, terminal, { ...correction, id: "later", parentId: terminal.id }]).status).toBe("intervened");
-  expect(check([source, { ...terminal, parentId: source.id, requestMessageId: source.id }]).status).toBe("intervened");
+  expect(check([source, { ...terminal, parentId: source.id, requestMessageId: source.id }]).status).toBe("ready");
   expect(check([source, { ...terminal, parentId: "missing" }]).status).toBe("intervened");
 });
 it("retains mid-turn steering under the proven originating request", () => {
   const steer = { ...correction, id: "steer", parentId: correction.id, steered: true };
   expect(check([source, correction, steer, { ...terminal, parentId: steer.id }]).status).toBe("ready");
+});
+
+it("recovers an exact retry after provider recovery retained only the failed leaf", () => {
+  const failed = { ...terminal, id: "failed", parentId: source.id, requestMessageId: source.id, turnSucceeded: false };
+  const retry = { ...source, id: "retry", sendId: "retry-id" };
+  const done = { ...terminal, parentId: retry.id, requestMessageId: retry.id };
+  const old = { leafId: failed.id };
+  expect(reconcileObjectiveConversation([source, failed, retry, done], done.id, old, {}).status).toBe("ready");
+  expect(reconcileObjectiveConversation([{ ...source, requestCancelled: true }, failed, retry, done], done.id, old, {}).status).toBe("stopped");
+  expect(reconcileObjectiveConversation([source, failed, { ...retry, text: "Unrelated work" }, done], done.id, old, {}).status).toBe("intervened");
+});
+it("requires the latest resumed turn to succeed and waits for all teammates", () => {
+  const first = { ...terminal, parentId: source.id, requestMessageId: source.id };
+  const later = { ...first, id: "later", parentId: first.id, turnId: "later-turn", turnSucceeded: false };
+  expect(check([source, first, later]).status).toBe("intervened");
+  expect(check([source, first, { ...later, turnSucceeded: true }], { waitingForTeammates: true }).status).toBe("waiting");
+  expect(check([source, first, { ...later, turnSucceeded: true }]).status).toBe("ready");
 });

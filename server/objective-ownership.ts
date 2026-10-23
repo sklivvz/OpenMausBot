@@ -12,7 +12,7 @@ export function routePortfolioTasks(tasks: OwnershipTask[], owners: PortfolioOwn
   const owner = owners.find(o => o.id === portfolioId);
   if (!owner) return [];
   const explicit = (task: OwnershipTask): string | undefined => {
-    const line = task.description?.match(/^(?:Owner|Accountable owner|Accountable delivery owner|Delivery owner):\s*(.+)$/mi)?.[1]?.trim().toLocaleLowerCase();
+    const line = task.description?.match(/^(?:Owner|Accountable owner|Accountable lead|Accountable delivery owner|Delivery owner):\s*(.+)$/mi)?.[1]?.trim().toLocaleLowerCase();
     if (!line) return undefined;
     return owners.find(o => o.names.some(name => {
       const n = name.trim().toLocaleLowerCase();

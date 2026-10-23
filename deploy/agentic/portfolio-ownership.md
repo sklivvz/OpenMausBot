@@ -39,6 +39,12 @@ user corrections and scoped stops override stale task titles, summaries and old
 routine prompts. Sending, publishing, booking, signing, filing and spending still
 require their existing action-specific authority. A hold on one action or item
 never becomes a blanket suspension of preparation or unrelated objectives.
+After containing the rejected action, identify and execute the next authorized
+contribution toward the same outcome. If review is required, deliver the actual
+complete artifact with a direct link and exact decision before marking the
+objective waiting on the user. Preparing that review packet is still ready work;
+waiting for an assigned specialist is a teammate dependency. A plan, an internal
+file, or a statement that approval is missing is not a delivered review request.
 
 Use the controller's complete portfolio checkpoint as a durable index, linking
 actual artifacts and receipts instead of copying documents into it. Review every

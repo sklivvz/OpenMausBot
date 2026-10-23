@@ -74,8 +74,10 @@ it("uses configured fallback after a real fixture provider capacity error withou
     await controller.tick();
     expect(controller.state.status, controller.state.detail).toBe("working");
     const firstId = controller.state.request!.sendId;
+    const originalText = controller.state.request!.text;
     await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/${firstId}?threadId=${task.threadId}`)).phase, { timeout: 15_000 }).toBe("untracked");
-    evidence.push(await api("GET", `/api/bots/${bot.id}/requests/${firstId}?threadId=${task.threadId}`));
+    const failedSnapshot = await api("GET", `/api/bots/${bot.id}/requests/${firstId}?threadId=${task.threadId}`);
+    evidence.push(failedSnapshot);
     const wrapper = join(fixture.info.dataDir, "healthy-provider.mjs");
     writeFileSync(wrapper, `#!/usr/bin/env node\nprocess.env.FAKE_CLAUDE_MODE = 'happy';\nawait import(${JSON.stringify(new URL("./testing/fake-claude-cli.ts", import.meta.url).href)});\n`, { mode: 0o700 });
     await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).bots.some((b: any) => b.busy || b.tasks?.some((t: any) => t.busy)), { timeout: 10_000 }).toBe(false);
@@ -83,6 +85,12 @@ it("uses configured fallback after a real fixture provider capacity error withou
     await controller.tick();
     expect(controller.state.status).toBe("ready");
     expect(controller.state.recoveries).toBe(1);
+    await api("POST", `/api/bots/${bot.id}/messages/${failedSnapshot.messageId}/edit`, { threadId: task.threadId, text: originalText, sendId: "fixture-exact-retry-1234" });
+    await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/fixture-exact-retry-1234?threadId=${task.threadId}`)).phase, { timeout: 15_000 }).toBe("settled");
+    await controller.tick();
+    expect(controller.state.status).toBe("intervened");
+    await controller.tick();
+    expect(controller.state.status, controller.state.detail).toBe("ready");
     await controller.tick();
     const resumed = controller.state.request!.sendId;
     await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/${resumed}?threadId=${task.threadId}`)).phase, { timeout: 15_000 }).toBe("settled");
@@ -144,3 +152,35 @@ it("continues after a settled user correction without replaying the previous req
     await fixture.close();
   }
 }, 90_000);
+
+it("reconciles a request whose successful completion arrives after a maintenance observation", async () => {
+  const fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, { scripted: true }, [], undefined, undefined, process.env.OMB_VERIFICATION_ENTRY);
+  const api = loopbackApi(fixture.info.url);
+  try {
+    const { bot } = await runControlOmb(["new-bot", "--name", "Late completion owner", "--url", fixture.info.url]) as any;
+    const { task } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Late completion fixture" });
+    await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { approvalMode: "ask" });
+    writeFileSync(join(fixture.info.dataDir, "room-plan.json"), JSON.stringify({ [bot.id]: { turns: [
+      { reply: "First contribution completed; next contribution remains." },
+      { reply: "Advanced the remaining fixture contribution." },
+    ] } }));
+    const config: ObjectiveConfig = { id: "late", botId: bot.id, threadId: task.threadId, approvalMode: "ask", objective: "Finish fixture contributions", instructions: "Fixture only", initialLeafId: null, checkpointDirectory: join(fixture.info.dataDir, "checkpoints") };
+    const directory = join(fixture.info.dataDir, "controller");
+    let controller = new ObjectiveController(config, directory, api);
+    await controller.tick();
+    const originalId = controller.state.request!.sendId;
+    await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/${originalId}?threadId=${task.threadId}`)).phase, { timeout: 20_000 }).toBe("settled");
+    atomicJson(join(directory, "state.json"), { ...controller.state, status: "maintenance", detail: "Fixture observation preceded terminal success" });
+    controller = new ObjectiveController(config, directory, api);
+    await controller.tick();
+    expect(controller.state.status, controller.state.detail).toBe("ready");
+    await controller.tick();
+    const continuedId = controller.state.request!.sendId;
+    await expect.poll(async () => (await api("GET", `/api/bots/${bot.id}/requests/${continuedId}?threadId=${task.threadId}`)).phase, { timeout: 20_000 }).toBe("settled");
+    const page = await api("GET", `/api/threads/${task.threadId}/messages?limit=100`);
+    expect(page.messages.filter((m: any) => m.sendId === originalId)).toHaveLength(1);
+    expect(page.messages.filter((m: any) => m.role === "user")).toHaveLength(2);
+    writeFileSync(`${fixture.info.logPath}.late-completion.json`, JSON.stringify({ config, state: controller.state, page }, null, 2));
+    console.log(`Late completion evidence: ${fixture.info.logPath}.late-completion.json`);
+  } finally { await fixture.close(); }
+}, 60_000);
