@@ -44,4 +44,5 @@ COPY --chmod=0555 marketing-calendar-audit /usr/local/bin/marketing-calendar-aud
 COPY --chmod=0555 newsletter-template-preflight /usr/local/bin/newsletter-template-preflight
 COPY --chmod=0555 newsletter-template-prepare /usr/local/bin/newsletter-template-prepare
 COPY --chmod=0555 slop-detector-mcp.cjs /usr/local/bin/slop-detector-mcp
+COPY --chmod=0555 keila-drafts-mcp.cjs /usr/local/bin/keila-drafts-mcp
 USER maus

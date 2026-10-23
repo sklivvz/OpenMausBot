@@ -3,6 +3,39 @@ name: newsletter-platform-production
 description: Install a reusable newsletter template separately from issue content, then verify the provider's saved objects.
 ---
 
+## Deterministic Keila installation
+
+When the `keila-drafts` MCP is connected, use `keila_inventory`,
+`keila_snapshot` and `keila_prepare` for template/campaign installation and
+readback. Browser editor actions are not the production path. A missing API
+connection is one concrete setup blocker to escalate; do not spend turns
+rediscovering editor mechanics or ask the user to perform the production work.
+
+Use the documented manifest and payload schema in
+this skill's `API.md` reference (source: `deploy/keila/README.md`).
+Operate only on the exact authorized task, preserve user holds, and keep sent
+campaigns untouched. A template-install task does not authorize filling it with
+issue copy. A draft-preparation task does not authorize sending. Copy approved
+source files exactly into the payload; choose no replacement wording or design.
+Snapshot the selected master once, assemble the issue once, and return the
+verified provider URL/receipt. The tool handles persistence, hashes and readback;
+do not paste full template HTML or screenshots repeatedly into the conversation.
+
+Use a stable operation ID per exact authorized preparation. On an uncertain
+write, stop mutations and escalate the receipt; never generate a new ID to try
+again. On a changed snapshot, reread and report the conflicting edit. On a hold,
+report the held task and continue other authorized work. On structural failure,
+route the specific design/copy defect to its owner. A successful API receipt is
+storage verification, not visual design acceptance or permission to deliver.
+
+These mechanical steps can run under an inexpensive executor (including an
+available DeepSeek executor); no model is used inside the API operations. Jev may
+classify a bounded ambiguous routing decision, but neither Jev nor an executor
+can turn uncertain permission into approval. Keep design with Edna and copy with
+Chandler; Liz assembles and verifies.
+
+
+
 # Newsletter platform production
 
 Edna supplies the reusable visual template and artwork; Chandler supplies issue
