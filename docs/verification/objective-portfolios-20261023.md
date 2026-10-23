@@ -53,3 +53,22 @@ checkpoint content, output quality, or achievement of a live business objective.
 
 Pending live registration and observation. Source implementation, deployment,
 observed execution and business acceptance must be reported separately.
+
+### First live admissions
+
+Six dedicated portfolio threads were registered with their inherited task
+permissions: five Full and PMO Auto. The five domain sweep schedules were
+backed up and disabled; Bill's briefing/intake routines and specialists' dated
+jobs were unchanged. The controller admitted Marketing and personal Operations
+at 06:29:34–35 UTC. These are execution admissions, not business acceptance.
+Darcy's observed source review explicitly recovered customer permissions,
+editorial work, Slush, merchandise, paid advertising, measurement and newsletter
+renewal in addition to the launch. Donna recovered personal sources and scoped
+holds. Remaining teams await admission or their existing work finishing.
+
+Donna encountered a missing `/usr/local/bin/operations-queue` in the current
+image. Direct inspection also found the two attention-scan launchers absent.
+The three existing fixed read-only launchers were restored without restarting
+the app, and the image recipe now retains them. No scans or domain writes were
+substituted by the frontier. PMO controller activation awaits the verified
+Auto-compatible package; its current routines remain active.
