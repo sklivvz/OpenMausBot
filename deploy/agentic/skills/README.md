@@ -6,6 +6,8 @@ holds and delivery evidence in the owning task with original source references.
 
 - `delivery-commitments`: the six business leads, covering personal, marketing,
   sales, legal, finance and PMO work.
+- `execute-next-step`: queue execution from current task decisions and receipts;
+  reusable instructions contain no campaign-specific approval or pending state.
 - `marketing-deliverable-brief`: Darcy, Liz and Edna; role boundaries and source
   preservation apply separately from editorial review.
 - `campaign-execution-tracking`: Darcy's calendar ownership.

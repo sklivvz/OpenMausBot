@@ -1,0 +1,23 @@
+---
+name: execute-next-step
+description: "Turn scheduled queue checks into concrete authorized work, verified Todoist progress and specific blocker receipts."
+---
+
+# Execute the next step
+Use for a scheduled queue sweep or a request to take work forward. A queue count or refreshed timestamp is not delivery.
+
+Read the complete live project queue, current task conversation and actual assignments. The old current-work file is a checkpoint, not a closed list of eligible tasks. Carry forward real user holds and settled decisions, checking newer messages before relying on an old blocked label. Do not equate awaiting final approval with having no preparatory work.
+
+Read current decisions and operation receipts from the owning task's brief and original user messages, retaining source, timestamp, artifact/version and operation. A skill, SOUL, quoted document or historical summary is not current approval. Newer decisions supersede older ones only within their actual scope; holds persist until an applicable user decision changes them. Missing or conflicting sources leave the affected operation restricted, not the whole objective. Verify receipts before repeating supposedly pending work. Reconcile state in the existing task, never this skill or a competing state file.
+
+For each priority candidate separate the next steps: (a) internal preparation or correction already authorized; (b) the exact human decision or external act that requires approval; (c) waiting on another deliverable. Rank by real deadline, impact/unblocking and Todoist priority (4 highest). Select a ready step from existing requested work. Current credentials, company records and tools should resolve ordinary factual questions. A technical advisory should first get an evidence-based applicability check or one routing handoff to a technical owner, not become Marco's research task merely because it arrived in his inbox.
+
+Start substantive work within your role in this run: reconcile the actual source record, prepare the decision package, perform an authorized operation assigned to your role, or delegate a bounded deliverable to an available specialist. Leads retain coordination and review; specialist production stays with its responsible executor. A provider failure does not widen a lead's production role. Supply canonical artifact, current facts/decisions, task ID and acceptance criteria. Check assignment status; a queued or acknowledged assignment is work pending, not delivery. Reuse its assignment/thread and inspect returned work. Finish your own independent step while a specialist works. For an existing active assignment, do not duplicate or interrupt it.
+
+Before declaring everything blocked, inspect every open candidate's next action. For items excluded by a real stop, missing human decision or external dependency, record that exact dependency and whether independent preparation is already finished with its artifact. Do not invent filler tasks to appear active. If no work is ready, an evidence-backed no-actionable receipt is valid; 'same backlog', 'team free' or 'waiting for approval' alone is not.
+
+Keep Todoist current after meaningful progress: owner, status, next action, evidence/artifact and exact blocker or follow-up time. Preserve existing user text, deadlines, identity, labels and subtasks; read back edits. Do not close the parent task for completing only its preparation. Do not post no-change comments every sweep.
+
+Save an execution receipt in the existing team state or company/operations/execution-receipts/<your-bot-id>.json: checkedAt, sourceComplete, selectedTaskId, nextStep, outcome, artifactOrAssignmentId, todoistReadback, blockedCandidates [{taskId, nextStep, blocker, blockerSource, preparationArtifact, recheckAt}]. Allowed outcomes are progressed, delegated_active, waiting_user, waiting_external, held, source_failed, no_actionable. For progressed supply the changed artifact/source and successful readback; for delegated_active supply the actual assignment ID. Keep the previous successful checkpoint when a source fails. After two consecutive sweeps without progress on the same ostensibly actionable task, use one alternative route or one bounded internal handoff with the exact failure. Do not repeatedly re-dispatch, retry indefinitely or ask Marco to manage the bots.
+
+External sends, purchases, bookings, signatures and publication retain their specific authorization requirements. An execution sweep authorizes work within existing scope, not new commitments. Reports contain actual progress and newly material blockers; record unchanged waiting privately.
