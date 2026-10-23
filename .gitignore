@@ -56,3 +56,6 @@ deploy/podman/.env.*
 /deploy/local/execution-tools-mcp.cjs
 /deploy/local/assembled-output-verify
 __pycache__/
+/deploy/local/perk-mcp.cjs
+/deploy/local/threads-mcp.cjs
+/deploy/local/bluesky-mcp.cjs
