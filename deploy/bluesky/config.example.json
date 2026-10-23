@@ -1,0 +1,10 @@
+{
+  "pdsUrl": "https://YOUR-ACCOUNT-PDS.example",
+  "accountDid": "did:plc:REPLACE_WITH_VERIFIED_ACCOUNT_DID",
+  "credentialsFile": "/run/secrets/bluesky-app-password.json",
+  "stateDir": "/data/private/bluesky-state",
+  "grantDir": "/run/bluesky-approval-grants",
+  "artifactRoots": ["/data/.openmausbot/workspaces/WORKSPACE_ID/company/marketing"],
+  "allowPublish": false,
+  "timeoutMs": 15000
+}
