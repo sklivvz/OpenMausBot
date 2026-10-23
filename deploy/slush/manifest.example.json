@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "saved-sent-requests",
+      "kind": "sent_requests",
+      "path": "sent-requests.tsv",
+      "event": "slush26",
+      "account": "owner-account-reference",
+      "captured_at": "2026-10-21T10:00:00Z"
+    },
+    {
+      "id": "saved-company-matches",
+      "kind": "company_matches",
+      "path": "company-matches.tsv",
+      "event": "slush26",
+      "account": "owner-account-reference",
+      "captured_at": "2026-10-21T10:00:00Z"
+    }
+  ],
+  "filters": { "country": "GB", "company_type": "vc-investor" }
+}
