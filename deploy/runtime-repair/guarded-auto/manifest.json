@@ -1,0 +1,6 @@
+{
+  "baseImage": "openmausbot-local:bill-briefing-compact-20261023",
+  "before": "142da5449b59513b55da3a57bcbea0d78b958106ba3d3a9ff414f070b61084e1",
+  "after": "ced8fecf29681477603dbfec106e5055898b6e26cd5d16194fdee9cbbf7e28f6",
+  "patch": "index.patch"
+}

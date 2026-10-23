@@ -113,7 +113,7 @@ const guardedSendSchema = z.object({
   sendId: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/),
   text: z.string().min(1),
   expectedActiveLeafId: z.string().regex(/^[\w-]+$/).nullable(),
-  expectedApprovalMode: z.enum(["ask", "full"]).optional(),
+  expectedApprovalMode: z.enum(["ask", "auto", "full"]).optional(),
   replyToId: z.string().optional(),
   onBehalfOf: z.object({
     email: z.string().trim().toLowerCase().max(254).pipe(z.email()).optional(),

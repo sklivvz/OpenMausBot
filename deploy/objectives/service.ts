@@ -37,7 +37,7 @@ while (running) {
     try {
       const inventory = await api("GET", "/api/bots?messages=0");
       botInventory = inventory.bots;
-      busyBots = new Set(inventory.bots.filter((b: any) => b.busy || b.waitingForTeammates || b.tasks?.some((t: any) => t.busy || t.waitingForTeammates)).map((b: any) => b.id));
+      busyBots = new Set(inventory.bots.filter((b: any) => b.busy || b.tasks?.some((t: any) => t.busy)).map((b: any) => b.id));
       nextActivityRead = Date.now() + 5000;
     } catch {
       await new Promise(resolve => setTimeout(resolve, 2000));

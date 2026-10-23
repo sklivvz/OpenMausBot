@@ -1,0 +1,19 @@
+--- index.js
++++ index.js
+@@ -229041,6 +229041,7 @@
+         guardedMessages: 1,
+         guardedRequests: 1,
+         guardedFullAccess: 1,
++        guardedAuto: 1,
+         guardedOnBehalfOf: 1,
+         ...sharedWorkspaceFullAccessEnabled2() ? { sharedWorkspaceFullAccess: 1 } : {}
+       } });
+@@ -229384,7 +229385,7 @@
+   sendId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,80}$/),
+   text: external_exports.string().min(1),
+   expectedActiveLeafId: external_exports.string().regex(/^[\w-]+$/).nullable(),
+-  expectedApprovalMode: external_exports.enum(["ask", "full"]).optional(),
++  expectedApprovalMode: external_exports.enum(["ask", "auto", "full"]).optional(),
+   replyToId: external_exports.string().optional(),
+   onBehalfOf: external_exports.object({
+     email: external_exports.string().trim().toLowerCase().max(254).pipe(external_exports.email()).optional(),

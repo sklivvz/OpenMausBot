@@ -66,7 +66,7 @@ describe("guarded external messages through an isolated runtime", () => {
 
   beforeEach(async () => {
     evidence = [];
-    fixture = await launchVerificationServer();
+    fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, undefined, [], undefined, undefined, process.env.OMB_VERIFICATION_ENTRY);
     const wrapper = join(fixture.info.dataDir, "guarded-fake-claude.mjs");
     writeFileSync(wrapper, [
       "#!/usr/bin/env node",
@@ -146,6 +146,20 @@ describe("guarded external messages through an isolated runtime", () => {
     expect(remembered.status).toBe(409); expect(remembered.body.code).toBe("guarded_permissions");
     expect((await page(bot.activeTaskId)).messages).toEqual(baseline.messages);
     await noQueuedWork(bot.activeTaskId);
+  }, 30_000);
+
+  it("admits explicitly expected Auto without changing policy and refuses it after a mode change", async () => {
+    const bot = await newBot();
+    expect((await api("GET", "/api/health")).body.capabilities.guardedAuto).toBe(1);
+    expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.activeTaskId}`, { approvalMode: "auto" })).status).toBe(200);
+    const accepted = await guarded(bot, { ...payload(bot, "EXPLICIT_AUTO"), expectedApprovalMode: "auto" });
+    expect(accepted.status).toBe(202);
+    await finish(bot);
+    const baseline = await page(bot.activeTaskId);
+    expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.activeTaskId}`, { approvalMode: "ask" })).status).toBe(200);
+    const rejected = await guarded(bot, { ...payload(bot, "AUTO_AFTER_DOWNGRADE", baseline.activeLeafId), expectedApprovalMode: "auto" });
+    expect(rejected.status).toBe(409); expect(rejected.body.code).toBe("guarded_permissions");
+    expect((await page(bot.activeTaskId)).messages).toEqual(baseline.messages);
   }, 30_000);
 
   it("does not steer an active normal turn or queue behind exhausted capacity", async () => {
