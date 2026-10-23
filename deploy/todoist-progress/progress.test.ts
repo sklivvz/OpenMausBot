@@ -15,7 +15,7 @@ function fixture() {
   let evidenceValid = true;
   const rpc = async (slug: string, args: Record<string, unknown>) => {
     calls.push({ slug, args });
-    if (slug === 'TODOIST_GET_ALL_TASKS') { if (readFails) throw Error('offline'); return { tasks: [structuredClone(task)], next_cursor: null }; }
+    if (slug === 'TODOIST_GET_ALL_TASKS') { assert.deepEqual(args, { ids: ['t1'], limit: 5 }); if (readFails) throw Error('offline'); return { tasks: [structuredClone(task)], next_cursor: null }; }
     assert.equal(slug, 'TODOIST_UPDATE_TASK');
     assert.deepEqual(Object.keys(args).sort(), ['description', 'task_id']);
     if (failBeforeWrite) throw Error('lost connection');
@@ -94,10 +94,10 @@ test('ambiguous or injected managed delimiters cannot damage user text', async (
 test('task lock survives uncertainty and excludes another writer without lease expiry', async () => {
   const f = fixture(); try { fs.writeFileSync(path.join(f.directory, 'task-t1.lock'), '{}'); await assert.rejects(f.tool.update(f.input()), /owns this task lock/); assert.equal(f.calls.length, 0); } finally { f.cleanup(); }
 });
-test('incomplete, repeated and bounded pages never provide a write precondition', async () => {
-  for (const result of [{ tasks: [], has_more: true }, { tasks: [], next_cursor: 'same' }, { tasks: [{ id: 't1', content: 'a', project_id: 'p1' }, { id: 't1', content: 'a', project_id: 'p1' }] }]) {
+test('targeted reads reject incomplete, duplicate, wrong-project and ignored-filter responses without pagination', async () => {
+  for (const result of [{ tasks: [{ id: 'unrelated', content: 'a', project_id: 'p1' }] }, { tasks: [{ id: 't1', content: 'a', project_id: 'other-project' }] }, { tasks: [], has_more: true }, { tasks: [], next_cursor: 'same' }, { tasks: [{ id: 't1', content: 'a', project_id: 'p1' }, { id: 't1', content: 'a', project_id: 'p1' }] }]) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-progress-pages-'));
-    try { const tool = createTodoistProgress({ receiptDir: directory, allowedProjects: ['p1'], rpc: async () => result, verifyEvidence: async () => [] }); await assert.rejects(tool.inspect({ taskId: 't1', projectId: 'p1' })); } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+    try { let reads = 0; const tool = createTodoistProgress({ receiptDir: directory, allowedProjects: ['p1'], rpc: async (_slug, args) => { reads++; assert.deepEqual(args, { ids: ['t1'], limit: 5 }); return result; }, verifyEvidence: async () => [] }); await assert.rejects(tool.inspect({ taskId: 't1', projectId: 'p1' })); assert.equal(reads, 1); } finally { fs.rmSync(directory, { recursive: true, force: true }); }
   }
 });
 test('actual connector transport uses existing account and fixed read/update operations only', async () => {
@@ -122,6 +122,7 @@ test('complete progress workflow runs through isolated HTTP provider and verifie
   const server = http.createServer(async (req, res) => {
     let body = ''; for await (const chunk of req) body += chunk;
     const request = JSON.parse(body), op = request.params.arguments.tools[0];
+    if (op.tool_slug === 'TODOIST_GET_ALL_TASKS') assert.deepEqual(op.arguments, { ids: ['http-task'], limit: 5 });
     if (op.tool_slug === 'TODOIST_UPDATE_TASK') { task = { ...task, description: op.arguments.description, updated_at: 'v2' }; mutations++; }
     res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ id: request.id, result: { structuredContent: { data: { results: [{ response: { successful: true, data: op.tool_slug === 'TODOIST_GET_ALL_TASKS' ? { tasks: [task], next_cursor: null } : task } }] } } } }));
   });
