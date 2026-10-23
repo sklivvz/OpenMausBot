@@ -154,6 +154,10 @@ test('host config enforces private paths and permissions', async (t) => {
   assert.deepEqual(await loadConfig(configFile), f.config);
   await fs.writeFile(configFile, JSON.stringify({ ...f.config, tokenFile: path.join(f.config.stateDir, 'unsafe.json') }));
   await assert.rejects(loadConfig(configFile), /credentials_inside_evidence_directory/);
+  const nativeConfig = { stateDir: f.config.stateDir, allowDrafts: false };
+  await fs.writeFile(configFile, JSON.stringify(nativeConfig));
+  await assert.rejects(loadConfig(configFile), /config_invalid/);
+  assert.deepEqual(await loadConfig(configFile, { externalCredentials: true }), nativeConfig);
 });
 
 test('real RemoteMcpClient transport uses the official endpoint, bearer header and rejects redirects', async () => {

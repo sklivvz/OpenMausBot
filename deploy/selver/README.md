@@ -21,8 +21,10 @@ Node 22+; standard library only. No MCP or app/server changes.
 - `../../skills/selver-shopper/scripts/selver-bff.mjs`: requirement/quantity audit.
 - `../../skills/selver-shopper/scripts/selver-cart-bff.mjs`: existing provider transport.
 
-Deploy the two dependency files at these relative paths as well, or bundle the
-CLI's static imports with the repository's esbuild. Neither dependency is changed
+Deploy the two dependency files at these relative paths as well. Do not bundle
+these unchanged entrypoints: one dependency has top-level await, and both use
+`import.meta.url` to guard their standalone CLI. Bundling can change that guard's
+meaning. Neither dependency is changed
 by this slice. No proposed skill is installed and no production configuration is
 enabled by these files.
 

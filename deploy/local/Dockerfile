@@ -48,4 +48,7 @@ COPY --chmod=0555 keila-drafts-mcp.cjs /usr/local/bin/keila-drafts-mcp
 COPY --chmod=0555 review-packet-mcp.cjs /usr/local/bin/review-packet-mcp
 COPY --chmod=0555 execution-tools-mcp.cjs /usr/local/bin/execution-tools-mcp
 COPY --chmod=0555 assembled-output-verify /usr/local/bin/assembled-output-verify
+COPY --chmod=0555 perk-mcp.cjs /usr/local/bin/perk-mcp
+COPY --chmod=0555 threads-mcp.cjs /usr/local/bin/threads-mcp
+COPY --chmod=0555 bluesky-mcp.cjs /usr/local/bin/bluesky-mcp
 USER maus

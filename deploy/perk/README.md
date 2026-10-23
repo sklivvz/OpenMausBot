@@ -43,6 +43,24 @@ Set `allowDrafts:true` only when travel preparation is authorized for this deplo
 
 The native broad Perk MCP registration used for OAuth should remain disabled/unselected for bots; expose only this connector. Required account scopes include `user:read`, `trip:read`, and `trips:write` for preparation; policy lookup additionally needs `my-travel-policy:read`. OAuth client redirect acceptance, scopes, account role and plan qualification remain installation work.
 
+The bundled entrypoint can use the app's native OAuth store by setting
+`PERK_NATIVE_OAUTH_STORE` to its absolute private path. In that mode `tokenFile`
+may be omitted from the connector config. `PERK_NATIVE_SERVER_NAME` defaults to
+`perk-upstream`; `PERK_NATIVE_APP_URL` defaults to `http://127.0.0.1:8799` and only
+literal HTTP loopback origins are accepted. The registered upstream URL must
+equal the official Perk endpoint. The adapter rejects symlinks and readable
+credential files, never writes this store, and never copies its refresh token.
+Within 90 seconds of expiry it asks the existing local app probe route to renew
+through the app's OAuth manager, then rereads the persisted token. If local
+administration denies the probe, renewal remains blocked. This is not an
+authorization bypass or a separately managed refresh loop.
+
+Synthetic tests exercise native-manager token rotation and concurrent renewal.
+The app fixture verifies wrapper registration, discovery and scoped selection;
+it does not qualify a real Perk OAuth enrollment or deployment's local probe
+authority. Register the native upstream with the intended travel scopes before
+enrollment: automatic discovery currently advertises expense scopes too.
+
 ## Execution semantics
 
 Every request has one 25-second provider budget including initialization/discovery, followed by at most two seconds for session cleanup. Remote bodies are limited to 2 MiB, individual argument schemas to 24 KiB, catalogs to eight pages, and result pages to 6,000-character evidence fragments with an explicit next offset. HTTPS requests target the fixed official endpoint and disallow redirects. No automatic provider retries occur. A caller may retry safe reads after a suitable delay; an unknown preparation must be reconciled first.

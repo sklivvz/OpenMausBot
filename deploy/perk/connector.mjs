@@ -24,12 +24,12 @@ export async function privateJson(file) {
   return JSON.parse(await fs.readFile(file, 'utf8'));
 }
 
-export async function loadConfig(file) {
+export async function loadConfig(file, { externalCredentials = false } = {}) {
   if (!file || !path.isAbsolute(file)) throw new PerkError('config_missing');
   const config = await privateJson(file);
-  if (!path.isAbsolute(config.tokenFile ?? '') || !path.isAbsolute(config.stateDir ?? '') || typeof config.allowDrafts !== 'boolean') throw new PerkError('config_invalid');
+  if ((!externalCredentials && !path.isAbsolute(config.tokenFile ?? '')) || (config.tokenFile !== undefined && !path.isAbsolute(config.tokenFile)) || !path.isAbsolute(config.stateDir ?? '') || typeof config.allowDrafts !== 'boolean') throw new PerkError('config_invalid');
   const state = path.resolve(config.stateDir);
-  if (contained(state, path.resolve(file)) || contained(state, path.resolve(config.tokenFile))) throw new PerkError('credentials_inside_evidence_directory');
+  if (contained(state, path.resolve(file)) || (config.tokenFile && contained(state, path.resolve(config.tokenFile)))) throw new PerkError('credentials_inside_evidence_directory');
   await fs.mkdir(state, { recursive: true, mode: 0o700 });
   const stat = await fs.lstat(state);
   if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077)) throw new PerkError('private_directory_permissions_required');

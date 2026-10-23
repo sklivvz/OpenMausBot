@@ -5,7 +5,7 @@ import { TOOLS } from './catalog.mjs';
 export async function serve({ input = process.stdin, output = process.stdout, configPath = process.env.PERK_CONNECTOR_CONFIG, credentialProvider } = {}) {
   let connector;
   let startupReason;
-  try { connector = new PerkConnector(await loadConfig(configPath), { credentialProvider }); }
+  try { connector = new PerkConnector(await loadConfig(configPath, { externalCredentials: typeof credentialProvider === 'function' }), { credentialProvider }); }
   catch (error) { startupReason = error.reason ?? 'config_unavailable'; }
   const lines = readline.createInterface({ input, crlfDelay: Infinity });
   for await (const line of lines) {
