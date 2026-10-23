@@ -1,0 +1,8 @@
+{
+  "cartUpdatesEnabled": false,
+  "cartReadsEnabled": false,
+  "specHash": "REPLACE_WITH_REVIEWED_SPECIFICATION_SHA256",
+  "cartId": "REPLACE_WITH_ALREADY_CONNECTED_CART_ID",
+  "sessionFile": "/private/selver/session.json",
+  "stateDir": "/private/selver/reconciliation"
+}
