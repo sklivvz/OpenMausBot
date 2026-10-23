@@ -37,14 +37,19 @@ export function createEvidenceObserver({ artifactRoots, readJob, now = () => new
     const before = await readJob(ref.threadId), after = await readJob(ref.threadId);
     const stable = (value: unknown) => value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'now')) : value;
     if (receiptHash(stable(before)) !== receiptHash(stable(after))) throw Error('Assignment source changed during observation');
-    const job = after as { threadId?: string; scope?: string; hidden?: number; nodes?: { id: string; rootId: string; parentId?: string; status: string; result?: unknown }[]; counts?: Record<string, number>; roots?: string[] };
+    const job = after as { threadId?: string; scope?: string; hidden?: number; nodes?: { id: string; rootId: string; parentId?: string; status: string; outcome?: string; result?: unknown }[]; counts?: Record<string, number>; roots?: string[] };
     if (job.threadId !== ref.threadId || job.scope !== 'job' || job.hidden !== 0 || !Array.isArray(job.nodes) || !job.counts || Object.values(job.counts).some(n => !Number.isSafeInteger(n) || n < 0) || Object.values(job.counts).reduce((a, b) => a + b, 0) !== job.nodes.length || new Set(job.nodes.map(n => n.id)).size !== job.nodes.length) throw Error('Incomplete assignment source');
     const node = job.nodes.find(n => n.id === ref.id && n.rootId === ref.rootId);
-    if (!node || !job.nodes.some(n => n.id === ref.rootId)) throw Error('Assignment identity unavailable');
-    let current = node, hasStop = stopped.has(node.status); const seen = new Set([node.id]);
-    while (current.parentId) { const parent = job.nodes.find(n => n.id === current.parentId); if (!parent || seen.has(parent.id)) throw Error('Incomplete assignment ancestry'); seen.add(parent.id); hasStop ||= stopped.has(parent.status); current = parent; }
+    if (!node || !Array.isArray(job.roots) || !job.roots.includes(ref.rootId) || !job.nodes.some(n => n.id === ref.rootId && n.rootId === ref.rootId)) throw Error('Assignment identity unavailable');
+    let current = node, hasStop = stopped.has(node.status) || node.outcome === 'stopped'; const seen = new Set([node.id]);
+    while (current.id !== ref.rootId) {
+      const parent = current.parentId ? job.nodes.find(n => n.id === current.parentId && n.rootId === ref.rootId) : undefined;
+      if (!parent || seen.has(parent.id)) throw Error('Incomplete assignment ancestry');
+      seen.add(parent.id); hasStop ||= stopped.has(parent.status) || parent.outcome === 'stopped'; current = parent;
+    }
+    if (current.parentId) throw Error('Requested assignment root has a parent');
     const state = hasStop ? 'assignment_stopped' : active.has(node.status) ? 'assignment_active' : node.status === 'completed' ? 'assignment_returned' : 'assignment_other';
-    return { ref, observedAt: now(), sha256: receiptHash(stable(after)), state, details: { assignmentId: node.id, rootId: node.rootId, status: node.status, stoppedAncestor: hasStop, returnedTextSha256: node.result === undefined ? null : receiptHash(node.result), interpretation: 'Native execution state only; returned text is not accepted work.' } };
+    return { ref, observedAt: now(), sha256: receiptHash(stable(after)), state, details: { assignmentId: node.id, rootId: node.rootId, status: node.status, outcome: node.outcome ?? null, stoppedAncestor: hasStop, returnedTextSha256: node.result === undefined ? null : receiptHash(node.result), interpretation: 'Native execution state only; returned text is not accepted work.' } };
   };
 }
 

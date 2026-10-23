@@ -51,7 +51,7 @@ test('actual queued or active assignment establishes delegation but completed te
 });
 test('stopped ancestry blocks active-delegation interpretation', async () => {
   const f = fixture(); try {
-    f.source({ ...f.job, counts: { cancelled: 1, running: 1 }, nodes: [{ id: 'root', rootId: 'root', status: 'cancelled' }, { id: 'child', rootId: 'root', parentId: 'root', status: 'running' }] });
+    f.source({ ...f.job, roots: ['root'], counts: { cancelled: 1, running: 1 }, nodes: [{ id: 'root', rootId: 'root', status: 'cancelled' }, { id: 'child', rootId: 'root', parentId: 'root', status: 'running' }] });
     const receipt = await f.recorder.record({ ...f.input, evidence: [{ kind: 'assignment', id: 'child', threadId: 'thread-1', rootId: 'root' }] }); assert.equal(receipt.outcome, 'unverified'); assert.equal(receipt.observations[0].state, 'assignment_stopped');
   } finally { f.cleanup(); }
 });
@@ -108,5 +108,33 @@ test('authenticated pending journal restores a saved observation before another 
     const pendingFile = path.join(f.directory, `pending-${taskKey}.json`);
     fs.writeFileSync(pendingFile, JSON.stringify({ ...pending, signature: crypto.createHmac('sha256', f.signingKey).update(signed).digest('hex') }));
     const current = await f.recorder.record({ ...f.input, operationId: 'op-3' }); assert.equal(current.outcome, 'unverified'); assert.equal(fs.existsSync(pendingFile), false);
+  } finally { f.cleanup(); }
+});
+
+test('completed root with stopped outcome keeps a running child stopped', async () => {
+  const f = fixture(); try {
+    f.source({ ...f.job, roots: ['root'], counts: { completed: 1, running: 1 }, nodes: [{ id: 'root', rootId: 'root', status: 'completed', outcome: 'stopped' }, { id: 'child', rootId: 'root', parentId: 'root', status: 'running' }] });
+    const receipt = await f.recorder.record({ ...f.input, evidence: [{ kind: 'assignment', id: 'child', threadId: 'thread-1', rootId: 'root' }] });
+    assert.equal(receipt.outcome, 'unverified'); assert.equal(receipt.observations[0].state, 'assignment_stopped'); assert.deepEqual(receipt.supportedStatuses, []);
+  } finally { f.cleanup(); }
+});
+
+test('assignment must belong to a declared root through a consistent complete ancestry', async () => {
+  const f = fixture(); try {
+    const root = { id: 'root', rootId: 'root', status: 'running' };
+    const child = { id: 'child', rootId: 'root', parentId: 'root', status: 'running' };
+    const job = { ...f.job, roots: ['root'], counts: { running: 2 }, nodes: [root, child] };
+    const ref = { kind: 'assignment' as const, id: 'child', threadId: 'thread-1', rootId: 'root' };
+    for (const invalid of [
+      { ...job, roots: [] },
+      { ...job, roots: ['other'] },
+      { ...job, nodes: [{ ...root, rootId: 'other' }, child] },
+      { ...job, nodes: [root, { ...child, parentId: undefined }] },
+      { ...job, nodes: [root, { ...child, parentId: 'missing' }] },
+      { ...job, counts: { running: 3 }, nodes: [root, { id: 'other', rootId: 'other', status: 'running' }, { ...child, parentId: 'other' }] },
+      { ...job, counts: { running: 3 }, nodes: [root, { id: 'other', rootId: 'root', status: 'running' }, { ...child, parentId: 'other' }] },
+      { ...job, nodes: [{ ...root, parentId: 'child' }, child] },
+    ]) { f.source(invalid); await assert.rejects(f.observe(ref)); }
+    f.source(job); assert.equal((await f.observe(ref)).state, 'assignment_active');
   } finally { f.cleanup(); }
 });

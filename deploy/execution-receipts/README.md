@@ -51,9 +51,10 @@ result, outcome, timestamp or approval is accepted.
 The concrete observer reads exact file bytes only beneath configured roots, up
 to 3 MiB, and rejects symlink escapes. Native job state is read twice and compared
 in full excluding its clock. It requires complete counts, unique assignment
-identities, visible root and complete ancestry. Queued, running, waiting and
-resume are retained as native execution states; canceled/stopped ancestry
-prevents active-delegation claims. Returned result text is hashed as a claim,
+identities, a declared visible root and complete ancestry whose root IDs agree. Queued, running, waiting and
+resume are retained as native execution states; canceled/stopped statuses and
+explicit stopped outcomes anywhere in that ancestry prevent active-delegation
+claims. Returned result text is hashed as a claim,
 not accepted as a delivered or approved artifact.
 
 ## Outcomes and update evidence
@@ -98,7 +99,7 @@ business action (this module has no such action).
 ## Verification
 
 Run `node --experimental-strip-types --test deploy/execution-receipts/receipts.test.ts`.
-Thirteen isolated tests use temporary files and injected native job sources. They
+Fifteen isolated tests use temporary files and injected native job sources. They
 cover baseline/change observation, source-failure checkpoint preservation,
 immutable replay/conflicts, stopped ancestry, incomplete/changing job trees,
 fresh target-bound verification, forbidden caller success fields, authenticated
