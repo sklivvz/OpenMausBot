@@ -99,6 +99,6 @@ export function createOwnershipClassifier({ fetchImpl = fetch, config = () => JS
 export const ownershipToolDefinition = {
   name: 'classify_marketing_ownership',
   description: 'Recommend the specialist for one marketing contribution. Known operations map in code; natural-language requests use one bounded Jev call. Mixed work requires decomposition, ambiguous work stays uncertain. Does not dispatch, change approvals or permit publication.',
-  inputSchema: z.toJSONSchema(ownershipInput),
+  inputSchema: { ...z.toJSONSchema(ownershipInput), type: 'object' },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 };

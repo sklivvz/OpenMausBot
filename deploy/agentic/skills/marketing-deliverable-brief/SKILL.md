@@ -5,6 +5,15 @@ description: Preserve a marketing deliverable's audience, authority, source vers
 
 # One brief for the requested deliverable
 
+Use `classify_marketing_work` when the requested work kind is ambiguous; supply
+the actual request and relevant context. A launch reference alone does not make
+a deck campaign work. Use `classify_marketing_ownership` with known operation
+identifiers for deterministic specialist mapping, or a bounded contribution
+request when its role is unclear. Mixed work needs decomposition by the lead;
+uncertain results are not new approval gates. Neither tool changes authority,
+holds or assignment state. Reuse an established classification until its source
+request changes.
+
 Darcy owns the brief and outcome. Distinguish evergreen collateral, editorial
 content and dated campaign work. Record the actual reader separately from the
 distributor, purpose, requested deliverable, inclusions/exclusions, source links,
