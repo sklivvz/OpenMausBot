@@ -57,3 +57,18 @@ on Marco. Preparation remains the team's work. Existing scoped approval remains
 valid; ask only for genuinely missing authority. A publishing hold does not
 suspend independent preparation or other objectives. Read back Todoist progress
 updates and require actual operation receipts for scheduled or published claims.
+
+
+## Mechanical preflight
+
+Before handing off a changed brief, call slop-detector.check_marketing_brief with
+the existing objective, audience, deliverable, kind, owner, revision, sourceReferences,
+acceptanceCriteria, authorizedOperations, holds and assignment. The assignment records
+its owner, role, operation and briefRevision. Use current source-linked task decisions;
+do not generate a new approval requirement or copy an old campaign's state.
+The tool checks missing fields, role/scope conflicts, operation-specific holds and
+revision mismatches without a model call. Fix all reported inconsistencies together.
+A publishing hold leaves independently authorized copy/design preparation available.
+structurally_ready means only that the supplied fields agree; Darcy still owns
+meaning, source authority and business suitability. Reuse this brief/version for
+specialist work instead of rebuilding its checklist at every turn.

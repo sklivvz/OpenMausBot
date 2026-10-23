@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { jevBackend } from '../../server/decider/jev.ts';
+import { constraintsSchema, deterministicChecks, hash } from './preflight.ts';
+import { ReceiptStore } from './receipts.ts';
 import type { DeciderQuestion, ChoiceAnswer, YesNoAnswer } from '../../server/decider/types.ts';
 
 export const inputSchema = z.object({
@@ -12,6 +14,8 @@ export const inputSchema = z.object({
   channel: z.string().trim().min(1).max(160),
   sourceFacts: z.string().max(8000).default(''),
   approvedReference: z.string().max(4000).default(''),
+  constraints: constraintsSchema.default({ forbiddenPhrases: [], preserveExactly: [], requiredUrls: [] }),
+  reviewScope: z.object({ assetId: z.string().trim().min(1).max(200), briefRevision: z.string().trim().min(1).max(200) }).strict().optional(),
 }).strict();
 
 const rubric = {
@@ -64,47 +68,64 @@ export function questionsFor(rows: ReturnType<typeof passages>) {
   for (const [name, rule] of Object.entries(rubric)) {
     questions[name] = { type: 'yesno', instructions: boundary + 'Does the draft exhibit this defect? ' + rule.criterion };
     questions[name + '_passage'] = { type: 'choice', instructions: boundary + 'Select the single strongest example of this defect, considering the whole draft and adjacent passages. Choose none if there is no grounded example. ' + rule.criterion,
-      options: { none: 'No passage demonstrates this defect.', ...Object.fromEntries(rows.map(r => [r.id, `Passage ${r.id}: ${r.text}`])) } };
+      options: { none: 'No passage demonstrates this defect.', ...Object.fromEntries(rows.map(r => [r.id, `Passage ${r.id}, UTF-16 offsets ${r.start}–${r.end}, in the supplied passages.`])) } };
   }
   return questions;
 }
 
-export function createDetector({ fetchImpl = fetch, config = () => JSON.parse(fs.readFileSync(path.join(os.homedir(), '.openmausbot/config.json'), 'utf8')), now = () => new Date().toISOString() } = {}) {
+export function createDetector({ fetchImpl = fetch, config = () => JSON.parse(fs.readFileSync(path.join(os.homedir(), '.openmausbot/config.json'), 'utf8')), now = () => new Date().toISOString(), store = new ReceiptStore(process.env.SLOP_RECEIPTS_DIR || path.join(os.homedir(), '.openmausbot', 'slop-receipts')) } = {}) {
   return async function detect(raw: unknown) {
     const parsed = inputSchema.safeParse(raw);
     if (!parsed.success) throw Error('Invalid input: supply one complete draft, brief and channel within the tool limits. Nothing was truncated.');
     const input = parsed.data;
     const rows = passages(input.draft);
-    const base = { detectorVersion: '1.0.0', draftSha256: crypto.createHash('sha256').update(input.draft).digest('hex'),
-      reviewSha256: crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex'), checkedAt: now(),
+    const base = { detectorVersion: '2.0.0', draftSha256: crypto.createHash('sha256').update(input.draft).digest('hex'),
+      reviewSha256: hash({ detectorVersion: '2.0.0', input }), checkedAt: now(),
       coverage: { characters: input.draft.length, passages: rows.length, complete: true, sourceFactsProvided: Boolean(input.sourceFacts.trim()) },
       limitation: 'Editorial signals, not proof of AI authorship, factual accuracy, channel compliance or publication approval. Probabilities are model estimates, not calibrated accuracy. Findings show one strongest passage per category, not every occurrence.',
     };
-    const cfg = config();
-    const unavailable = (reason: string) => ({ ...base, status: 'unavailable', reason, automatedCheckComplete: false, editorialSignoff: 'writer_required' });
-    if (!cfg.decider?.enabled || !cfg.decider?.key || (cfg.decider.provider && cfg.decider.provider !== 'jev')) return unavailable('Jev is not enabled with a direct key.');
-    const questions = questionsFor(rows);
-    const result = await jevBackend.decide({ key: cfg.decider.key, baseUrl: cfg.decider.baseUrl, state: { ...input, passages: rows }, questions, fetch: fetchImpl, signal: AbortSignal.timeout(25000) });
-    if (!result.ok) return unavailable(result.reason);
-    const assessments = Object.entries(rubric).map(([category, rule]) => {
-      const probability = (result.answers[category] as YesNoAnswer).p;
-      const evidence = result.answers[category + '_passage'] as ChoiceAnswer;
-      const passage = rows.find(r => r.id === evidence.choice);
-      const supported = category !== 'unsupported_claim' || Boolean(input.sourceFacts.trim());
-      const severity = !supported ? 'not_assessed' : probability >= .8 && passage && evidence.pTop >= .6 ? 'revise' : probability >= .45 || (passage && evidence.pTop >= .6) ? 'review' : 'clear';
-      return { category, severity, probability, evidenceProbability: evidence.pTop,
-        ...(passage ? { passage: { ...passage, offsetUnit: 'UTF-16 code units' } } : {}), criterion: rule.criterion, action: rule.action };
+    const localFindings = deterministicChecks(input.draft, input.constraints);
+    const repair = { executorRole: 'copy', preserve: { exactText: input.constraints.preserveExactly, urls: input.constraints.requiredUrls }, rules: 'Repair only identified defects within the supplied scope. Preserve facts, argument and approved wording. Return ambiguity or conflicting constraints to the owner; never rewrite to chase a score.' };
+    const findingSummary = (findings: { category: string; severity: string; action: string; passage?: { text: string } }[]) => findings.map(f => `${f.severity}: ${f.category}. ${f.action}${f.passage ? ' Passage: ' + f.passage.text.slice(0, 160) : ''}`);
+    if (localFindings.some(f => f.severity === 'revise')) {
+      const receipt = { ...base, status: 'needs_revision', stage: 'deterministic', automatedCheckComplete: false, semanticCheck: 'not_run', inputTokensThisCall: 0, findingSummary: findingSummary(localFindings), findings: localFindings, repair };
+      store.save(base.reviewSha256, receipt, input);
+      return receipt;
+    }
+    const scope = input.reviewScope ? hash(input.reviewScope) : base.reviewSha256;
+    return store.locked(scope, async () => {
+      const cached = store.read(base.reviewSha256);
+      if (cached) return { ...cached, cacheHit: true, inputTokensThisCall: 0 };
+      if (input.reviewScope && store.revisions(scope).length >= 2) return { ...base, status: 'needs_editor', automatedCheckComplete: false, semanticCheck: 'not_run', inputTokensThisCall: 0, findings: localFindings, reason: 'Two semantic checks already completed for this asset and brief revision. Resolve remaining findings with the owner; do not create another revision to seek a different score.', repair };
+      const cfg = config();
+      const unavailable = (reason: string) => ({ ...base, status: 'unavailable', reason, automatedCheckComplete: false, editorialSignoff: 'writer_required' });
+      if (!cfg.decider?.enabled || !cfg.decider?.key || (cfg.decider.provider && cfg.decider.provider !== 'jev')) return unavailable('Jev is not enabled with a direct key.');
+      const questions = questionsFor(rows);
+      const result = await jevBackend.decide({ key: cfg.decider.key, baseUrl: cfg.decider.baseUrl, state: { ...input, passages: rows }, questions, fetch: fetchImpl, signal: AbortSignal.timeout(25000) });
+      if (!result.ok) return unavailable(result.reason);
+      const assessments = Object.entries(rubric).map(([category, rule]) => {
+        const probability = (result.answers[category] as YesNoAnswer).p;
+        const evidence = result.answers[category + '_passage'] as ChoiceAnswer;
+        const passage = rows.find(r => r.id === evidence.choice);
+        const supported = category !== 'unsupported_claim' || Boolean(input.sourceFacts.trim());
+        const severity = !supported ? 'not_assessed' : probability >= .8 && passage && evidence.pTop >= .6 ? 'revise' : probability >= .45 || (passage && evidence.pTop >= .6) ? 'review' : 'clear';
+        return { category, severity, probability, evidenceProbability: evidence.pTop,
+          ...(passage ? { passage: { ...passage, offsetUnit: 'UTF-16 code units' } } : {}), criterion: rule.criterion, action: rule.action };
+      });
+      const findings = assessments.filter(a => a.severity === 'revise' || a.severity === 'review');
+      const status = findings.some(a => a.severity === 'revise') ? 'needs_revision' : findings.length ? 'needs_review' : 'no_flags';
+      const receipt = { ...base, model: result.model, inputTokens: result.inputTokens, status: localFindings.length && status === 'no_flags' ? 'needs_review' : status, cacheHit: false, inputTokensThisCall: result.inputTokens ?? null, stage: 'semantic', findingSummary: findingSummary([...localFindings, ...findings]), repair, automatedCheckComplete: true, editorialSignoff: 'writer_required',
+        handoffRequirement: 'Writer must address findings and verify facts, links, limits and approved text. No flags is not editorial sign-off. Retain this receipt with the exact draft.', findings: [...localFindings, ...findings], assessments: assessments.map(({ category, severity, probability, evidenceProbability, passage }) => ({ category, severity, probability, evidenceProbability, passageId: passage?.id ?? null })) };
+      store.save(base.reviewSha256, receipt, input);
+      if (input.reviewScope) store.recordRevision(scope, base.reviewSha256);
+      return receipt;
     });
-    const findings = assessments.filter(a => a.severity === 'revise' || a.severity === 'review');
-    const status = findings.some(a => a.severity === 'revise') ? 'needs_revision' : findings.length ? 'needs_review' : 'no_flags';
-    return { ...base, model: result.model, inputTokens: result.inputTokens, status, automatedCheckComplete: true, editorialSignoff: 'writer_required',
-      handoffRequirement: 'Writer must address findings and verify facts, links, limits and approved text. No flags is not editorial sign-off. Retain this receipt with the exact draft.', findings, assessments: assessments.map(({ category, severity, probability, evidenceProbability, passage }) => ({ category, severity, probability, evidenceProbability, passageId: passage?.id ?? null })) };
   };
 }
 
 export const toolDefinition = {
   name: 'detect_slop',
-  description: 'Review one complete marketing draft with Jev before handoff. Returns grounded passage quotes, defect categories, editorial actions and a draft hash. Supply the real brief, channel, source facts and any approved reference. Does not rewrite, publish, identify AI authorship or independently verify facts.',
+  description: 'Check one complete marketing draft: explicit constraints in code first, then cached Jev review. Supply reviewScope to limit semantic checks to two per asset/brief revision. Returns grounded passage quotes, defect categories, editorial actions and a draft hash. Supply the real brief, channel, source facts and any approved reference. Does not rewrite, publish, identify AI authorship or independently verify facts.',
   inputSchema: z.toJSONSchema(inputSchema),
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 };
