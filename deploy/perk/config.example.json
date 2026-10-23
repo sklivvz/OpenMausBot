@@ -1,0 +1,5 @@
+{
+  "tokenFile": "/run/openmausbot-private/perk-token.json",
+  "stateDir": "/data/openmausbot-private/perk-evidence",
+  "allowDrafts": false
+}
