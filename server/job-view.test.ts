@@ -101,6 +101,7 @@ describe("the job of a conversation", () => {
     const rows = [root({ status: "waiting" }), child("a1", "priya", { status: "running" })];
     const before = view(rows).version;
     expect(view(rows, { now: 99_000 }).version).toBe(before);
+    expect(view(rows, { now: 99_000, since: 99_000 }).version).toBe(before);
     expect(view([rows[0]!, { ...rows[1]!, status: "completed" }]).version).not.toBe(before);
     expect(view(rows, { conversation: { ...idle, queued: 1 } }).version).not.toBe(before);
   });
