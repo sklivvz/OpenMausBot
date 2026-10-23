@@ -70,6 +70,7 @@ Use only mapped, tested commands:
 - [In-chat team coordination](room-coordination.md)
 - [Leadership contributions and independent observation](agentic-minimal-20261023.md)
 - [Live launch ownership and scheduled continuation](launch-ownership-20261023.md)
+- [Continuous team objective portfolios](objective-portfolios-20261023.md)
 - [Chief access to additional teams](team-access.md)
 - [Engines and Doctor](engines.md)
 - [Cline engine and native loopback qualification](cline.md)
