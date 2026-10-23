@@ -1,10 +1,10 @@
 {
-  "status": "deferred_until_current_automation_is_verified",
+  "status": "assessed_awaiting_business_increment_selection",
   "questions": [
     {
       "topic": "Task platform and executor",
       "question": "Is our Todoist integration API-driven or MCP-driven? Compare staying with Todoist, a new Linear team, Google Keep and other suitable alternatives; which execution approach is fastest and most reliable?",
-      "status": "pending"
+      "status": "answered"
     },
     {
       "topic": "Further service automation",
@@ -26,7 +26,253 @@
         "Google Analytics",
         "Reddit Ads"
       ],
-      "status": "pending"
+      "status": "answered"
     }
-  ]
+  ],
+  "assessedAt": "2026-10-23",
+  "implementationScope": "Assessment only. No platform migration, new connections, publication, purchases or advertising changes.",
+  "taskPlatformAssessment": {
+    "currentPath": "Bot -> local execution-tools MCP -> deterministic code -> managed Composio MCP broker -> Todoist API. Full queue reads additionally use the local attention service.",
+    "observedBottleneck": {
+      "source": "deploy/attention-scan/tasks.mjs",
+      "pageLimit": 5,
+      "lastVerifiedOpenTasks": 246,
+      "approximateConnectorCallsForFullScan": 50,
+      "targetedProgressReads": "Already fetch a single task by ID."
+    },
+    "recommendation": "Keep Todoist for the next efficiency increment; improve bounded pagination, incremental ingestion and indexed retrieval. Evaluate Linear for richer objective/project workflows, not as an assumed latency or token saving.",
+    "linearAccess": "Connected Positronics workspace verified by get_workspace and list_teams. Existing teams: Positron Flux Development (FLUX), Marketing Development (MKT), Sales (CASH), Company Administration (ADM).",
+    "alternatives": [
+      {
+        "name": "Todoist",
+        "assessment": "Lowest migration effort; public API, Sync batching/incremental reads, official MCP and webhooks. Current managed connector is functional; direct API needs separately provisioned credentials.",
+        "sources": [
+          "https://developer.todoist.com/",
+          "https://developer.todoist.com/api/v1/"
+        ]
+      },
+      {
+        "name": "Linear",
+        "assessment": "Better native structure for company objectives through initiatives, projects and issues. GraphQL API, MCP and webhooks. Existing teams can be reused; no new team is inherently necessary. No migration or speed benchmark performed.",
+        "sources": [
+          "https://linear.app/developers/graphql",
+          "https://linear.app/developers/webhooks",
+          "https://linear.app/docs/mcp",
+          "https://linear.app/docs/initiatives"
+        ]
+      },
+      {
+        "name": "Google Keep",
+        "assessment": "Poor execution-system fit: enterprise note administration API, with no note-update method in the published REST reference; not a substitute for an objective/task workflow.",
+        "sources": [
+          "https://developers.google.com/workspace/keep/api/guides",
+          "https://developers.google.com/workspace/keep/api/reference/rest"
+        ]
+      },
+      {
+        "name": "Google Tasks",
+        "assessment": "Already reported connected; reasonable personal checklist API, not the preferred shared business-objective system.",
+        "sources": [
+          "https://developers.google.com/workspace/tasks/reference/rest"
+        ]
+      },
+      {
+        "name": "Local indexed execution cache",
+        "assessment": "Code-operated cache and work queue can avoid repeated remote scans. It should preserve the selected external system as the human-facing source of truth rather than introduce a second independently edited backlog."
+      }
+    ],
+    "executorRecommendation": "Stable operations run in code, exposed through MCP for agent access. Jev only for bounded classification. DeepSeek Flash is a candidate for residual established executor work against Haiku/Luna fixtures; there is no current benchmark establishing the fastest model. Do not force max reasoning for mechanical tasks or rebalance Sol/Opus without evidence.",
+    "benchmarkNeeded": [
+      "wall time per verified outcome",
+      "new and cached tokens separately",
+      "provider and connector cost",
+      "correctness and duplicate rate",
+      "retries",
+      "human interventions"
+    ]
+  },
+  "serviceAssessment": [
+    {
+      "service": "Bolt Food",
+      "maturity": "Discovery required",
+      "evidence": "Public developer documentation found is merchant/POS order handling, not a customer checkout API. No customer-order adapter found in inspected tool/config inventory.",
+      "nextCapability": "Discover customer catalog/cart/quote operations in a separate authorized session or existing recordings, then qualify bounded operations. Exact meal, fees and total remain part of approval.",
+      "sources": [
+        "https://developer.bolt.eu/delivery/main/"
+      ]
+    },
+    {
+      "service": "Perk",
+      "maturity": "Official MCP available; not configured in inspected runtime",
+      "evidence": "Gustave currently has browser-oriented Perk skills. Official MCP provides search, trip data and checkout links; security docs explicitly exclude completing/paying, modifying or cancelling confirmed bookings. OAuth, role/plan and callback compatibility remain unverified.",
+      "nextCapability": "Connect and qualify the official MCP, then automate repeated searches and quote comparisons while preserving the existing checkout boundary.",
+      "sources": [
+        "https://developers.perk.com/docs/perk-mcp",
+        "https://developers.perk.com/docs/perk-mcp-security-and-data-handling",
+        "https://support.perk.com/hc/en-us/articles/28613855811228-Connect-your-AI-assistant-to-Perk"
+      ]
+    },
+    {
+      "service": "Selver",
+      "maturity": "Direct BFF automation already installed",
+      "evidence": "Confirmed selver-bff.mjs and selver-cart-bff.mjs installed; enabled selver-shopping skill uses authenticated account/cart reads, quantity updates and deterministic ingredient audits. Current login and cart were not exercised.",
+      "nextCapability": "Verify and harden existing clients and session recovery, expose small typed operations if useful, and retain deterministic cart/ingredient reconciliation. No replacement browser automation is needed for established cart operations.",
+      "sources": [
+        "https://www.selver.ee/kkk"
+      ]
+    },
+    {
+      "service": "Rimi",
+      "maturity": "Discovery required",
+      "evidence": "No public customer-cart API or local adapter verified. Official store supports saved/repeated shopping workflows, but that does not establish a programmable checkout contract.",
+      "nextCapability": "Discover catalog, account-cart, substitutions and delivery-slot operations; start with a verified cart and price quote before payment.",
+      "sources": [
+        "https://www.rimi.ee/epood/en",
+        "https://www.rimi.ee/epood/en/business-client"
+      ]
+    },
+    {
+      "service": "Web Summit",
+      "maturity": "Existing browser skill; API unverified",
+      "evidence": "Attendee-platform skill is enabled. Official support describes the attendee web app, meeting requests and connection exports; a public attendee automation API was not found in this review.",
+      "nextCapability": "Reuse exports and discover stable read/request/status operations. Distinguish invitations from accepted meetings when synchronizing calendars.",
+      "sources": [
+        "https://support.websummit.com/support/solutions/folders/44001201334"
+      ]
+    },
+    {
+      "service": "Slush",
+      "maturity": "Existing browser skill; API unverified",
+      "evidence": "Meeting-tool skill is enabled. Official platform supports calendar sync. No public attendee request/search API verified.",
+      "nextCapability": "Automate directory/agenda ingestion and request-status reconciliation first; qualify meeting requests separately.",
+      "sources": [
+        "https://slush.org/meetings-info"
+      ]
+    },
+    {
+      "service": "Marketing calendar",
+      "maturity": "Local CSV and audit already exist",
+      "evidence": "Current audit is hardcoded to one launch publication register. Its live execution record references a comms-calendar CSV mirror; Google Calendar and Sheets connectors are active, but neither is established here as the canonical marketing calendar.",
+      "nextCapability": "Resolve and preserve the actual canonical calendar; generalize deterministic scheduling/reconciliation across all objectives, with exact time zones, content hashes, scoped approvals, per-channel jobs and publication readback.",
+      "sources": []
+    },
+    {
+      "service": "X",
+      "maturity": "Official posting API; no broker connection listed",
+      "evidence": "Official API supports posting and media workflows. Pricing is pay-per-use; cited page lists $0.015/post and $0.20/post containing a URL, subject to current account rates. Auth and funded access not verified.",
+      "nextCapability": "Use the official API with scoped authorization, media upload, exact-copy preservation and duplicate-safe readback instead of browser posting.",
+      "sources": [
+        "https://docs.x.com/x-api/getting-started/pricing"
+      ]
+    },
+    {
+      "service": "Mastodon",
+      "maturity": "Official API; existing browser publishing skill",
+      "evidence": "No Mastodon connection in managed connector inventory. Native status API supports posting, scheduled_at and Idempotency-Key.",
+      "nextCapability": "Provision instance-specific OAuth and qualify one-channel text/image/schedule/readback adapter.",
+      "sources": [
+        "https://docs.joinmastodon.org/methods/statuses/"
+      ]
+    },
+    {
+      "service": "Threads",
+      "maturity": "Official API; existing browser publishing skill",
+      "evidence": "No Threads connection in managed connector inventory. Meta official collection exposes text/image/video containers and publishing; OAuth/app setup needed.",
+      "nextCapability": "Qualify container creation, media readiness, publication and permalink readback as one bounded channel operation.",
+      "sources": [
+        "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api"
+      ]
+    },
+    {
+      "service": "LinkedIn",
+      "maturity": "Connected; profile read succeeded",
+      "evidence": "Managed positron account is ACTIVE; GET_MY_INFO succeeded. Posting and image-upload schemas discovered. Organization admin rights, write scopes and company-page publishing were not tested.",
+      "nextCapability": "Qualify personal versus company-page authority and media posting; wrap exact-content publishing and readback in code.",
+      "sources": [
+        "https://learn.microsoft.com/en-us/linkedin/shared/authentication/getting-access"
+      ]
+    },
+    {
+      "service": "LinkedIn Sales Navigator",
+      "maturity": "Restricted API access; browser skill exists",
+      "evidence": "Ordinary LinkedIn connection does not grant Sales Navigator API access. Official SNAP partner approval is required for relevant API permissions; entitlement not verified.",
+      "nextCapability": "Prefer available supported CRM/SNAP integration. Otherwise bounded browser discovery remains necessary; do not promise general API-based prospect search from the existing connector.",
+      "sources": [
+        "https://learn.microsoft.com/en-us/linkedin/shared/authentication/getting-access",
+        "https://business.linkedin.com/sell/sales-integrations/security-and-privacy"
+      ]
+    },
+    {
+      "service": "Bluesky",
+      "maturity": "Official AT Protocol API; existing browser publishing skill",
+      "evidence": "No Bluesky connection in managed connector inventory. Public API documents post creation, blobs and URI/CID results. Direct app-password/OAuth credentials were not verified.",
+      "nextCapability": "Qualify a one-channel adapter for exact copy, rich-text links, image blobs, alt text and publication reconciliation.",
+      "sources": [
+        "https://bsky.network/docs/bluesky-api/",
+        "https://bsky.network/docs/api-directory/"
+      ]
+    },
+    {
+      "service": "Google Analytics",
+      "maturity": "Connected; account-summary read succeeded",
+      "evidence": "work account ACTIVE; account-summary call succeeded. Report metric/dimension combinations and property-level reporting still need qualification. Google also publishes a read-only MCP.",
+      "nextCapability": "Build fixed reporting queries, campaign/UTM joins and reproducible summaries; keep arithmetic in code and interpretation with the lead.",
+      "sources": [
+        "https://developers.google.com/analytics/devguides/MCP"
+      ]
+    },
+    {
+      "service": "Reddit Ads",
+      "maturity": "Connected; reporting schemas discovered",
+      "evidence": "positron account ACTIVE; report and campaign schemas discovered. No ad-account report was executed and no spend changed. Official Ads API is open to developers with OAuth, with adsread and adsedit scopes.",
+      "nextCapability": "Start with deterministic reporting and budget checks; separately qualify approved campaign mutations with before/after verification.",
+      "sources": [
+        "https://ads-api.reddit.com/docs/v3/"
+      ]
+    }
+  ],
+  "proposedBusinessIncrements": [
+    {
+      "outcome": "Leads receive current changed/actionable work without repeatedly rereading the whole backlog.",
+      "engineeringAssessment": "High confidence: improve existing Todoist ingestion and compact indexed retrieval. No migration required."
+    },
+    {
+      "outcome": "Approved social posts appear on time with the correct copy and image, with verified receipts.",
+      "engineeringAssessment": "High potential: qualify Bluesky and Mastodon separately, then Threads/LinkedIn/X as credentials and scopes permit. Compose channels only after separate reliable runs."
+    },
+    {
+      "outcome": "Travel requests produce comparable Perk options and usable checkout links without browser walkthroughs.",
+      "engineeringAssessment": "Official MCP reduces discovery effort; one-time OAuth and account capability verification required."
+    },
+    {
+      "outcome": "Marketing receives a reproducible performance report without agents transcribing dashboards.",
+      "engineeringAssessment": "Google Analytics and Reddit Ads connectors already active; reporting schemas and metrics need qualification."
+    },
+    {
+      "outcome": "The Dude returns a correctly audited Selver cart matching the meal plan and budget.",
+      "engineeringAssessment": "Existing BFF clients mean verification, recovery and bounded workflow hardening are the next work, not a fresh integration."
+    }
+  ],
+  "selectionRule": "These are engineering recommendations. Marco selects business value and the next increment; no fixed roadmap or additional rollout is implied.",
+  "evidence": {
+    "localSources": [
+      "deploy/legal-queue/transport.mjs",
+      "deploy/attention-scan/tasks.mjs",
+      "deploy/todoist-progress/progress.ts",
+      "deploy/marketing-calendar/audit.ts",
+      "skills/selver-shopper/scripts/selver-bff.mjs",
+      "skills/selver-shopper/scripts/selver-cart-bff.mjs"
+    ],
+    "liveReadOnly": [
+      "OpenMausBot /api/connectors/connected",
+      "Selected bot skill listings and text",
+      "Installed provider/tool filenames",
+      "Existing marketing calendar execution record",
+      "Linear get_workspace and list_teams",
+      "Composio tool discovery for Analytics, Reddit Ads, LinkedIn and Calendar",
+      "Google Analytics account-summary and LinkedIn profile calls"
+    ],
+    "privateEvidence": "Main worktree .omb-scratch/service-assessment; contains account metadata and is excluded from Git.",
+    "limitations": "No browser access, authenticated BFF discovery, latency benchmark, new OAuth grant, API write test, purchase, publication or campaign change was performed."
+  }
 }
