@@ -2003,6 +2003,17 @@ describe("ACP turns (fake CLI)", () => {
     expect(done).toMatchObject({ ok: true });
   });
 
+  it("a requested model with no advertised model select fails instead of running the CLI default", async () => {
+    await create(SelectModelDriver);
+    await instance.adapter.sendTurn({ threadId: "t-no-model-select", text: "go", model: "m-two" });
+
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: false });
+    const err = recorder.events.find((e) => e.type === "runtime.error")!;
+    expect(err.message).toMatch(/model not found/);
+    expect(recorder.events.some((e) => e.type === "content.delta")).toBe(false);
+  });
+
   it("a model the session does not advertise fails the turn instead of running another", async () => {
     process.env.FAKE_ACP_MODELS = "m-one,m-two";
     await create(SelectModelDriver);

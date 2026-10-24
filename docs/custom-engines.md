@@ -43,8 +43,11 @@ instance at it:
   hint instead of failing at first message.
 - **Sign in first.** The driver has no auth flow of its own — run the CLI once
   in a terminal and log in there; OpenMausBot spawns it with your login intact.
-- **Model choice stays inside the agent.** The picker shows a single
-  "Agent default" entry; whatever the CLI is configured to run is what runs.
+- **Models and reasoning.** At startup the driver opens one session. If that
+  session advertises a model select, those choices are the picker (the id is
+  the CLI's own value, including a provider and model pair). A thought-level
+  select on the same session is the reasoning control. A CLI that advertises
+  neither keeps a single "Agent default" entry, and its own model runs.
 - **`environment`** is passed to the CLI child. Foreign provider keys
   (XAI_API_KEY, OPENAI_COMPAT_API_KEY, …) are deliberately stripped so a
   custom CLI can never bill against another engine's login.
