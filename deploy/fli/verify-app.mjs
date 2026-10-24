@@ -20,6 +20,8 @@ try {
     name: 'fli-research', command: python,
     args: [fileURLToPath(new URL('./research.py', import.meta.url))], enabled: true,
   });
+  await call('/api/mcp/servers/fli-research', 'PATCH', { enabled: true });
+  assert.equal((await call('/api/mcp/servers')).servers.find(s => s.name === 'fli-research').enabled, true);
   const probe = await call('/api/mcp/servers/fli-research/test', 'POST');
   assert.equal(probe.ok, true, JSON.stringify(probe));
   assert.deepEqual(probe.tools.map(t => t.name).sort(), ['find_airports', 'search_dates', 'search_flights']);

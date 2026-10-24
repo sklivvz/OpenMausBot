@@ -46,7 +46,9 @@ MCP dependencies required by the upstream entrypoint.
 
 Register `fli-research` with the absolute venv Python as `command` and the
 absolute `research.py` path as its sole argument. Use stdio and an 8000 result
-budget. Enable it only in Gustave's explicit `mcpServers` selection. Install the
+budget. The creation endpoint saves new registrations disabled: explicitly PATCH
+`/api/mcp/servers/fli-research` with `{ "enabled": true }` and read back
+`enabled:true`. Select it only in Gustave's explicit `mcpServers` selection. Install the
 two skills through the app's skill-template lifecycle and apply the exact
 `gustave-routing.json` replacement after checking the current SOUL. Preserve
 existing model, tools and task state. Read back all changes while the bot is idle.

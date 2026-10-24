@@ -10,7 +10,10 @@ server selection and model were preserved. He was idle during installation.
 Installed and enabled `fli-flight-research`; updated `travel-fulfilment` and
 SOUL to use flight research before browser discovery while preserving explicit
 Perk requests, existing booking channels and the separate purchase boundary.
-Source, skill, SOUL and selection were read back. The deployment token was
+Source, skill, SOUL and selection were read back. The final audit caught that registration
+creation persisted disabled despite its input. The explicit enable PATCH was
+applied and `enabled:true` read back at 17:44 UTC; the fixture now checks that
+separate step as well. The deployment token was
 revoked. No bot was interrupted or sent a synthetic task.
 
 ## Verification
@@ -20,7 +23,7 @@ revoked. No bot was interrupted or sent a synthetic task.
   evidence/error preservation, concurrent calls and lock recovery.
 - Isolated real-app fixture: MCP discovery, explicit bot selection, enabled
   skill installation and exact readback. Final log:
-  `/var/folders/m8/7zpq1vyn0g138lf533b16n000000gn/T/openmausbot-verification-evidence/server-1792863733967-72753.log`.
+  `/var/folders/m8/7zpq1vyn0g138lf533b16n000000gn/T/openmausbot-verification-evidence/server-1792863880332-73021.log`.
   The fixture closed cleanly.
 - Read-only Docker MCP canary: Tallinn airport resolved to TLL; a TLL–HEL
   nonstop search for 10 November 2026 returned six EUR results with itinerary
