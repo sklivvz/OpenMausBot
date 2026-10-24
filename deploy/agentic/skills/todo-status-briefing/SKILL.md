@@ -58,3 +58,6 @@ The generator requires an included receipt belonging to the item, and rejects
 unretrieved URLs and Todoist URLs as primary action destinations. It does not
 verify semantic readiness or grant approval. Existing grouping, schedules,
 scope, holds and task identities remain in force.
+
+
+Use execution-tools.read_execution_queue for compact deterministic queue retrieval instead of reclassifying every task during an unchanged briefing. Follow returned cursors and preserve incomplete-source warnings. Use review-packet.prepare_review_packet when checking an existing artifact decision package; retain direct artifact/conversation links and unknown access checks. A task link alone is not an actionable review request. These tools do not change the briefing schedule or transfer objective ownership.

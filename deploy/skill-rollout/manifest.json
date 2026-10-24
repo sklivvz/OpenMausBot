@@ -1,0 +1,232 @@
+{
+  "installations": [
+    {
+      "botId": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "botName": "Liz Lemon",
+      "skill": "newsletter-platform-production",
+      "source": "deploy/agentic/newsletter-platform-production.md"
+    },
+    {
+      "botId": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "botName": "Liz Lemon",
+      "skill": "campaign-execution-tracking",
+      "source": "deploy/agentic/skills/campaign-execution-tracking/SKILL.md"
+    },
+    {
+      "botId": "38c245f6-5d17-44e2-801a-9cb78c905818",
+      "botName": "Darcy McGuire",
+      "skill": "campaign-execution-tracking",
+      "source": "deploy/agentic/skills/campaign-execution-tracking/SKILL.md"
+    },
+    {
+      "botId": "38c245f6-5d17-44e2-801a-9cb78c905818",
+      "botName": "Darcy McGuire",
+      "skill": "delivery-commitments",
+      "source": "deploy/agentic/skills/delivery-commitments/SKILL.md"
+    },
+    {
+      "botId": "1a868aed-cf1f-490b-afba-692f46c2825b",
+      "botName": "Louis Tully",
+      "skill": "delivery-commitments",
+      "source": "deploy/agentic/skills/delivery-commitments/SKILL.md"
+    },
+    {
+      "botId": "c39b15e9-3beb-4440-9eaa-b283155c6ad5",
+      "botName": "Blake",
+      "skill": "delivery-commitments",
+      "source": "deploy/agentic/skills/delivery-commitments/SKILL.md"
+    },
+    {
+      "botId": "3e0f9965-68eb-4740-8025-66105403e7a2",
+      "botName": "Bill Lumbergh",
+      "skill": "delivery-commitments",
+      "source": "deploy/agentic/skills/delivery-commitments/SKILL.md"
+    },
+    {
+      "botId": "f95b0fae-d451-4a5d-a52d-4b2679d1db2b",
+      "botName": "Luis Litt",
+      "skill": "delivery-commitments",
+      "source": "deploy/agentic/skills/delivery-commitments/SKILL.md"
+    },
+    {
+      "botId": "8929a449-0acd-4a66-a97b-10a9284ed555",
+      "botName": "Donna Paulsen",
+      "skill": "delivery-commitments",
+      "source": "deploy/agentic/skills/delivery-commitments/SKILL.md"
+    },
+    {
+      "botId": "38c245f6-5d17-44e2-801a-9cb78c905818",
+      "botName": "Darcy McGuire",
+      "skill": "execute-next-step",
+      "source": "deploy/skill-rollout/variants/darcy-execute-next-step.md"
+    },
+    {
+      "botId": "1a868aed-cf1f-490b-afba-692f46c2825b",
+      "botName": "Louis Tully",
+      "skill": "execute-next-step",
+      "source": "deploy/agentic/skills/execute-next-step/SKILL.md"
+    },
+    {
+      "botId": "c39b15e9-3beb-4440-9eaa-b283155c6ad5",
+      "botName": "Blake",
+      "skill": "execute-next-step",
+      "source": "deploy/agentic/skills/execute-next-step/SKILL.md"
+    },
+    {
+      "botId": "f95b0fae-d451-4a5d-a52d-4b2679d1db2b",
+      "botName": "Luis Litt",
+      "skill": "execute-next-step",
+      "source": "deploy/agentic/skills/execute-next-step/SKILL.md"
+    },
+    {
+      "botId": "8929a449-0acd-4a66-a97b-10a9284ed555",
+      "botName": "Donna Paulsen",
+      "skill": "execute-next-step",
+      "source": "deploy/agentic/skills/execute-next-step/SKILL.md"
+    },
+    {
+      "botId": "8995edf7-f3f0-41a3-9d37-4c5a7613f754",
+      "botName": "Edna Mode",
+      "skill": "marketing-deliverable-brief",
+      "source": "deploy/agentic/skills/marketing-deliverable-brief/SKILL.md"
+    },
+    {
+      "botId": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "botName": "Liz Lemon",
+      "skill": "marketing-deliverable-brief",
+      "source": "deploy/agentic/skills/marketing-deliverable-brief/SKILL.md"
+    },
+    {
+      "botId": "38c245f6-5d17-44e2-801a-9cb78c905818",
+      "botName": "Darcy McGuire",
+      "skill": "marketing-deliverable-brief",
+      "source": "deploy/agentic/skills/marketing-deliverable-brief/SKILL.md"
+    },
+    {
+      "botId": "a1cb5221-f7e7-4b80-8b2e-24f291d1bb37",
+      "botName": "Chandler Bing",
+      "skill": "marketing-deliverable-brief",
+      "source": "deploy/agentic/skills/marketing-deliverable-brief/SKILL.md"
+    },
+    {
+      "botId": "3e0f9965-68eb-4740-8025-66105403e7a2",
+      "botName": "Bill Lumbergh",
+      "skill": "operations-intake-routing",
+      "source": "deploy/agentic/skills/operations-intake-routing/SKILL.md"
+    },
+    {
+      "botId": "8929a449-0acd-4a66-a97b-10a9284ed555",
+      "botName": "Donna Paulsen",
+      "skill": "personal-task-ownership",
+      "source": "deploy/agentic/skills/personal-task-ownership/SKILL.md"
+    },
+    {
+      "botId": "3e0f9965-68eb-4740-8025-66105403e7a2",
+      "botName": "Bill Lumbergh",
+      "skill": "todo-status-briefing",
+      "source": "deploy/agentic/skills/todo-status-briefing/SKILL.md"
+    },
+    {
+      "botId": "714b23fe-e272-4d2d-b437-25d3019ca7f1",
+      "botName": "The Dude",
+      "skill": "takeout-ordering",
+      "source": "deploy/agentic/takeout-ordering.md"
+    },
+    {
+      "botId": "8929a449-0acd-4a66-a97b-10a9284ed555",
+      "botName": "Donna Paulsen",
+      "skill": "takeout-ordering",
+      "source": "deploy/agentic/takeout-ordering.md"
+    },
+    {
+      "botId": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "botName": "Liz Lemon",
+      "skill": "bluesky-post-preparation",
+      "source": "deploy/bluesky/skill/bluesky-post-preparation/SKILL.md"
+    },
+    {
+      "botId": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "botName": "Liz Lemon",
+      "skill": "bluesky-publishing",
+      "source": "deploy/bluesky/skill/bluesky-publishing/SKILL.md"
+    },
+    {
+      "botId": "714b23fe-e272-4d2d-b437-25d3019ca7f1",
+      "botName": "The Dude",
+      "skill": "bolt-food-order",
+      "source": "deploy/bolt/skill/bolt-food-order/SKILL.md"
+    },
+    {
+      "botId": "8929a449-0acd-4a66-a97b-10a9284ed555",
+      "botName": "Donna Paulsen",
+      "skill": "bolt-food-order",
+      "source": "deploy/bolt/skill/bolt-food-order/SKILL.md"
+    },
+    {
+      "botId": "d645f570-50c8-4471-8a2d-dff0bdc0c505",
+      "botName": "Gustave H.",
+      "skill": "perk-travel-options",
+      "source": "deploy/perk/skills/perk-travel-options/SKILL.md"
+    },
+    {
+      "botId": "c39b15e9-3beb-4440-9eaa-b283155c6ad5",
+      "botName": "Blake",
+      "skill": "sales-funnel-execution",
+      "source": "deploy/sales-execution/skills/sales-funnel-execution/SKILL.md"
+    },
+    {
+      "botId": "714b23fe-e272-4d2d-b437-25d3019ca7f1",
+      "botName": "The Dude",
+      "skill": "selver-cart-preview",
+      "source": "deploy/selver/skill/selver-cart-preview/SKILL.md"
+    },
+    {
+      "botId": "8995edf7-f3f0-41a3-9d37-4c5a7613f754",
+      "botName": "Edna Mode",
+      "skill": "announcement-production",
+      "source": "deploy/slop-detector/skills/announcement-production/SKILL.md"
+    },
+    {
+      "botId": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "botName": "Liz Lemon",
+      "skill": "announcement-production",
+      "source": "deploy/slop-detector/skills/announcement-production/SKILL.md"
+    },
+    {
+      "botId": "38c245f6-5d17-44e2-801a-9cb78c905818",
+      "botName": "Darcy McGuire",
+      "skill": "announcement-production",
+      "source": "deploy/slop-detector/skills/announcement-production/SKILL.md"
+    },
+    {
+      "botId": "38c245f6-5d17-44e2-801a-9cb78c905818",
+      "botName": "Darcy McGuire",
+      "skill": "copy-preflight",
+      "source": "deploy/slop-detector/skills/copy-preflight/SKILL.md"
+    },
+    {
+      "botId": "a1cb5221-f7e7-4b80-8b2e-24f291d1bb37",
+      "botName": "Chandler Bing",
+      "skill": "copy-preflight",
+      "source": "deploy/slop-detector/skills/copy-preflight/SKILL.md"
+    },
+    {
+      "botId": "c39b15e9-3beb-4440-9eaa-b283155c6ad5",
+      "botName": "Blake",
+      "skill": "slush-evidence-reconciliation",
+      "source": "deploy/slush/skill/slush-evidence-reconciliation/SKILL.md"
+    },
+    {
+      "botId": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "botName": "Liz Lemon",
+      "skill": "threads-publishing",
+      "source": "deploy/threads/threads-publishing/SKILL.md"
+    },
+    {
+      "botId": "c39b15e9-3beb-4440-9eaa-b283155c6ad5",
+      "botName": "Blake",
+      "skill": "websummit-directory-reconciliation",
+      "source": "deploy/websummit/skill/websummit-directory-reconciliation/SKILL.md"
+    }
+  ]
+}

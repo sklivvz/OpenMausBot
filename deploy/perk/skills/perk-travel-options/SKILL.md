@@ -5,7 +5,7 @@ description: Retrieve current Perk business travel options and prepare provider 
 
 Use the Perk connector for travel research, existing trip lookup and checkout preparation. Donna keeps ownership of the user's request; Gustave returns options and exact provider links with evidence receipts.
 
-Start with `perk_status`. If authentication, role or plan is blocked, report the reason and required account connection to Donna. Do not turn missing API access into a browser walkthrough.
+Check whether the scoped Perk tools are exposed before invoking them. If they are absent, report the missing connector to Donna; do not fabricate a tool call or treat it as a provider outage. When available, start with `perk_status`. If authentication, role or plan is blocked, report the reason and required account connection to Donna. Do not turn missing API access into a browser walkthrough.
 
 Choose the relevant operation from the reported catalog. Read `perk_contract` once for each operation you need; use its exact `inputSchema` and `schemaHash` in `perk_read` or `perk_prepare`. The provider's documented operation names are available, but argument fields must come from authenticated discovery.
 

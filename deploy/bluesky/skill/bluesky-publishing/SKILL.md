@@ -3,6 +3,8 @@ name: bluesky-publishing
 description: Prepare and publish one approved Bluesky text/image update through the Bluesky MCP, with exact copy, media, links and verified publication evidence. Use for Bluesky only.
 ---
 
+Inspect the tools actually exposed in this thread. If only preparation is available, prepare the exact artifact and return the missing publication capability to the lead; do not claim it was published or repeatedly call unavailable tools.
+
 Keep each Bluesky delivery a separate operation. Use the assigned post ID as its stable operation ID across retries.
 
 1. Obtain the exact approved copy, image files and alt text. Do not rewrite approved material. For each HTTPS link provide its explicit start/end offsets in the original text (UTF-16, end exclusive); the connector computes UTF-8 facets. Obtain SHA-256 hashes of the supplied image bytes. Replies, mentions, video and link-preview cards are not supported by this connector; report this specific gap to the lead rather than substituting content.
