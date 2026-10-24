@@ -227,6 +227,18 @@
       "botName": "Blake",
       "skill": "websummit-directory-reconciliation",
       "source": "deploy/websummit/skill/websummit-directory-reconciliation/SKILL.md"
+    },
+    {
+      "botId": "d645f570-50c8-4471-8a2d-dff0bdc0c505",
+      "botName": "Gustave H.",
+      "skill": "fli-flight-research",
+      "source": "deploy/fli/skill/fli-flight-research/SKILL.md"
+    },
+    {
+      "botId": "d645f570-50c8-4471-8a2d-dff0bdc0c505",
+      "botName": "Gustave H.",
+      "skill": "travel-fulfilment",
+      "source": "deploy/fli/skill/travel-fulfilment/SKILL.md"
     }
   ]
 }

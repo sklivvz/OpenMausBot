@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/punitarani/fli",
+  "commit": "881aee5ff4321e81ea2157cb44be94ce6a21dc1b",
+  "version": "0.10.0",
+  "license": "MIT",
+  "wheelSha256": "7366ad1c21c8070139808a355912ea2dbbb6c1506e5f0000ade20261269a965f",
+  "requirementsSha256": "71986f9796c705636dc937a962cd321a1f2e2f0b11360d72c10a6e1de17df16b",
+  "uvVersion": "0.12.17",
+  "linuxArm64UvSha256": "d636d1b678e9e7f367ecb22b46bd1cabbed234d6bc3b4d96365d2b507f72f86c"
+}
