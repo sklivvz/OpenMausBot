@@ -181,6 +181,9 @@ export interface AcpSupport {
   /** Select the model through a session config option instead of argv (opencode's ACP subcommand
    *  takes no -m). The agent must confirm it before the prompt. */
   selectModel?: { configId: string };
+  /** A CLI that advertises no model select chooses its own model: a requested id is neither sent
+   *  through set_config_option nor rejected as changed before the prompt. */
+  passthroughWithoutModelSelect?: boolean;
   /** With `selectModel`: the model a turn runs when it asked for none or for one this session does
    * not offer; null keeps the strict behaviour. */
   fallbackModel?(sessionConfig: unknown, catalogDefault: string): string | null;
@@ -1292,6 +1295,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           );
           return typeof option?.currentValue === "string" ? option.currentValue : null;
         };
+        const modelSelectIsPassthrough = () => {
+          if (!support.selectModel || support.passthroughWithoutModelSelect !== true) return false;
+          return offeredModels(session.sessionConfigResult, support.selectModel.configId).length === 0;
+        };
         const receiveModelVariants = (result: any) => {
           session.sessionConfigResult = result;
           if (!support.modelVariants) return;
@@ -1529,7 +1536,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                     variant = undefined;
                   }
                 }
-                if (cliTurn.model && cliTurn.model !== selectedModel) {
+                // set_config_option rejects a picker id the passthrough CLI does not advertise.
+                if (cliTurn.model && cliTurn.model !== selectedModel && !modelSelectIsPassthrough()) {
                   await request(
                     "session/set_config_option",
                     { sessionId, configId, value: cliTurn.model },
@@ -1621,7 +1629,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             const imageBlocks = support.images === true && runtimeAcceptsImages
               ? await readAcpImageBlocks(turn.images ?? [])
               : [];
-            if (support.modelVariants && cliTurn.model && modelOf(session.sessionConfigResult) !== cliTurn.model) {
+            if (support.modelVariants && cliTurn.model && !modelSelectIsPassthrough()
+                && modelOf(session.sessionConfigResult) !== cliTurn.model) {
               throw new Error(`${support.displayName} changed model before the prompt`);
             }
             if (variant !== undefined && requestedVariantOption().currentValue !== variant) {
