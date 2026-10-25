@@ -227,6 +227,16 @@ describe("atomic Bolt product operations on a source-derived disposable DOM", ()
     expect(jam.open?.selector).not.toBe(jam.cardSelector);
   });
 
+  it.each([
+    '<button aria-label="Search for food, restaurants, stores">&#xe000;</button>',
+    '<div tabindex="0">&#xe000;Search</div>',
+  ])("recognizes accessible search launchers without test ids: %s", async (html) => {
+    const f = fixture();
+    f.window.document.querySelector('[data-testid="components.ProviderStickyTitleHeader.searchButton"]')!.outerHTML = html;
+    const page = await readBranchProducts(f.transport);
+    expect(page.search.launcher).toBeDefined();
+  });
+
   it("searches the in-store input and waits for changed, stable results", async () => {
     const f = fixture();
     const page = await readBranchProducts(f.transport);

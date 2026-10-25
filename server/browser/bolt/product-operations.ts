@@ -458,7 +458,10 @@ const OBSERVATION_SCRIPT = String.raw`(() => {
     value: element.value || "",
     enabled: !element.disabled && attr(element, "aria-disabled") !== "true",
   } : undefined;
-  const launcherCandidates = many("button, [role=button]").filter((element) => /^(search for food|search$)/i.test(textOf(element)) || attr(element, "data-testid") === "components.ProviderStickyTitleHeader.searchButton");
+  const launcherCandidates = many('button, [role=button], [tabindex], [onclick], [data-testid="components.ProviderStickyTitleHeader.searchButton"]').filter((element) => {
+    const label = (attr(element, "aria-label") || textOf(element)).replace(/^[\uE000-\uF8FF\s]+/u, "");
+    return /^(search for food|search$)/i.test(label) || attr(element, "data-testid") === "components.ProviderStickyTitleHeader.searchButton";
+  });
   const launcher = launcherCandidates.length === 1 ? {
     selector: cssPath(launcherCandidates[0]),
     label: attr(launcherCandidates[0], "aria-label") || textOf(launcherCandidates[0]),

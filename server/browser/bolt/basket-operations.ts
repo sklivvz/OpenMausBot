@@ -307,6 +307,19 @@ const READ_SCRIPT = `(() => {
       entries.push({ testId: spec.id, priority: index, selector: cssPath(element), text, priceText: (text.match(/[0-9][0-9\\s.,]*\\s*€/g) || []).pop() || null, priceMinor: parseMoney(text), enabled: !element.disabled && element.getAttribute("aria-disabled") !== "true" });
     }
   }
+  if (entries.length === 0) {
+    const candidates = [...document.querySelectorAll('button, [role="button"]')].filter((element) => {
+      if (!visible(element)) return false;
+      const label = clean(element.getAttribute("aria-label") || element.innerText || element.textContent);
+      return /^view basket(?:$|[\\s·])/i.test(label);
+    });
+    if (candidates.length > 1) errors.push("basket_entry_ambiguous");
+    if (candidates.length === 1) {
+      const element = candidates[0];
+      const text = clean(element.getAttribute("aria-label") || element.innerText || element.textContent);
+      entries.push({ testId: "accessible:view-basket", priority: 3, selector: cssPath(element), text, priceText: (text.match(/[0-9][0-9\\s.,]*\\s*€/g) || []).pop() || null, priceMinor: parseMoney(text), enabled: !element.disabled && element.getAttribute("aria-disabled") !== "true" });
+    }
+  }
   const bodyText = clean(document.body.innerText);
   return {
     url: location.href,
@@ -728,7 +741,7 @@ export class BoltBasketOperations {
     requireBolt(before.basketEntry.enabled, "basket_entry_disabled");
     const entry = before.basketEntry;
     const latest = await this.read();
-    requireBolt(latest.complete && latest.basketEntry?.testId === entry.testId && latest.basketEntry.priceMinor === entry.priceMinor, "basket_entry_changed_before_effect");
+    requireBolt(latest.complete && latest.basketEntry?.testId === entry.testId && latest.basketEntry.selector === entry.selector && latest.basketEntry.text === entry.text && latest.basketEntry.priceMinor === entry.priceMinor, "basket_entry_changed_before_effect");
     await this.dispatch({ kind: "open_basket", control: latest.basketEntry.selector }, () => this.transport.click(latest.basketEntry!.selector));
     const after = await this.waitFor((snapshot) => snapshot.open && snapshot.complete);
     return { status: "verified", effectDispatched: true, alreadyOpen: false, before, after };
