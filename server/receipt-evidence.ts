@@ -38,7 +38,6 @@ export interface ReceiptVerdict {
 const RECEIPT_TOOL = /(?:^|__)(record_execution_receipt)$/;
 const ASSEMBLED_TOOL = /(?:^|__)(verify_assembled_output)$/;
 const HEX64 = /^[a-f0-9]{64}$/;
-const ID = /urn:li:[A-Za-z0-9:_-]+|https:\/\/[^\s"'<>]+|\b[A-Za-z0-9][A-Za-z0-9_-]{5,}\b/g;
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_, item) =>
   item && typeof item === "object" && !Array.isArray(item)
@@ -66,6 +65,68 @@ function channelOf(label: string): string | undefined {
     [/postmark|keila|gmail|email|newsletter/i, "email"], [/slack/i, "slack"],
   ];
   return matches.find(([pattern]) => pattern.test(label))?.[1];
+}
+
+const PROVIDER_IDS: Record<string, RegExp> = {
+  // A LinkedIn post is a share/ugcPost/update URN. A person URN is an actor,
+  // not the published object, and is deliberately absent.
+  linkedin: /urn:li:(?:share|ugcPost|update):[A-Za-z0-9_-]+/g,
+  bluesky: /(?:at:\/\/[^\s/]+\/app\.bsky\.feed\.post\/[A-Za-z0-9]+|https:\/\/bsky\.app\/profile\/[^\s/]+\/post\/[A-Za-z0-9]+)/g,
+  threads: /https:\/\/(?:www\.)?threads\.(?:net|com)\/[^\s"'<>]+/g,
+  x: /https:\/\/(?:www\.)?(?:x|twitter)\.com\/[^\s/]+\/status\/\d+/g,
+  mastodon: /https:\/\/[^\s/]+\/@[^\s/]+\/\d+/g,
+};
+
+/** Only structured provider object identifiers, never arbitrary words in JSON. */
+function providerIds(value: unknown, channel: string): Set<string> {
+  const ids = new Set<string>();
+  const pattern = PROVIDER_IDS[channel];
+  if (!pattern) return ids;
+  const visit = (node: unknown): void => {
+    if (typeof node === "string") {
+      for (const match of node.match(pattern) ?? []) ids.add(match);
+      return;
+    }
+    if (Array.isArray(node)) { for (const item of node) visit(item); return; }
+    if (record(node)) for (const item of Object.values(node)) visit(item);
+  };
+  visit(value);
+  return ids;
+}
+
+const ACCOUNT_KEYS = new Set(["account", "accountid", "accountdid", "author", "owner", "ownerid", "actor", "actorid", "username", "handle"]);
+
+/** Bind to a structured account/author field, not to the expected string appearing anywhere in prose. */
+function accountBound(value: unknown, expected: string | undefined): boolean {
+  if (!expected) return false;
+  if (Array.isArray(value)) return value.some(item => accountBound(item, expected));
+  if (!record(value)) return false;
+  for (const [key, item] of Object.entries(value)) {
+    const normalized = key.toLowerCase().replace(/[_-]/g, "");
+    if (ACCOUNT_KEYS.has(normalized) && item === expected) return true;
+    if (accountBound(item, expected)) return true;
+  }
+  return false;
+}
+
+function composioResults(output: Record<string, unknown>, count: number): unknown[] | undefined {
+  const results: unknown[] = [];
+  for (const item of Array.isArray(output.content) ? output.content : []) {
+    if (!record(item) || item.type !== "text") continue;
+    let text: unknown = item.text;
+    if (typeof text === "string") {
+      try { text = JSON.parse(text); } catch { continue; }
+    }
+    if (!record(text)) continue;
+    const data = record(text.data) ? text.data : text;
+    if (Array.isArray(data.results)) results.push(...data.results);
+  }
+  if (!results.length && record(output.data) && Array.isArray(output.data.results)) results.push(...output.data.results);
+  return results.length === count ? results : undefined;
+}
+
+function outputRecord(value: unknown): Record<string, unknown> {
+  return record(value) ? value : { value };
 }
 
 /** Verify a receipt file signed by the trusted execution-tools host. */
@@ -144,6 +205,7 @@ function assembledOutput(output: Record<string, unknown>, context: ReceiptContex
 function providerReadback(calls: readonly { at: number; name: string; output: Record<string, unknown> }[], context: ReceiptContext): ReceiptVerdict {
   const channel = context.channel?.toLowerCase();
   if (!channel) return { ok: false, reason: "the admitted deliverable names no channel to bind provider evidence to" };
+  if (!context.account) return { ok: false, reason: "publication evidence requires the exact admitted account" };
   const prepared = new Map<string, string>();
   for (const call of calls) {
     if (channelOf(call.name) !== channel || !/_prepare(?:_post)?$/.test(call.name)) continue;
@@ -157,7 +219,7 @@ function providerReadback(calls: readonly { at: number; name: string; output: Re
     if (call.name.includes("bluesky_") && state === "verified") {
       const operation = call.output.operationId;
       if (typeof operation !== "string" || !prepared.has(operation) || call.output.contentSha256 !== prepared.get(operation)) continue;
-      if (context.account && call.output.accountDid !== context.account) continue;
+      if (!accountBound(call.output, context.account)) continue;
       if (typeof call.output.uri !== "string" || !call.output.uri.startsWith("at://")) continue;
       if (typeof call.output.cid !== "string" || !call.output.cid) continue;
       if (typeof call.output.permalink !== "string" || !call.output.permalink.startsWith("https://")) continue;
@@ -166,7 +228,7 @@ function providerReadback(calls: readonly { at: number; name: string; output: Re
     if (call.name.includes("threads_") && state === "published_verified") {
       const operation = call.output.operationId;
       if (typeof operation !== "string" || !prepared.has(operation) || call.output.manifestSha256 !== prepared.get(operation)) continue;
-      if (context.account && call.output.accountId !== context.account) continue;
+      if (!accountBound(call.output, context.account)) continue;
       if (typeof call.output.postId !== "string" || !call.output.postId) continue;
       if (typeof call.output.permalink !== "string" || !/^https:\/\/(?:www\.)?threads\.(?:net|com)\//.test(call.output.permalink)) continue;
       return { ok: true, reason: "Threads connector readback verified the exact manifest on the provider", evidence: call.output.permalink };
@@ -176,25 +238,25 @@ function providerReadback(calls: readonly { at: number; name: string; output: Re
       return { ok: true, reason: "Keila readback verified the saved provider object", evidence: `keila:${call.output.id}` };
     }
   }
-  // A direct provider publish is not acceptance until a later read-only call sees
-  // the same provider identifier. This is readback of a real tool result, not a
-  // caller-supplied success flag.
+  // A direct provider publish is not acceptance until a later read-only call
+  // returns the same structured provider object ID and the admitted account.
   const published: Array<{ at: number; ids: Set<string> }> = [];
   for (const call of calls) {
     if (!isOutboundTool(call.name) || channelOf(call.name) !== channel) continue;
-    const ids = new Set([...JSON.stringify(call.output).matchAll(ID)].map(match => match[0]));
+    const ids = providerIds(call.output, channel);
     if (ids.size) published.push({ at: call.at, ids });
   }
   for (const call of calls) {
     if (!isReadOnlyTool(call.name) || channelOf(call.name) !== channel) continue;
-    const text = JSON.stringify(call.output);
+    if (!accountBound(call.output, context.account)) continue;
+    const ids = providerIds(call.output, channel);
     for (const earlier of published) {
       if (earlier.at >= call.at) continue;
-      const matched = [...earlier.ids].find(id => text.includes(id));
-      if (matched) return { ok: true, reason: "a later read-only provider call returned the published identifier", evidence: matched };
+      const matched = [...earlier.ids].find(id => ids.has(id));
+      if (matched) return { ok: true, reason: "a later read-only provider call returned the published object and admitted account", evidence: matched };
     }
   }
-  return { ok: false, reason: "no provider readback of the published object was recorded; an acknowledgement is not publication evidence" };
+  return { ok: false, reason: "no structured provider readback of the published object and admitted account was recorded; an acknowledgement or generic token is not publication evidence" };
 }
 
 export function receiptDecision(messages: readonly ReceiptActivity[], context: ReceiptContext): ReceiptVerdict {
@@ -207,12 +269,26 @@ export function receiptDecision(messages: readonly ReceiptActivity[], context: R
     const output = parseOutput(message.tool.output);
     if (!output || !name) continue;
     // Composio's multi-execute wrapper is not itself a channel. Decode the
-    // caller-visible slugs so the same readback rule applies to app tools.
+    // caller-visible slugs, but only bind each child to its own structured
+    // result; never copy the whole wrapper output onto every child.
     const input = parseOutput(message.tool.input);
-    const names = name.startsWith("COMPOSIO_") && input
-      ? connectorCallsIn(name, input).map(call => call.slug)
-      : [name];
-    for (const expanded of names) calls.push({ at: message.at, name: expanded, output });
+    if (name === "COMPOSIO_MULTI_EXECUTE_TOOL" && input) {
+      const names = connectorCallsIn(name, input).map(call => call.slug);
+      const results = composioResults(output, names.length);
+      if (results) for (const [index, expanded] of names.entries()) {
+        calls.push({ at: message.at, name: expanded, output: outputRecord(results[index]) });
+      }
+      continue;
+    }
+    if (name.startsWith("COMPOSIO_") && input) {
+      const names = connectorCallsIn(name, input).map(call => call.slug);
+      // A single named app tool can use the wrapper result directly; a
+      // multi-tool wrapper without aligned child results is not attributable.
+      if (names.length !== 1) continue;
+      calls.push({ at: message.at, name: names[0]!, output });
+      continue;
+    }
+    calls.push({ at: message.at, name, output });
   }
   const publication = context.operations?.includes("publish") === true;
   for (const call of calls) {

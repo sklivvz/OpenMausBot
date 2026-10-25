@@ -107,6 +107,49 @@ describe("receipt evidence", () => {
     expect(receiptRecorded(messages, { ...base(), operations: ["publish"], channel: "bluesky", account: "did:plc:other" })).toBe(false);
   });
 
+  it("accepts only a structured LinkedIn post object with matching author, never a person URN or generic words", () => {
+    const activity = (at: number, name: string, value: unknown) =>
+      ({ at, kind: "activity", tool: { name, ok: true, output: JSON.stringify(value) } });
+    const context = { ...base(), operations: ["publish"] as const, channel: "linkedin", account: "urn:li:person:fixture" };
+    const share = "urn:li:share:7519844322616258560";
+    expect(receiptRecorded([
+      activity(150, "LINKEDIN_CREATE_LINKED_IN_POST", { id: share }),
+      activity(200, "LINKEDIN_GET_POST_CONTENT", { id: share, author: "urn:li:person:fixture" }),
+    ], context)).toBe(true);
+    expect(receiptRecorded([
+      activity(150, "LINKEDIN_CREATE_LINKED_IN_POST", { success: true, results: ["success"], content: "ok" }),
+      activity(200, "LINKEDIN_GET_POST_CONTENT", { success: true, results: ["success"], content: "ok", author: "urn:li:person:fixture" }),
+    ], context)).toBe(false);
+    expect(receiptRecorded([
+      activity(150, "LINKEDIN_CREATE_LINKED_IN_POST", { id: "urn:li:person:fixture" }),
+      activity(200, "LINKEDIN_GET_POST_CONTENT", { id: "urn:li:person:fixture", author: "urn:li:person:fixture" }),
+    ], context)).toBe(false);
+    expect(receiptRecorded([
+      activity(150, "LINKEDIN_CREATE_LINKED_IN_POST", { id: share }),
+      activity(200, "LINKEDIN_GET_POST_CONTENT", { id: share, author: "urn:li:person:other" }),
+    ], context)).toBe(false);
+  });
+
+  it("does not attribute a multi-tool Composio wrapper result to every child", () => {
+    const input = {
+      tools: [{ tool_slug: "LINKEDIN_CREATE_LINKED_IN_POST" }, { tool_slug: "LINKEDIN_GET_POST_CONTENT" }],
+    };
+    const output = {
+      content: [{ type: "text", text: { successful: true, data: { results: [
+        { id: "urn:li:share:7519844322616258560" },
+      ] } } }],
+    };
+    const context = { ...base(), operations: ["publish"] as const, channel: "linkedin", account: "urn:li:person:fixture" };
+    const wrapper = { at: 150, kind: "activity", tool: {
+      name: "COMPOSIO_MULTI_EXECUTE_TOOL", ok: true, input: JSON.stringify(input), output: JSON.stringify(output),
+    } };
+    const readback = { at: 200, kind: "activity", tool: {
+      name: "LINKEDIN_GET_POST_CONTENT", ok: true,
+      output: JSON.stringify({ id: "urn:li:share:7519844322616258560", author: "urn:li:person:fixture" }),
+    } };
+    expect(receiptRecorded([wrapper, readback], context)).toBe(false);
+  });
+
   it("returns a bounded reason for a refused result", () => {
     const decision = receiptDecision([receiptActivity(200, JSON.stringify({ sourceComplete: true }))], base());
     expect(decision.ok).toBe(false);

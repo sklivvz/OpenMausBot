@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AdmissionBounceGuard,
+  PublicationAttempts,
   admissionBrief,
   effectWithinAdmission,
   outwardWithinAdmission,
@@ -75,6 +76,22 @@ describe("marketing admission", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe("time_budget_insufficient");
+  });
+
+  it("counts multiple same-channel publishes in one wrapper and permits one publish attempt per deliverable", () => {
+    const sixPublishes = {
+      tools: Array.from({ length: 6 }, () => ({ tool_slug: "LINKEDIN_CREATE_LINKED_IN_POST" })),
+    };
+    expect(effectWithinAdmission(single(), "COMPOSIO_MULTI_EXECUTE_TOOL", sixPublishes))
+      .toMatchObject({ ok: true, channels: ["linkedin"], publishCalls: 6 });
+    for (const preparation of ["LINKEDIN_INITIALIZE_IMAGE_UPLOAD", "THREADS_CREATE_CONTAINER", "LINKEDIN_GET_POST_CONTENT"]) {
+      expect(effectWithinAdmission(single(), preparation, {})).toMatchObject({ ok: true, publishCalls: 0 });
+    }
+    const attempts = new PublicationAttempts();
+    expect(attempts.take("assignment-a", single(), 1)).toEqual({ ok: true });
+    expect(attempts.take("assignment-a", single(), 1)).toMatchObject({ ok: false, reason: expect.stringContaining("already attempted") });
+    expect(attempts.take("assignment-b", single(), 0)).toEqual({ ok: true });
+    expect(attempts.take("assignment-c", single(), 6)).toMatchObject({ ok: false, reason: expect.stringContaining("several") });
   });
 
   it("returns a known-infeasible scope before dispatch instead of granting an extension", () => {
