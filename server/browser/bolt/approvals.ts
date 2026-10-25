@@ -13,7 +13,7 @@ const money = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 
 function summary(checkout: BoltCheckout): string {
   return [
-    `Account: ${checkout.account}. Branch: ${checkout.branchId}.`,
+    `Approval profile (host browser identity): ${checkout.account}. Branch: ${checkout.branchId}.${checkout.providerAccountId ? ` Provider account: ${checkout.providerAccountId}.` : " No provider account id was observed; approval is scoped to the host browser profile."}`,
     ...checkout.lines.map((line) => `${line.quantity} × ${line.name}, ${money(line.unitPriceMinor)} each. Options: ${line.options.map((option) => `${option.groupLabel}: ${option.choiceLabel} × ${option.quantity}`).join(", ") || "none"}. Item comment: ${JSON.stringify(line.comment)}.`),
     `To: ${checkout.destination}. ${checkout.fulfilment}; ${checkout.deliveryLabel}; ${checkout.deliveryEta}.`,
     `Courier comment: ${JSON.stringify(checkout.courierComment)}. Payment: ${checkout.paymentMethod}.`,
@@ -24,6 +24,7 @@ function summary(checkout: BoltCheckout): string {
 
 export function boltPaymentAuthority(store: ApprovalStore, scope: { threadId: string; botId: string; profileKey: string }, now = Date.now): BoltPaymentAuthority {
   return {
+    scope: { kind: "host_browser_profile", profileKey: scope.profileKey },
     async request(checkout) {
       const hash = checkoutHash(checkout);
       const existing = store.messagesFor(scope.threadId).find((message) => {

@@ -1,4 +1,5 @@
 import { BOLT_ACTIONS, BoltFault, requireBolt, type BoltCheckout, type BoltInput, type BoltLine, type BoltView } from "./contracts.ts";
+import type { BoltAtomicOperations } from "./atomic.ts";
 import { BoltJournal, digest, type BoltReceipt } from "./state.ts";
 
 export interface BoltObservation {
@@ -20,6 +21,8 @@ export interface BoltPort {
 
 /** The host verifies a genuine user's approval, bound to this profile and exact checkout. No bot boolean grants payment authority. */
 export interface BoltPaymentAuthority {
+  /** The host-owned browser profile this authority is bound to. Never supplied by a bot call. */
+  readonly scope?: { kind: "host_browser_profile"; profileKey: string };
   request?(checkout: BoltCheckout): Promise<string>;
   verify(approvalRef: string, checkoutHash: string): Promise<void>;
 }
@@ -141,18 +144,42 @@ export class BoltRunner {
   readonly port: BoltPort;
   readonly journal: BoltJournal;
   readonly authority?: BoltPaymentAuthority;
-  constructor(port: BoltPort, journal: BoltJournal, authority?: BoltPaymentAuthority) {
+  readonly atomic?: BoltAtomicOperations;
+  constructor(port: BoltPort, journal: BoltJournal, authority?: BoltPaymentAuthority, atomic?: BoltAtomicOperations) {
     this.port = port;
     this.journal = journal;
     this.authority = authority;
+    this.atomic = atomic;
   }
 
-  async run(input: BoltInput) {
+  async run(input: BoltInput): Promise<Record<string, unknown>> {
     return this.journal.locked(async () => {
       this.port.guard();
-      const before = await this.port.read();
-      requireBolt(this.port.supports?.(input.action) !== false, "action_bindings_required");
-      if (input.action === "inspect") return { status: "observed", supportedActions: BOLT_ACTIONS.filter((action) => this.port.supports?.(action) !== false), ...before };
+      if (input.action === "reconcile_operation") {
+        const receipt = input.operationId ? this.journal.read()[input.operationId] : undefined;
+        if (receipt && this.atomic?.handles(receipt.input.action)) return this.reconcileAtomic(receipt);
+      }
+      const atomicAction = this.atomic?.handles(input.action) === true;
+      if (input.action === "inspect" && this.atomic) {
+        const generic = await this.port.read();
+        try {
+          const atomicView = await this.atomic.observe({ action: "search_branch" });
+          return {
+            status: "observed",
+            supportedActions: BOLT_ACTIONS.filter((action) => this.atomic?.handles(action) === true || this.port.supports?.(action) !== false),
+            url: atomicView.url,
+            observationRef: atomicView.observationRef,
+            view: { ...generic.view, ...atomicView.view },
+          };
+        } catch {
+          return { status: "observed", supportedActions: BOLT_ACTIONS.filter((action) => this.port.supports?.(action) !== false), ...generic };
+        }
+      }
+      const before = atomicAction ? await this.atomic!.observe(input) as BoltObservation : await this.port.read();
+      const supported = atomicAction || this.port.supports?.(input.action) !== false;
+      requireBolt(supported, "action_bindings_required");
+      if (input.action === "inspect") return { status: "observed", supportedActions: BOLT_ACTIONS.filter((action) => this.atomic?.handles(action) === true || this.port.supports?.(action) !== false), ...before };
+      if (atomicAction) return this.runAtomic(input, before);
       if (input.action === "request_payment_approval") {
         requireBolt(before.view.checkout && this.authority?.request, "checkout_approval_host_required");
         this.plan({ ...input, action: "pay" }, before.view);
@@ -186,7 +213,11 @@ export class BoltRunner {
         return { status: receipt.status, receipt: receiptSummary(receipt), ...before };
       }
       requireBolt(!Object.values(receipts).some((entry) => entry.status === "pending"), "unresolved_operation_reconcile_required");
-      requireBolt(before.observationRef === input.observationRef, "stale_observation");
+      let atomicRef: string | undefined;
+      if (this.atomic) {
+        try { atomicRef = (await this.atomic.observe({ action: "search_branch" })).observationRef; } catch { atomicRef = undefined; }
+      }
+      requireBolt(before.observationRef === input.observationRef || atomicRef === input.observationRef, "stale_observation");
       requireBolt(before.view.authenticationRequired !== true, "sign_in_required");
       requireBolt(before.view.overlay !== "replacement" && before.view.overlay !== "unknown", "overlay_requires_resolution");
       const effects = this.plan(input, before.view);
@@ -232,6 +263,66 @@ export class BoltRunner {
         throw error;
       }
     });
+  }
+
+  private async reconcileAtomic(receipt: BoltReceipt): Promise<Record<string, unknown>> {
+    const atomic = this.atomic!;
+    if (receipt.status === "pending" && await atomic.reconcile(receipt.input, receipt.before, receipt.basketBaseline)) {
+      receipt.status = "verified";
+      receipt.verifiedAt = new Date().toISOString();
+      this.journal.write(receipt);
+    }
+    const observed = await atomic.observe(receipt.input);
+    return { status: receipt.status, receipt: receiptSummary(receipt), ...observed };
+  }
+
+  private async runAtomic(input: BoltInput, before: BoltObservation): Promise<Record<string, unknown>> {
+    const atomic = this.atomic!;
+    if (input.action === "request_payment_approval" || !atomic.isMutation(input.action)) {
+      const outcome = await atomic.run(input, this.authority);
+      return { ...outcome, observationRef: before.observationRef, url: before.url };
+    }
+    const receipts = this.journal.read();
+    requireBolt(input.operationId, "operation_id_required");
+    const receipt = Object.hasOwn(receipts, input.operationId) ? receipts[input.operationId] : undefined;
+    if (receipt) {
+      requireBolt(receipt.requestHash === digest(input), "operation_id_reused_for_different_request");
+      return { status: receipt.status, receipt: receiptSummary(receipt), ...before };
+    }
+    requireBolt(!Object.values(receipts).some((entry) => entry.status === "pending"), "unresolved_operation_reconcile_required");
+    requireBolt(before.observationRef === input.observationRef, "stale_observation");
+    requireBolt(before.view.authenticationRequired !== true, "sign_in_required");
+    requireBolt(before.view.overlay !== "replacement" && before.view.overlay !== "unknown", "overlay_requires_resolution");
+    if (input.action === "pay") {
+      requireBolt(this.authority && input.approvedCheckoutRef, "trusted_checkout_approval_required");
+      requireBolt(!Object.values(receipts).some((entry) => entry.status !== "not_executed" && entry.input.approvedCheckoutRef === input.approvedCheckoutRef), "approval_already_used");
+    }
+    const intent: BoltReceipt = {
+      operationId: input.operationId, requestHash: digest(input), input, before: before.view, status: "pending", startedAt: new Date().toISOString(),
+      ...(input.action === "add_configured_product" ? { basketBaseline: await atomic.baselineFor() } : {}),
+    };
+    this.journal.write(intent);
+    const effectsBefore = atomic.effectsDispatched;
+    try {
+      const outcome = await atomic.run(input, this.authority);
+      if (input.action === "pay") {
+        intent.checkoutHash = typeof outcome.checkoutHash === "string" ? outcome.checkoutHash : undefined;
+        this.journal.write(intent);
+        return { ...outcome, receipt: receiptSummary(intent) };
+      }
+      intent.status = outcome.status === "verified" || outcome.status === "observed" ? "verified" : "dispatched";
+      if (intent.status === "verified") intent.verifiedAt = new Date().toISOString();
+      if (typeof outcome.checkoutHash === "string") intent.checkoutHash = outcome.checkoutHash;
+      this.journal.write(intent);
+      return { ...outcome, receipt: receiptSummary(intent) };
+    } catch (error) {
+      if (atomic.effectsDispatched === effectsBefore) {
+        intent.status = "not_executed";
+        this.journal.write(intent);
+      }
+      if (!(error instanceof BoltFault)) throw new BoltFault("outcome_unknown_reconcile_required");
+      throw error;
+    }
   }
 
   private async waitFor(predicate: (view: BoltView) => boolean): Promise<BoltObservation> {

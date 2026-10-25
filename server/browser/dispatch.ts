@@ -20,6 +20,7 @@ import type { Tab, TabRegistry } from "./tabs.ts";
 import { targetOf, type ToolCall, type ToolInput } from "./tools.ts";
 import { SELVER_CART_SNAPSHOT } from "./selver-cart.ts";
 import { BoltBrowserPort, loadBindings } from "./bolt/browser.ts";
+import { BoltAtomicOperations } from "./bolt/atomic.ts";
 import { BoltFault } from "./bolt/contracts.ts";
 import { BoltRunner, type BoltPaymentAuthority } from "./bolt/runner.ts";
 import { BoltJournal } from "./bolt/state.ts";
@@ -408,7 +409,11 @@ export async function executeTool(context: ToolContext, call: ToolCall): Promise
         };
         try {
           const port = new BoltBrowserPort(tab.page, loadBindings(context.bolt.bindingsPath), guard, () => remaining(context));
-          const runner = new BoltRunner(port, new BoltJournal(context.bolt.directory), context.bolt.authority);
+          const atomic = new BoltAtomicOperations({
+            transport: port.transport, guard, directory: context.bolt.directory,
+            host: context.bolt.authority?.scope ? { profileKey: context.bolt.authority.scope.profileKey } : {},
+          });
+          const runner = new BoltRunner(port, new BoltJournal(context.bolt.directory), context.bolt.authority, atomic);
           return textResult(JSON.stringify(await runner.run(call.input)));
         } catch (error) {
           if (error instanceof BoltFault) return errorResult(JSON.stringify({ status: "blocked", code: error.code, operationId: call.input.operationId }));

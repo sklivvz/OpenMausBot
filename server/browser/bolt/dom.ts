@@ -9,7 +9,7 @@ export const RECORDED_BINDINGS: BoltBindings = {
   version: 1,
   evidence: "Recorded Bolt Food DOM, 16/23 October 2026: current address header, two search inputs, grid product cards, product add/close controls, basket button/loading indicator, pay control, and dynamically listed fulfilment/delivery buttons. Dish option sheets, complete basket rows, saved-address sheets, checkout breakdowns and order results are not captured.",
   root: { kind: "object", fields: {
-    search: { kind: "text", selector: SEARCH, attribute: "value", optional: true },
+    search: { kind: "text", selector: SEARCH, attribute: "value", first: true, optional: true },
     address: { kind: "text", selector: 'button[aria-label^="Delivery address "]', attribute: "aria-label", pattern: "^Delivery address\\s+(.+)$", group: 1, optional: true },
     products: { kind: "list", optional: true, selector: PRODUCT_CARD, item: { kind: "object", fields: {
       id: { kind: "text", attribute: "aria-label", pattern: "^,?\\s*(.+?)(?:,\\s*[0-9][0-9\\s.,]*€)?$", group: 1 },
@@ -20,6 +20,7 @@ export const RECORDED_BINDINGS: BoltBindings = {
     basketState: { kind: "object", optional: true, fields: {
       loading: { kind: "exists", selector: '[data-testid="screens.Groceries.GroceriesScreen.activeBasketButton.loading"]' },
       ready: { kind: "exists", selector: '[data-testid="screens.Groceries.GroceriesScreen.activeBasketButton"], [data-testid="components.MainNavigationMenu.viewBasketButton"], [data-testid="screens.Provider.Menu.ProviderMenuStickySearch.viewBasket"]' },
+      rowsAvailable: { kind: "exists", selector: '[data-testid="components.CheckoutItem.checkoutItemCounter"]' },
       detail: { kind: "text", selector: BASKET, first: true, optional: true },
       control: { kind: "control", selector: BASKET, first: true, optional: true },
     } },
@@ -27,7 +28,7 @@ export const RECORDED_BINDINGS: BoltBindings = {
       id: { kind: "text", attribute: "aria-label" },
       label: { kind: "text", attribute: "aria-label" },
       available: { kind: "enabled" },
-      selected: { kind: "boolean", selector: 'input[type="radio"], [role="radio"]', attribute: "checked" },
+      selected: { kind: "boolean", selector: 'input[type="radio"], [role="radio"]', attribute: "checked", first: true },
       control: { kind: "control" },
     } } },
     deliveryOptions: { kind: "list", optional: true, selector: 'button[aria-label*="delivery"]', item: { kind: "object", fields: {
@@ -35,13 +36,13 @@ export const RECORDED_BINDINGS: BoltBindings = {
       label: { kind: "text", attribute: "aria-label" },
       eta: { kind: "text", attribute: "aria-label", pattern: "(\\d+(?:\\s*(?:-|–|to)\\s*\\d+)?\\s*min)", group: 1, optional: true },
       available: { kind: "enabled" },
-      selected: { kind: "boolean", selector: 'input[type="radio"], [role="radio"]', attribute: "checked" },
+      selected: { kind: "boolean", selector: 'input[type="radio"], [role="radio"]', attribute: "checked", first: true },
       control: { kind: "control" },
     } } },
     controls: { kind: "object", fields: {
-      search: { kind: "control", selector: SEARCH, optional: true },
+      search: { kind: "control", selector: SEARCH, first: true, optional: true },
       openBasket: { kind: "control", selector: BASKET, first: true, optional: true },
-      add: { kind: "control", selector: '[data-testid="components.ProviderDish.addButton"]', optional: true },
+      add: { kind: "control", selector: '[data-testid="components.ProviderDish.addButton"]', first: true, optional: true },
       closeProduct: { kind: "control", selector: '[data-testid="screens.Provider.Dish.DishBottomSheet.closeButton"], button[aria-label="Close dish details"]', first: true, optional: true },
       pay: { kind: "control", selector: '[data-testid="screens.OnePageCheckout.confirmSimpleButton"]', optional: true },
     } },

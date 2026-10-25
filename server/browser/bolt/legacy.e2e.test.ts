@@ -34,22 +34,21 @@ describe("the legacy agent-browser Bolt transport", () => {
     const { runtime, spec, host, calls } = legacy();
     const inspected = await bolt(runtime, spec, host, { action: "inspect" });
     expect(inspected.raw.isError).not.toBe(true);
-    expect(inspected.value).toMatchObject({
-      status: "observed",
-      supportedActions: ["inspect", "open_branch", "search_branch", "read_basket", "list_fulfilment_options", "select_fulfilment", "list_delivery_options", "select_delivery_option", "reconcile_operation"],
-    });
+    expect(inspected.value).toMatchObject({ status: "observed" });
+    expect(inspected.value.supportedActions).toEqual(expect.arrayContaining(["inspect", "open_branch", "search_branch", "read_basket", "list_fulfilment_options", "select_fulfilment", "list_delivery_options", "select_delivery_option", "reconcile_operation"]));
     expect((inspected.value.view as { products: unknown[] }).products).toHaveLength(1);
     const basket = await bolt(runtime, spec, host, { action: "read_basket" });
-    expect(basket.value).toMatchObject({ status: "observed", basketRows: "unavailable", view: { basketState: { loading: true, ready: false, rowsAvailable: false } } });
+    expect(basket.value).toMatchObject({ status: "observed", basketRows: "not_open", view: { basketState: { rowsAvailable: false } } });
     expect(calls()).toContain("agent_browser_eval");
     expect(calls()).not.toContain("agent_browser_bolt");
   });
 
-  it("dispatches search through the legacy fill/eval tools without claiming fresh results", async () => {
-    const { runtime, spec, host } = legacy();
+  it("refuses a search observation the fixture cannot prove instead of claiming fresh results", async () => {
+    const { runtime, spec, host, calls } = legacy();
     const inspected = await bolt(runtime, spec, host, { action: "inspect" });
     const searched = await bolt(runtime, spec, host, { action: "search_branch", operationId: "search-1", observationRef: inspected.value.observationRef, query: "soup" });
-    expect(searched.value).toMatchObject({ status: "dispatched", verification: "input_only", searchResults: "unknown" });
+    expect(searched.value).toMatchObject({ status: "blocked", code: "product_observation_invalid" });
+    expect(calls()).not.toContain("agent_browser_fill");
   });
 
   it("opens a branch through the actual agent_browser_open tool", async () => {
@@ -82,7 +81,7 @@ describe("the legacy agent-browser Bolt transport", () => {
   it("refuses unsupported actions before invoking a browser effect", async () => {
     const { runtime, spec, host, calls } = legacy();
     const inspected = await bolt(runtime, spec, host, { action: "inspect" });
-    const blocked = await bolt(runtime, spec, host, { action: "read_item_options", operationId: "item-1", observationRef: inspected.value.observationRef });
+    const blocked = await bolt(runtime, spec, host, { action: "read_order", operationId: "order-1", observationRef: inspected.value.observationRef });
     expect(blocked.raw.isError).toBe(true);
     expect(blocked.value).toMatchObject({ status: "blocked", code: "action_bindings_required" });
     expect(calls().filter((name) => name === "agent_browser_click" || name === "agent_browser_fill")).toEqual([]);
