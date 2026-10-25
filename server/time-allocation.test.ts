@@ -15,6 +15,16 @@ import {
 const NOW = Date.parse("2026-10-24T19:00:00Z");
 
 describe("explicit time allocations", () => {
+  it("records a missed start without forbidding the requested work", () => {
+    const allocation = parseExplicitTimeAllocation("YOU HAVE 5 SECONDS TO START GROCERY SHOPPING", { now: NOW })!;
+    expect(timeAllocationState(allocation, NOW + 6_000)).toBe("missed");
+    expect(canStartEffect(allocation, NOW + 6_000)).toBe(true);
+    expect(canStartEffect(inheritedTimeAllocation(allocation), NOW + 6_000)).toBe(true);
+    expect(timeAllocationLine(allocation, NOW + 6_000)).toContain("START COMMITMENT (missed)");
+    const bounded = parseExplicitTimeAllocation("You have 5 seconds to start and stop", { now: NOW })!;
+    expect(canStartEffect(bounded, NOW + 6_000)).toBe(false);
+  });
+
   it("records a person's duration and its source", () => {
     const allocation = parseExplicitTimeAllocation("YOU HAVE 60 SECONDS", { now: NOW, messageId: "m1" })!;
     expect(allocation).toMatchObject({

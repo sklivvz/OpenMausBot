@@ -123,7 +123,7 @@ import { hostTimeZone, takesTurnClock, turnClockLine, withTurnClock } from "./tu
 import { createMemoryUpkeep, upkeepEnabled } from "./memory-upkeep.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createSkillReview, turnToolSteps } from "./skill-review.ts";
-import { canStartEffect, parseExplicitTimeAllocation, timeAllocationLine, timeAllocationState, updateTimeAllocation } from "./time-allocation.ts";
+import { canStartEffect, parseExplicitTimeAllocation, timeAllocationLine, updateTimeAllocation } from "./time-allocation.ts";
 import { receiptRecorded, type ReceiptVerificationConfig } from "./receipt-evidence.ts";
 import { AdmissionBounceGuard, PublicationAttempts, admissionBrief, effectWithinAdmission, validateMarketingAdmission } from "./marketing-admission.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
@@ -4358,7 +4358,7 @@ const coordinator: Coordinator = createCoordinator({
       // A running turn is left to report/reconcile; it is never killed at expiry.
       if ((node.parentId || node.groupId) && (node.status === "queued" || node.status === "resume")) {
         const allocation = timeAllocationForNode(node);
-        if (allocation && timeAllocationState(allocation, Date.now()) === "missed") {
+        if (!canStartEffect(allocation, Date.now())) {
           return "TIME ALLOCATION EXPIRED: this assignment may not start a new turn; preserve completed work and record the unmet commitment.";
         }
       }
@@ -4591,7 +4591,7 @@ const coordinator: Coordinator = createCoordinator({
     },
     timeExpired: node => {
       const allocation = timeAllocationForNode(node);
-      return Boolean(allocation && timeAllocationState(allocation, Date.now()) === "missed");
+      return !canStartEffect(allocation, Date.now());
     },
   },
 });
