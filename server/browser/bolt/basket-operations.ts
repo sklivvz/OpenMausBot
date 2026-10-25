@@ -99,7 +99,7 @@ export interface BoltAddControl {
   asUpdate: boolean;
   /** Observed add quantity from Bolt's `Add {N} ...` accessibility label, or the recorded simple-card default of one. */
   quantity: number | null;
-  quantitySource: "aria_label" | "simple_default" | "unknown";
+  quantitySource: "aria_label" | "simple_default" | "detail_counter" | "unknown";
   priceText: string | null;
   priceMinor: number | null;
   priceBasis: "add_total";
@@ -353,8 +353,22 @@ const READ_SCRIPT = `(() => {
           if (label && /€/.test(label)) { container = node; name = parseProductLabel(label); nameSource = "aria_label"; break; }
         }
       }
-      const quantity = floating ? Number(floating[2]) : (card ? 1 : null);
-      const quantitySource = floating ? "aria_label" : (card ? "simple_default" : "unknown");
+      let quantity = floating ? Number(floating[2]) : (card ? 1 : null);
+      let quantitySource = floating ? "aria_label" : (card ? "simple_default" : "unknown");
+      if (quantity === null) {
+        let node = addButton.parentElement;
+        for (let depth = 0; node && depth < 10; node = node.parentElement, depth++) {
+          const adds = [...node.querySelectorAll('${ADD}')].filter(visible);
+          if (adds.length !== 1 || adds[0] !== addButton) break;
+          const counters = [...node.querySelectorAll('[data-testid="components.ProviderDish.dishCounter.text"]')].filter(visible);
+          if (counters.length > 1) break;
+          if (counters.length === 1) {
+            const value = clean(counters[0].textContent);
+            if (/^\\d+$/.test(value) && Number(value) > 0) { quantity = Number(value); quantitySource = "detail_counter"; }
+            break;
+          }
+        }
+      }
       let priceMinor = parseMoney(controlText);
       let priceSource = priceMinor === null ? null : "control";
       if (floating && floating[4]) {
@@ -567,7 +581,7 @@ function parseAddControls(raw: unknown): { controls: BoltAddControl[]; replaceme
       controlText,
       asUpdate: item.asUpdate === true,
       quantity,
-      quantitySource: item.quantitySource === "aria_label" || item.quantitySource === "simple_default" ? item.quantitySource : "unknown",
+      quantitySource: item.quantitySource === "aria_label" || item.quantitySource === "simple_default" || item.quantitySource === "detail_counter" ? item.quantitySource : "unknown",
       priceText,
       priceMinor,
       priceBasis: "add_total",

@@ -145,7 +145,7 @@ function injectYogurtDetail(fixture: BasketFixture): void {
 }
 
 describe("add and reconcile against an existing baseline line", () => {
-  it("opens an unpriced basket by its route and adds the first item from an observed empty baseline", async () => {
+  it.each([true, false])("opens an unpriced basket and adds the first item (add aria label=%s)", async (hasAriaLabel) => {
     const fixture = new BasketFixture({ start: "menu", hideEmptyBasketEntry: true, lines: [
       { key: "yogurt", name: "Tere, Kreeka jogurt maitsestamata, 350 g", quantity: 0, unitPriceMinor: 176 },
     ] });
@@ -160,6 +160,7 @@ describe("add and reconcile against an existing baseline line", () => {
     expect(navigated).toEqual(["https://food.bolt.eu/en/1-tallinn/checkout/200420/?source=menu_screen"]);
     fixture.showMenu();
     injectYogurtDetail(fixture);
+    if (!hasAriaLabel) fixture.window.document.querySelector('[data-action="add-yogurt"]')!.removeAttribute("aria-label");
     const product = await runner.run({ action: "read_item_options" }) as { observationRef: string };
     const added = await runner.run({ action: "add_configured_product", operationId: "first-item", observationRef: product.observationRef });
     expect(added.status).toBe("verified");
