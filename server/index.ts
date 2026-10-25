@@ -125,7 +125,7 @@ import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from ".
 import { createSkillReview, turnToolSteps } from "./skill-review.ts";
 import { canStartEffect, parseExplicitTimeAllocation, timeAllocationLine, timeAllocationState, updateTimeAllocation } from "./time-allocation.ts";
 import { receiptRecorded, type ReceiptVerificationConfig } from "./receipt-evidence.ts";
-import { AdmissionBounceGuard, admissionBrief, effectWithinAdmission, validateMarketingAdmission } from "./marketing-admission.ts";
+import { AdmissionBounceGuard, PublicationAttempts, admissionBrief, effectWithinAdmission, validateMarketingAdmission } from "./marketing-admission.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import type { CaptureTurn, RoomLine } from "./memory-capture.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profile-learned.ts";
@@ -4612,8 +4612,12 @@ function effectRefusalFor(capability: InternalCapability, tool: string, args: un
   const assignment = assignmentForCapability(capability);
   if (!assignment?.admission) return undefined;
   const decision = effectWithinAdmission(assignment.admission, tool, args);
-  if (decision.ok) return undefined;
-  return `${decision.code === "scope_unverifiable" ? "SCOPE UNVERIFIED" : "OUT OF SCOPE"}: ${decision.reason ?? "the outward action is outside the admitted scope"}. The action was not run. Return the exact conflict to the lead; a new admitted assignment is required for more work.`;
+  if (!decision.ok) {
+    return `${decision.code === "scope_unverifiable" ? "SCOPE UNVERIFIED" : "OUT OF SCOPE"}: ${decision.reason ?? "the outward action is outside the admitted scope"}. The action was not run. Return the exact conflict to the lead; a new admitted assignment is required for more work.`;
+  }
+  const publication = publicationAttempts.take(assignment.id, assignment.admission, decision.publishCalls ?? 0);
+  if (!publication.ok) return publication.reason;
+  return undefined;
 }
 threadsAwaitingTeammates = () => coordinator.awaitingTeammateThreads();
 const groupUsageReader = new GroupUsageReader(DATA_DIR);
@@ -5943,6 +5947,7 @@ bus.subscribe((event: RuntimeEvent) => {
 });
 
 const marketingBounceGuard = new AdmissionBounceGuard();
+const publicationAttempts = new PublicationAttempts();
 
 const skillReview = createSkillReview({
   enabled: () => skillReviewEnabled(cfg),

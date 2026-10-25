@@ -292,6 +292,8 @@ export interface EffectDecision {
   code?: "out_of_scope" | "scope_unverifiable";
   reason?: string;
   channels: string[];
+  /** Outbound calls in this single effect (a multi-execute can contain several). */
+  publishCalls?: number;
 }
 
 /**
@@ -302,7 +304,7 @@ export interface EffectDecision {
 export function effectWithinAdmission(admission: MarketingAdmission, toolName: string, args: unknown): EffectDecision {
   const calls = connectorCallsIn(toolName, args);
   const outward = calls.filter(call => isOutboundTool(call.slug));
-  if (!outward.length) return { ok: true, channels: [] };
+  if (!outward.length) return { ok: true, channels: [], publishCalls: 0 };
   if (!admission.operations.includes("publish")) {
     return { ok: false, code: "out_of_scope", channels: [], reason: "The admitted operations do not include publish; no outward send may start." };
   }
@@ -321,7 +323,33 @@ export function effectWithinAdmission(admission: MarketingAdmission, toolName: s
     }
     seen.push(channel);
   }
-  return { ok: true, channels: [...new Set(seen)] };
+  return { ok: true, channels: [...new Set(seen)], publishCalls: outward.length };
+}
+
+/**
+ * One admitted one-deliverable publication permits one publish attempt. A
+ * provider may need several preparation/container/reconciliation calls; those
+ * are not outbound and are not counted. A second publish in the same assignment
+ * must be reconciled or submitted as a new admitted assignment.
+ */
+export class PublicationAttempts {
+  private readonly counts = new Map<string, number>();
+
+  take(assignmentId: string, admission: MarketingAdmission, publishCalls: number): { ok: true } | { ok: false; reason: string } {
+    if (publishCalls <= 0 || admission.deliverables.length !== 1) return { ok: true };
+    if (publishCalls > 1) {
+      return { ok: false, reason: "PUBLICATION LIMIT: one admitted deliverable permits one publish call; this effect contains several. Split it into independently admitted deliverables." };
+    }
+    if ((this.counts.get(assignmentId) ?? 0) > 0) {
+      return { ok: false, reason: "PUBLICATION LIMIT: this admitted one-deliverable assignment already attempted a publish. Reconcile the provider state instead of publishing again; a genuinely new publication needs a new admitted assignment." };
+    }
+    this.counts.set(assignmentId, 1);
+    return { ok: true };
+  }
+
+  clear(assignmentId: string): void {
+    this.counts.delete(assignmentId);
+  }
 }
 
 /** A post-turn check remains; the pre-effect check above is the enforcement point. */
