@@ -13,7 +13,6 @@
         "mode": "replace",
         "value": [
           "company-knowledge-graph",
-          "company-graph",
           "sonarcloud",
           "slop-detector",
           "execution-tools",
@@ -21,7 +20,7 @@
           "assembled-output"
         ],
         "removed": [],
-        "rationale": "Keep the existing code-quality research/review server and the business research, classifier, execution receipts, review packets and artifact verification."
+        "rationale": "Keep the installed code-quality/research/review/execution servers and remove the stale company-graph assignment that is not installed."
       },
       "connectorScopes": {
         "apps": {
@@ -61,17 +60,16 @@
       "browser": false,
       "admissionRequired": true,
       "mcpServers": {
-        "mode": "merge",
+        "mode": "replace",
         "value": [
           "company-knowledge-graph",
-          "company-graph",
           "keila-drafts",
           "execution-tools",
           "assembled-output",
           "bluesky-connector",
           "threads-connector"
         ],
-        "rationale": "Keep the installed deterministic newsletter and supported social connector paths, and add the installed execution-tools host so Liz can produce the signed receipt the acceptance gate requires."
+        "rationale": "Keep the installed deterministic newsletter and supported social connector paths, add execution-tools for the receipt gate, and replace the stale company-graph assignment that is not installed."
       },
       "connectorScopes": {
         "apps": {
