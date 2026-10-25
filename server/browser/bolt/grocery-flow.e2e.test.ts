@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BrowserRuntime, type BrowserSpawnSpec } from "../../browser-runtime.ts";
 import { RuntimeRouter, type ChromeEngine } from "../engines.ts";
@@ -12,55 +12,6 @@ const ORIGIN = "https://food.bolt.eu";
 const BRANCH_URL = `${ORIGIN}/en/1-tallinn/p/28032-bolt-market-toompuiestee/`;
 const SOUP = "Presto, Organic Pumpkin Puree Soup with Coconut Milk, 300g";
 const JAM = "Meie Mari, Raspberry Jam, 310g";
-const SEARCH = 'input[data-testid="screens.Provider.Menu.ProviderMenuStickySearch.searchInput.input"]';
-const BASKET = 'button[data-testid="components.MainNavigationMenu.viewBasketButton"]';
-
-const BINDINGS = {
-  version: 1,
-  evidence: "Vendor test ids from food.bolt.eu public bundle sha256 df909f20f08346d8f1345e5dd65c645b06e7225a65862ab6205a58e0965c5965; minimal host mapping for the disposable QA fixture.",
-  root: {
-    kind: "object",
-    fields: {
-      search: { kind: "text", selector: SEARCH, attribute: "value", first: true, optional: true },
-      address: { kind: "text", selector: 'button[aria-label^="Delivery address "]', attribute: "aria-label", pattern: "^Delivery address\\s+(.+)$", group: 1, optional: true },
-      products: {
-        kind: "list",
-        optional: true,
-        selector: 'button[data-testid="components.GridMenuDishBase.view"]',
-        item: {
-          kind: "object",
-          fields: {
-            id: { kind: "text", attribute: "aria-label", pattern: "^,?\\s*(.+?)(?:,\\s*[0-9][0-9\\s.,]*€)?$", group: 1 },
-            name: { kind: "text", attribute: "aria-label", pattern: "^,?\\s*(.+?)(?:,\\s*[0-9][0-9\\s.,]*€)?$", group: 1 },
-            priceMinor: { kind: "money", attribute: "aria-label", pattern: "([0-9][0-9\\s.,]*€)\\s*$", group: 1, optional: true },
-            open: { kind: "control" },
-          },
-        },
-      },
-      basketState: {
-        kind: "object",
-        optional: true,
-        fields: {
-          loading: { kind: "exists", selector: '[data-testid="screens.Groceries.GroceriesScreen.activeBasketButton.loading"]' },
-          ready: { kind: "exists", selector: BASKET },
-          rowsAvailable: { kind: "exists", selector: '[data-testid="components.CheckoutItem.checkoutItemCounter"]' },
-          detail: { kind: "text", selector: BASKET, first: true, optional: true },
-          control: { kind: "control", selector: BASKET, first: true, optional: true },
-        },
-      },
-      controls: {
-        kind: "object",
-        fields: {
-          search: { kind: "control", selector: SEARCH, first: true, optional: true },
-          openBasket: { kind: "control", selector: BASKET, first: true, optional: true },
-          add: { kind: "control", selector: '[data-testid="components.ProviderDish.addButton"]', optional: true },
-          closeProduct: { kind: "control", selector: '[data-testid="screens.Provider.Dish.DishBottomSheet.closeButton"]', first: true, optional: true },
-          pay: { kind: "control", selector: '[data-testid="screens.OnePageCheckout.confirmSimpleButton"]', optional: true },
-        },
-      },
-    },
-  },
-};
 
 type Call = {
   tool: string;
@@ -81,7 +32,6 @@ afterEach(async () => {
 
 function authority() {
   const expected = new Map<string, string>();
-  const used = new Set<string>();
   let issued = 0;
   return {
     scope: { kind: "host_browser_profile" as const, profileKey: PROFILE },
@@ -96,11 +46,9 @@ function authority() {
     },
     async verify(ref: string, hash: string) {
       this.verifyCalls.push({ ref, hash });
-      if (used.has(ref)) throw new BoltFault("approval_already_used");
       const stored = expected.get(ref);
       if (!stored) throw new BoltFault("approval_unknown");
       if (stored !== hash) throw new BoltFault("checkout_quote_changed");
-      used.add(ref);
     },
   } satisfies BoltPaymentAuthority & {
     scope: { kind: "host_browser_profile"; profileKey: string };
@@ -113,8 +61,6 @@ function setup(env: Record<string, string> = {}) {
   const directory = mkdtempSync(join(tmpdir(), "bolt-grocery-"));
   const callLog = join(directory, "calls.jsonl");
   const bindingsPath = join(directory, "browser", "bolt", "dom-bindings.json");
-  mkdirSync(dirname(bindingsPath), { recursive: true });
-  writeFileSync(bindingsPath, JSON.stringify(BINDINGS));
   const spec: BrowserSpawnSpec = {
     command: process.execPath,
     args: [join(process.cwd(), "server", "testing", "fake-bolt-grocery.mjs")],
@@ -133,6 +79,7 @@ function setup(env: Record<string, string> = {}) {
     spec,
     payment,
     directory,
+    bindingsPath,
     calls: () => {
       if (!existsSync(callLog)) return [] as Call[];
       return readFileSync(callLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as Call);
@@ -195,6 +142,7 @@ async function reachSoupDetail(f: ReturnType<typeof setup>) {
 describe("the real agent_browser_bolt grocery workflow over a legacy agent-browser MCP", () => {
   it("discovers the tool and runs the full separate-call cart and checkout workflow", { timeout: 30_000 }, async () => {
     const f = setup();
+    expect(existsSync(f.bindingsPath), "the deployed profile has no dom-bindings.json").toBe(false);
     const listed = await f.router.agentRpc("qa-grocery", f.spec, "tools/list", {}) as { tools: Array<{ name: string }> };
     expect(listed.tools.map((tool) => tool.name)).toContain("agent_browser_bolt");
 
@@ -376,7 +324,8 @@ describe("the real agent_browser_bolt grocery workflow over a legacy agent-brows
       action: "pay", operationId: "pay-same-approval", observationRef: paid.observationRef,
       approvedCheckoutRef: fresh.approvalRef,
     });
-    expect(["unresolved_operation_reconcile_required", "approval_already_used"]).toContain(secondPay.code);
+    expect(secondPay.code).toBe("unresolved_operation_reconcile_required");
+    expect(f.payment.verifyCalls).toHaveLength(2);
     expect(payClicks(f.calls())).toBe(1);
   });
 
