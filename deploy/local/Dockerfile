@@ -1,5 +1,16 @@
 ARG BASE_IMAGE=ghcr.io/milind-soni/openmausbot:latest
-FROM ${BASE_IMAGE}
+# Qwen Code, the qwenAgent driver's CLI. The official npm package requires Node 22+.
+FROM ${BASE_IMAGE} AS qwen-base
+USER root
+ARG QWEN_CODE_VERSION=0.26.1
+RUN if [ -n "$QWEN_CODE_VERSION" ]; then \
+      HOME=/tmp/omb-build-home npm install -g "@qwen-code/qwen-code@${QWEN_CODE_VERSION}" \
+      && [ "$(qwen --version)" = "$QWEN_CODE_VERSION" ] \
+      && rm -rf /tmp/omb-build-home /tmp/node-compile-cache; \
+    fi
+USER maus
+
+FROM qwen-base
 USER root
 ARG ENGINES="@anthropic-ai/claude-code @openai/codex"
 RUN if [ -n "$ENGINES" ]; then npm install -g $ENGINES; fi
