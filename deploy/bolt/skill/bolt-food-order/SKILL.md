@@ -50,7 +50,12 @@ ambiguous fields fail that primitive only; they no longer discard the whole page
   a trusted baseline. `read_basket` on a closed basket returns
   `basketRows: "not_open"` and `next: "open_basket"`; pass its `observationRef`
   to `open_basket`. An empty basket is only empty when the page exposes an
-  affirmative empty state. `read_basket` returns exact rows with line totals
+  affirmative empty state. When Bolt hides the basket button before the first
+  item, `open_basket` opens the current branch's checkout route and reads its
+  actual empty state. Then return to that branch with `open_branch` and configure
+  the first item. The host retains that observed empty baseline for two minutes;
+  refresh it if it expires. Do not substitute a guessed empty basket or raw
+  browser clicks. `read_basket` returns exact rows with line totals
   (`priceBasis: "line_total"`, `lineTotalMinor`) and the observed basket total.
   `set_basket_quantity` takes the line `ref`, `expectedQuantity` and absolute
   `quantity`; zero removes that line. For a configured product, the host uses

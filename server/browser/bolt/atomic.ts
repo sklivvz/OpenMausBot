@@ -287,6 +287,7 @@ export class BoltAtomicOperations {
     }
     if (stored.version !== 1 || stored.profileKey !== this.host.profileKey || stored.branchId !== branchId) return undefined;
     if (this.#now() - stored.savedAt > BASELINE_MAX_AGE_MS) return undefined;
+    if (stored.emptyBasket && this.#now() - stored.savedAt > 120_000) return undefined;
     const rows: BoltBasketLine[] = stored.rows.map((row) => ({
       ref: row.ref,
       name: row.name,
@@ -562,7 +563,8 @@ export class BoltAtomicOperations {
       requireBolt(current.basketTotalMinor !== null, "basket_summary_unavailable_read_basket_again");
       requireBolt(current.basketTotalMinor === baseline.basketTotalMinor, "basket_changed_before_add");
     } else {
-      requireBolt(current.emptyBasket && current.rows.length === 0, "basket_baseline_stale_read_basket_again");
+      requireBolt(baseline.emptyBasket && current.rows.length === 0 && !current.replacementPrompt &&
+        (current.emptyBasket || (!current.open && !current.basketEntry && current.basketTotalMinor === null)), "basket_baseline_stale_read_basket_again");
     }
 
     const controls = await this.basket.readAddControls();
