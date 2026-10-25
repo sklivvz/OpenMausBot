@@ -77,18 +77,22 @@ const PROVIDER_IDS: Record<string, RegExp> = {
   mastodon: /https:\/\/[^\s/]+\/@[^\s/]+\/\d+/g,
 };
 
-/** Only structured provider object identifiers, never arbitrary words in JSON. */
+const ID_KEYS = new Set(["id", "postid", "urn", "permalink", "url", "uri", "shareid", "object", "activity", "value", "results", "response", "data", "target", "posturl"]);
+
+/** Only structured provider object identifiers under identifier-bearing fields. */
 function providerIds(value: unknown, channel: string): Set<string> {
   const ids = new Set<string>();
   const pattern = PROVIDER_IDS[channel];
   if (!pattern) return ids;
-  const visit = (node: unknown): void => {
+  const visit = (node: unknown, key?: string): void => {
     if (typeof node === "string") {
+      const normalized = key?.toLowerCase().replace(/[_-]/g, "");
+      if (normalized && !ID_KEYS.has(normalized)) return;
       for (const match of node.match(pattern) ?? []) ids.add(match);
       return;
     }
-    if (Array.isArray(node)) { for (const item of node) visit(item); return; }
-    if (record(node)) for (const item of Object.values(node)) visit(item);
+    if (Array.isArray(node)) { for (const item of node) visit(item, key); return; }
+    if (record(node)) for (const [name, item] of Object.entries(node)) visit(item, name);
   };
   visit(value);
   return ids;

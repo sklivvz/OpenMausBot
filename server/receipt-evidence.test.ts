@@ -128,6 +128,10 @@ describe("receipt evidence", () => {
       activity(150, "LINKEDIN_CREATE_LINKED_IN_POST", { id: share }),
       activity(200, "LINKEDIN_GET_POST_CONTENT", { id: share, author: "urn:li:person:other" }),
     ], context)).toBe(false);
+    expect(receiptRecorded([
+      activity(150, "LINKEDIN_CREATE_LINKED_IN_POST", { id: share }),
+      activity(200, "LINKEDIN_GET_POST_CONTENT", { author: "urn:li:person:fixture", commentary: share }),
+    ], context)).toBe(false);
   });
 
   it("does not attribute a multi-tool Composio wrapper result to every child", () => {
