@@ -148,33 +148,30 @@ describe("Bolt mechanical operations", () => {
   it("rejects a stale delivery quote and quantity precondition", async () => {
     const f = fixture();
     const input = f.input("select_delivery_option", { targetRef: "delivery-3" });
-    f.state.deliveryOptions![3].feeMinor++;
+    f.state.deliveryOptions![3].feeMinor = (f.state.deliveryOptions![3].feeMinor ?? 0) + 1;
     await expect(f.runner.run(input)).rejects.toThrow("stale_observation");
     await expect(f.runner.run(f.input("set_product_quantity", { quantity: 3, expectedQuantity: 2 }))).rejects.toThrow("quantity_precondition_failed");
     expect(f.port.click).not.toHaveBeenCalled();
   });
 
-  it("waits for applied search results instead of trusting the input echo", async () => {
+  it("dispatches search with input-only evidence and does not claim fresh results", async () => {
     const f = fixture();
     f.state.search = "old";
     f.state.searchResultQuery = "old";
     f.state.searchPending = false;
     f.state.products = [];
     f.port.fill = vi.fn(async (_ref, value) => { f.state.search = value; f.state.searchPending = true; });
-    const read = f.port.read;
-    let polls = 0;
-    f.port.read = vi.fn(async () => {
-      if (f.state.searchPending && ++polls === 3) { f.state.searchResultQuery = f.state.search; f.state.searchPending = false; }
-      return read();
-    });
-    expect((await f.runner.run(f.input("search_branch", { query: "soup" }))).status).toBe("verified");
-    expect(polls).toBe(3);
+    const result = await f.runner.run(f.input("search_branch", { query: "soup" })) as { status: string; verification?: string; searchResults?: string };
+    expect(result.status).toBe("dispatched");
+    expect(result.verification).toBe("input_only");
+    expect(result.searchResults).toBe("unknown");
   });
 
-  it("requires explicit empty basket evidence before navigating branches", async () => {
+  it("refuses a branch change while the recorded basket is still loading", async () => {
     const f = fixture();
     delete f.state.basket;
-    await expect(f.runner.run(f.input("open_branch", { branchUrl: "https://food.bolt.eu/en/1-fixture/p/456/" }))).rejects.toThrow("empty_basket_required");
+    f.state.basketState = { loading: true, ready: false, rowsAvailable: false };
+    await expect(f.runner.run(f.input("open_branch", { branchUrl: "https://food.bolt.eu/en/1-fixture/p/456/" }))).rejects.toThrow("basket_still_loading");
     expect(f.port.navigate).not.toHaveBeenCalled();
   });
 
