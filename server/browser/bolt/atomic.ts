@@ -564,7 +564,7 @@ export class BoltAtomicOperations {
       requireBolt(current.basketTotalMinor === baseline.basketTotalMinor, "basket_changed_before_add");
     } else {
       requireBolt(baseline.emptyBasket && current.rows.length === 0 && !current.replacementPrompt &&
-        (current.emptyBasket || (!current.open && !current.basketEntry && current.basketTotalMinor === null)), "basket_baseline_stale_read_basket_again");
+        (current.emptyBasket || (!current.open && current.basketTotalMinor === null)), "basket_baseline_stale_read_basket_again");
     }
 
     const controls = await this.basket.readAddControls();

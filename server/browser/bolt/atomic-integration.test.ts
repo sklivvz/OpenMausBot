@@ -160,7 +160,10 @@ describe("add and reconcile against an existing baseline line", () => {
     expect(navigated).toEqual(["https://food.bolt.eu/en/1-tallinn/checkout/200420/?source=menu_screen"]);
     fixture.showMenu();
     injectYogurtDetail(fixture);
-    if (!hasAriaLabel) fixture.window.document.querySelector('[data-action="add-yogurt"]')!.removeAttribute("aria-label");
+    if (!hasAriaLabel) {
+      fixture.window.document.querySelector('[data-action="add-yogurt"]')!.removeAttribute("aria-label");
+      fixture.window.document.body.insertAdjacentHTML("afterbegin", '<button aria-label="View basket">View basket</button>');
+    }
     const product = await runner.run({ action: "read_item_options" }) as { observationRef: string };
     const added = await runner.run({ action: "add_configured_product", operationId: "first-item", observationRef: product.observationRef });
     expect(added.status).toBe("verified");
