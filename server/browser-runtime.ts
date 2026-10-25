@@ -6,6 +6,7 @@ import { SECRET_ON_PAGE, SecretHolds, type SecretHold } from "./browser-secret-h
 import { SELVER_CART_SNAPSHOT, SELVER_CART_TOOL } from "./browser/selver-cart.ts";
 import { BOLT_INPUT, BoltFault } from "./browser/bolt/contracts.ts";
 import { BoltDomPort, loadBindings, type BoltDomTransport } from "./browser/bolt/browser.ts";
+import { BoltAtomicOperations } from "./browser/bolt/atomic.ts";
 import { BoltRunner, type BoltPaymentAuthority } from "./browser/bolt/runner.ts";
 import { BoltJournal } from "./browser/bolt/state.ts";
 import type { BrowserSteps, StepCall, StepContext } from "./browser-steps.ts";
@@ -717,7 +718,11 @@ export class BrowserRuntime {
     };
     try {
       const port = new BoltDomPort(transport, loadBindings(host.bindingsPath), gate);
-      const runner = new BoltRunner(port, new BoltJournal(host.directory), host.authority);
+      const atomic = new BoltAtomicOperations({
+        transport, guard: gate, directory: host.directory,
+        host: host.authority?.scope ? { profileKey: host.authority.scope.profileKey } : {},
+      });
+      const runner = new BoltRunner(port, new BoltJournal(host.directory), host.authority, atomic);
       return textResult(JSON.stringify(await runner.run(parsed.data)));
     } catch (error) {
       if (error instanceof BoltFault) return errorResult(JSON.stringify({ status: "blocked", code: error.code, operationId: parsed.data.operationId }));

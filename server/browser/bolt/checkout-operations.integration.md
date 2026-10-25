@@ -11,8 +11,8 @@ The host must pass trusted session facts, never tool arguments:
 
 ```ts
 const host = {
-  signedIn: hostSession.signedIn,
-  account: approvalScope.profileKey,
+  scope: "host_browser_profile",
+  profileKey: approvalScope.profileKey,
   branchId: observation.view.branchId ?? branchFromCheckoutUrl(await port.transport.url()),
 } satisfies CheckoutHostFacts;
 
@@ -21,12 +21,12 @@ const quote = await readCheckoutQuote(port.transport, { guard: port.guard, host 
 
 Trustworthy sources:
 
-- `signedIn`: the host's launched-profile/auth guard, not page text and not a
-  bot argument.
-- `account`: the approval identity already used by the host profile, for
-  example `boltPaymentAuthority`'s `profileKey`. It may be an approval scope;
-  do not present it as a provider account id unless a trusted profile source
-  proves that id.
+- `profileKey`: the approval identity already used by the host profile, for
+  example `boltPaymentAuthority`'s `profileKey`. Do not present it as a provider
+  account id unless a trusted profile source proves that id; `providerAccountId`
+  is separate and optional.
+- No `signedIn` boolean is required. The host browser profile binds approval;
+  guest checkout remains possible.
 - `branchId`: the route (`/checkout/<branchId>/` or `/p/<branchId>-slug/`) or
   the existing trusted `BoltView.branchId`. A host value that disagrees with
   the route produces `branch_route_mismatch`.
@@ -35,10 +35,10 @@ Trustworthy sources:
   selection.
 - `courierComment`: read from the checkout note input when present.
 
-If the adapter cannot supply `account` or `signedIn`, `quote.status` remains
-`partial` while `feeRows`, `adjustments`, delivery options, destination and
-`totalMinor` remain available. Production must implement the supplier; it must
-not fabricate an account or accept these facts from the model.
+If the adapter cannot supply `profileKey`, `quote.status` remains `partial`
+while `feeRows`, `adjustments`, delivery options, destination and `totalMinor`
+remain available. Production supplies it from the existing host approval scope;
+it must not fabricate a provider account or accept these facts from the model.
 
 ## Approval flow
 

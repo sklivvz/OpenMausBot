@@ -123,10 +123,12 @@ describe("the recorded Bolt mappings on a disposable DOM", () => {
     expect(f.runner.journal.read()).toEqual({});
   });
 
-  it("refuses an ambiguous address control rather than guessing", async () => {
+  it("returns a partial observation instead of failing a whole page on an ambiguous optional address", async () => {
     const f = fixture();
     f.window.document.body.insertAdjacentHTML("afterbegin", `<button aria-label="Delivery address Home, Uus-Volta 6/1, Tallinn"></button>`);
-    await expect(f.port.read()).rejects.toThrow("ambiguous_control");
+    const observed = await f.port.read();
+    expect(observed.view.address).toBeUndefined();
+    expect(observed.view.branchId).toBe("70745");
   });
 
   it("does not claim a branch or query it did not see in the route", async () => {

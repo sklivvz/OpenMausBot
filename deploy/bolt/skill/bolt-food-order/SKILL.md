@@ -13,60 +13,71 @@ first; login and checkout are not prerequisites for useful recommendations.
 
 Read this procedure before using the browser. `agent_browser_bolt` runs on both
 the native Chrome and legacy agent-browser engines. Call `inspect` first and read
-its `supportedActions`; the built-in host-reviewed mapping currently exposes
-current-address reading, branch search dispatch, product-card reads, basket
-loading state, and fulfilment/delivery reads and selections. Unsupported item,
-basket-row, saved-address and checkout actions fail before any effect. Continue
-those non-payment preparation steps with the recorded browser route below, using
-observed controls and verifying each change. Do not invent selectors, run ad-hoc
-DOM experiments, or bypass an ambiguous or pending native effect. Payment never
-falls back to the generic route.
+its `supportedActions`. `inspect` returns fresh product cards and product-open
+refs from the same observation used by `search_branch`, `open_product`, item
+configuration and add, so use its `observationRef` for the first product action.
+Basket actions use the `observationRef` from `read_basket`; checkout actions use
+the `observationRef` from `read_checkout`. Do not reuse a product ref for a
+basket or checkout action. Do not invent selectors, run ad-hoc DOM experiments,
+or bypass an ambiguous or pending native effect.
 
 ## Mechanical operation route
 
-Start with `inspect` or the relevant read. Use the returned `observationRef` and
-`targetRef`, never invented selectors or IDs. Give each mutation a stable
-`operationId`; preserve it through interruption. A `pending` or unknown result
-requires `reconcile_operation` with that ID before another mutation. Do not use
-another route to bypass an unresolved effect.
+Start with `inspect`. Use the returned `observationRef` and product `ref`; never
+invent selectors or IDs. Give each mutation a stable `operationId`; preserve it
+through interruption. A `pending` or unknown result requires
+`reconcile_operation` with that ID before another mutation. Do not use another
+route to bypass an unresolved effect.
 
-The built-in mappings support `inspect`, `search_branch`, `read_basket`,
-`list_fulfilment_options`, `select_fulfilment`, `list_delivery_options`,
-`select_delivery_option` and `reconcile_operation`. `search_branch` returns
-`status: "dispatched"`, `verification: "input_only"` and
-`searchResults: "unknown"`: the search input was filled, but the recorded DOM
-does not prove the result cards finished refreshing. Inspect the cards before
-choosing one. `read_basket` returns a `basketState` with `loading`, `ready` and
-`rowsAvailable: false`; it is not a cart-row read and never a total. Do not claim
-an empty, complete or priced basket from it. Missing `basketRows` or checkout
-fields are explicit gaps, not zero.
+The built-in mappings now support `inspect`, `open_branch`, `search_branch`,
+`open_product`, `read_item_options`, `set_item_options`,
+`set_product_quantity`, `read_item_comment`, `set_item_comment`,
+`add_configured_product`, `close_product`, `open_basket`, `read_basket`,
+`set_basket_quantity`, `list_fulfilment_options`, `select_fulfilment`,
+`list_delivery_options`, `select_delivery_option`, `read_checkout`,
+`request_payment_approval`, `pay`, `read_order` (still unsupported) and
+`reconcile_operation`. `search_branch` verifies that results actually changed and
+returns `status: "verified"` with the matching card refs. Unsupported or
+ambiguous fields fail that primitive only; they no longer discard the whole page.
 
-Product cards preserve the displayed pack price (`displayedPriceBasis:
-"per_pack"`), the raw sale description, and a parsed sale unit only when the card
-shows one. A card without sale quantity, unit price or basis leaves those fields
-absent. Never infer kilograms from pieces, a per-kilogram price from a pack
-price, or edible quantity from product text.
+- **Product:** `search_branch`, `open_product`, `read_item_options`,
+  `set_item_options`, `set_product_quantity`, `read_item_comment`,
+  `set_item_comment`, `add_configured_product`, `close_product`. Product cards
+  preserve the displayed pack price (`displayedPriceBasis: "per_pack"`), raw sale
+  description and an observed unit price. Opening a product does not require the
+  checkout, option group or comment schema.
+- **Basket:** read the basket before configuring a product so the host can store
+  a trusted baseline. `read_basket` on a closed basket returns
+  `basketRows: "not_open"` and `next: "open_basket"`; pass its `observationRef`
+  to `open_basket`. An empty basket is only empty when the page exposes an
+  affirmative empty state. `read_basket` returns exact rows with line totals
+  (`priceBasis: "line_total"`, `lineTotalMinor`) and the observed basket total.
+  `set_basket_quantity` takes the line `ref`, `expectedQuantity` and absolute
+  `quantity`; zero removes that line. For a configured product, the host uses
+  the trusted basket baseline even when the product sheet hides basket rows.
+  Without a baseline the add fails with `read_basket_required_before_add`; call
+  `open_basket`/`read_basket` first, never invent a baseline.
+- **Checkout:** `read_checkout` returns complete checkout facts and an exact
+  `checkoutHash` only when the quote reconciles. A partial result keeps the
+  observed fees/total and lists `missing`/`conflicts`; it is not an approval-ready
+  checkout. `request_payment_approval` creates the host card for the exact fresh
+  checkout. `pay` re-reads that checkout, verifies the host approval against the
+  fresh hash and clicks the observed pay control once. It returns
+  `status: "dispatched"`, `purchase: "unverified"` and a pending receipt; it does
+  not claim an order was placed. `read_order` is still unsupported, so order
+  confirmation remains a separate, explicit limit. Never retry payment or use a
+  new operation ID after an unknown pay result.
 
-- Session and destination: `read_session`, `list_saved_addresses`,
-  `select_saved_address` (blocked until their DOM mappings exist).
-- Menu: `search_branch` is available as input-only dispatch. `open_branch`, `open_product` and `close_product` are blocked until their mappings exist; use the recorded route for non-payment preparation.
-- Item: `read_item_options`, `set_item_options`, `set_product_quantity`,
-  `read_item_comment`, `set_item_comment`, `add_configured_product` (blocked
-  until dish-sheet mappings exist).
-- Basket: `read_basket` exposes loading/readiness only; `open_basket` and
-  `set_basket_quantity` are blocked until row mappings exist.
-- Fulfilment: `list_fulfilment_options`, `select_fulfilment`,
-  `list_delivery_options`, `select_delivery_option`.
-- Checkout: `read_checkout`, `request_payment_approval`, `pay`, `read_order`.
-
-For option groups supply every group with `{groupRef, choices:[{choiceRef,
+Product options: supply every group with `{groupRef, choices:[{choiceRef,
 quantity}]}`, including empty lists for unselected optional groups. Respect
-single/multiple choice limits and counted extras. Quantity setters include
-`expectedQuantity`; zero removes the selected basket line. Item comments are
-separate from courier instructions. Read available delivery choices dynamically;
-never assume a fixed number, position, price or ETA. Payment requires the host's
-accepted exact-checkout card and `approvedCheckoutRef`, followed by fresh checkout
-comparison. A bot-authored approval assertion is not the card.
+single/multiple choice limits, availability and counted extras. Item comments are
+separate from courier instructions. Delivery choices are read dynamically with
+their current labels, fees and ETA; never assume a fixed count, position or price.
+Payment requires the host's accepted exact-checkout card and
+`approvedCheckoutRef`; a bot-authored approval is not the card. The approval is
+scoped to the host browser profile, not an invented provider account id. Any
+changed item, option, comment, destination, delivery quote, payment method or
+total needs a new approval.
 
 ## Recorded browser route
 
@@ -100,7 +111,8 @@ retain the corrected step and evidence for skill review.
    If item comments are supported, enter the exact requested comment and verify
    it remains in the item; a courier note is not a substitute. Do not silently
    discard unsupported choices or dietary instructions.
-6. **Add.** Record the basket baseline. Use the sheet's
+6. **Add.** Capture the trusted basket baseline before configuring the product
+   (`open_basket`, then `read_basket`). Use the sheet's
    `components.ProviderDish.addButton` once; confirm the resulting line, options,
    item comment and quantity. In edit mode the action may be Update: do not treat
    it as adding another item. Close the sheet using its observed close control;
@@ -108,8 +120,10 @@ retain the corrected step and evidence for skill review.
 7. **Basket.** Open `components.MainNavigationMenu.viewBasketButton`, or the
    grocery control `screens.Groceries.GroceriesScreen.activeBasketButton`, or the
    search control `screens.Provider.Menu.ProviderMenuStickySearch.viewBasket`.
-   Inspect actual rows. Scope minus/plus to the matching row; the recorded minus
-   ID is `components.CheckoutItem.checkoutItemCounter.minus`, quantity `.text`.
+   Read actual rows through `read_basket`; line `Price:` is the extended line
+   total (possibly the original undiscounted total), not a unit price. Scope
+   minus/plus to the matching row; the recorded minus ID is
+   `components.CheckoutItem.checkoutItemCounter.minus`, quantity `.text`.
    Discover the current plus control rather than assuming symmetry. Verify each
    absolute target quantity; keep rows with different options/comments distinct.
 8. **Fulfilment and delivery.** Read all currently offered choices, including
@@ -117,9 +131,10 @@ retain the corrected step and evidence for skill review.
    Then list available delivery tiers with exact fee and ETA. There may be one
    to four choices; choose by current labels, never ordinal position. Do not
    add priority delivery without authority. Verify the selected option and total.
-9. **Checkout.** Read every item, option, comment, destination, fulfilment,
-   delivery tier/ETA, courier instruction, payment method, subtotal, adjustments
-   and total. Fees and discounts must come from checkout, not inferred sums.
+9. **Checkout.** `read_checkout` every item, option, comment, destination,
+   fulfilment, delivery tier/ETA, courier instruction, payment method, subtotal,
+   adjustments and total. Fees and discounts must come from checkout, not
+   inferred sums. A partial read is not approval-ready.
    Give Donna this exact basket and total for the user decision. A menu-price
    approval, budget ceiling or urgency does not approve an arbitrary paid basket.
 10. **Pay and reconcile.** Check the latest user decision and fresh checkout.
@@ -127,8 +142,10 @@ retain the corrected step and evidence for skill review.
     control (`screens.OnePageCheckout.confirmSimpleButton`, accessible text
     includes Confirm order and pay plus total). Submit once. A timeout or lost
     response means inspect the active order/history, never click again blindly.
-    Verify order reference, restaurant, items, paid total and arrival/status.
-    Report an unresolved result honestly and retain the operation evidence.
+    The guarded operation returns `dispatched` with `purchase: "unverified"`;
+    order reference/items/status require a separate order read that is not yet
+    mapped. Report the unresolved result honestly and retain the operation
+    evidence.
 
 STOP cancels pending purchase authority. Changes outside an explicit substitution
 policy require a new decision. Do not place a replacement order to repair a bad

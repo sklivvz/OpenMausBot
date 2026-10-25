@@ -55,8 +55,8 @@ function normalizeSnapshot(raw: unknown): unknown {
     : choice);
   const basketState = next.basketState;
   if (basketState && typeof basketState === "object") {
-    const state = basketState as { loading?: unknown; ready?: unknown };
-    next.basketState = { ...basketState, ready: state.ready === true && state.loading !== true, rowsAvailable: false };
+    const state = basketState as { loading?: unknown; ready?: unknown; rowsAvailable?: unknown };
+    next.basketState = { ...basketState, ready: state.ready === true && state.loading !== true, rowsAvailable: state.rowsAvailable === true };
   }
   return { ...raw, view: next };
 }
@@ -135,10 +135,16 @@ export class BoltDomPort implements BoltPort {
     this.checkOrigin(await this.transport.url());
     const raw = await this.transport.evaluate(inspectionScript(this.bindings));
     requireBolt(JSON.stringify(raw).length <= 128_000, "observation_too_large");
-    if (raw && typeof raw === "object" && "error" in raw) throw new BoltFault(`dom_binding_error:${String(raw.error).slice(0, 100)}`);
     const normalized = normalizeSnapshot(raw);
     const parsed = snapshot.safeParse(normalized);
-    requireBolt(parsed.success, "dom_binding_incomplete");
+    if (!parsed.success) {
+      const fallback = raw && typeof raw === "object" ? (raw as { url?: unknown }).url : undefined;
+      requireBolt(typeof fallback === "string", "dom_binding_incomplete");
+      this.checkOrigin(fallback);
+      const partial = { url: fallback, view: {} as z.infer<typeof VIEW>, targets: {} };
+      this.#latest = partial;
+      return { url: fallback, observationRef: digest(partial), view: withUrlFacts(partial.view, fallback) };
+    }
     this.checkOrigin(parsed.data.url);
     const view = withUrlFacts(parsed.data.view, parsed.data.url);
     this.#latest = parsed.data;

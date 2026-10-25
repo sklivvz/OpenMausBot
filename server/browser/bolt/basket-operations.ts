@@ -138,6 +138,8 @@ export interface BoltBasketSetQuantityInput {
 
 export interface BoltBasketAddInput {
   controlRef: string;
+  /** Exact control selector resolved from the product detail observation. */
+  controlSelector?: string;
   expectedName?: string;
   expectedQuantity?: number;
   expectedPriceMinor?: number;
@@ -318,10 +320,11 @@ const READ_SCRIPT = `(() => {
       const controlText = clean(addButton.innerText || addButton.textContent);
       const ariaLabel = clean(addButton.getAttribute("aria-label"));
       const controlLabel = controlText.replace(/^[\\uE000-\\uF8FF\\s]+/u, "");
+      const floating = /^\\s*(Add|Update)\\s+(\\d+)\\s+([\\s\\S]+?)\\s+to basket\\.(?:\\s*Price:\\s*([0-9][0-9\\s.,]*\\s*€))?/i.exec(ariaLabel);
       const card = addButton.closest('${PRODUCT_CARD}');
       let container = card;
-      let name = card ? parseProductLabel(card.getAttribute("aria-label") || card.innerText) : null;
-      let nameSource = name ? "product_card" : "none";
+      let name = floating && clean(floating[3]) ? clean(floating[3]) : (card ? parseProductLabel(card.getAttribute("aria-label") || card.innerText) : null);
+      let nameSource = name ? (floating ? "aria_label" : "product_card") : "none";
       if (!name) {
         let node = addButton.parentElement;
         for (let depth = 0; node && depth < 8; node = node.parentElement, depth++) {
@@ -336,11 +339,14 @@ const READ_SCRIPT = `(() => {
           if (label && /€/.test(label)) { container = node; name = parseProductLabel(label); nameSource = "aria_label"; break; }
         }
       }
-      const quantityMatch = /\\b(?:Add|Update)\\s+(\\d+)\\b/i.exec(ariaLabel || controlText);
-      const quantity = quantityMatch ? Number(quantityMatch[1]) : (card ? 1 : null);
-      const quantitySource = quantityMatch ? "aria_label" : (card ? "simple_default" : "unknown");
+      const quantity = floating ? Number(floating[2]) : (card ? 1 : null);
+      const quantitySource = floating ? "aria_label" : (card ? "simple_default" : "unknown");
       let priceMinor = parseMoney(controlText);
       let priceSource = priceMinor === null ? null : "control";
+      if (floating && floating[4]) {
+        const labelTotal = parseMoney(floating[4]);
+        if (labelTotal !== null && priceMinor !== labelTotal) { priceMinor = labelTotal; priceSource = "aria_label"; }
+      }
       if (priceMinor === null && ariaLabel) { priceMinor = parseMoney(ariaLabel); priceSource = priceMinor === null ? null : "aria_label"; }
       if (priceMinor === null && container) {
         priceMinor = packPrice(container.getAttribute("aria-label") || container.innerText);
@@ -351,11 +357,11 @@ const READ_SCRIPT = `(() => {
         nameSource,
         controlText,
         ariaLabel,
-        asUpdate: /^Update(?:\\s|$|[0-9])/i.test(controlLabel) || /^Update/i.test(ariaLabel),
+        asUpdate: floating ? floating[1].toLowerCase() === "update" : /^Update(?:\\s|$|[0-9])/i.test(controlLabel) || /^Update/i.test(ariaLabel),
         quantity,
         quantitySource,
         selector: cssPath(addButton),
-        priceText: (controlText.match(/[0-9][0-9\\s.,]*\\s*€/g) || []).pop() || (ariaLabel.match(/[0-9][0-9\\s.,]*\\s*€/g) || []).pop() || null,
+        priceText: (floating && floating[4] ? floating[4] : (controlText.match(/[0-9][0-9\\s.,]*\\s*€/g) || []).pop() || (ariaLabel.match(/[0-9][0-9\\s.,]*\\s*€/g) || []).pop()) || null,
         priceMinor,
         priceSource,
         enabled: !addButton.disabled && addButton.getAttribute("aria-disabled") !== "true",
@@ -719,14 +725,16 @@ export class BoltBasketOperations {
     const current = await this.read();
     requireBolt(current.complete, "basket_observation_incomplete");
     const controls = await this.readAddControls();
-    const matches = controls.filter((control) => control.ref === input.controlRef);
+    const matches = input.controlSelector
+      ? controls.filter((control) => control.selector === input.controlSelector)
+      : controls.filter((control) => control.ref === input.controlRef);
     requireBolt(matches.length > 0, "add_control_not_found");
     requireBolt(matches.length === 1 && !matches[0].ambiguous, "add_control_ambiguous");
     const control = matches[0];
     requireBolt(control.enabled, "add_control_disabled");
     requireBolt(!control.asUpdate, "add_control_is_update");
-    requireBolt(control.name, "add_control_name_unknown");
-    const controlName = control.name;
+    requireBolt(control.name ?? input.expectedName, "add_control_name_unknown");
+    const controlName = control.name ?? input.expectedName!;
     if (input.expectedName !== undefined) requireBolt(normalized(controlName) === normalized(input.expectedName), "add_control_name_mismatch");
     const addQuantity = input.expectedQuantity ?? control.quantity;
     requireBolt(addQuantity !== null && addQuantity >= 1 && addQuantity <= 100, "add_quantity_unknown");
@@ -747,7 +755,7 @@ export class BoltBasketOperations {
     if (baseline) baselineKind = baseline.basketTotalMinor === null && baseline.emptyBasket && baseline.rows.length === 0 ? "empty_basket" : "observed";
     else if (current.emptyBasket && current.rows.length === 0) baselineKind = "empty_basket";
     else baselineKind = "unknown";
-    requireBolt(beforeTotal !== null, "basket_baseline_required_for_add");
+    requireBolt(beforeTotal !== null, "read_basket_required_before_add");
     if (baseline) {
       const currentTotal = totalValue(current);
       if (!(totalValue(baseline) === 0 && currentTotal === null)) {
@@ -756,10 +764,10 @@ export class BoltBasketOperations {
       if (current.open) requireBolt(sameRows(current, baseline), "basket_changed_before_add");
     }
 
-    const latestControls = (await this.readAddControls()).filter((candidate) => candidate.ref === input.controlRef);
+    const latestControls = (await this.readAddControls()).filter((candidate) => input.controlSelector ? candidate.selector === input.controlSelector : candidate.ref === input.controlRef);
     requireBolt(latestControls.length === 1 && !latestControls[0].ambiguous, "add_control_changed_before_effect");
     const latest = latestControls[0];
-    requireBolt(latest.enabled && !latest.asUpdate && latest.name === controlName && latest.quantity === addQuantity && latest.priceMinor === addTotal, "add_control_changed_before_effect");
+    requireBolt(latest.enabled && !latest.asUpdate && (latest.name ?? input.expectedName) === controlName && latest.quantity === addQuantity && latest.priceMinor === addTotal, "add_control_changed_before_effect");
     await this.dispatch({ kind: "add_product", control: latest.selector, targetRef: latest.ref, expectedQuantity: addQuantity }, () => this.transport.click(latest.selector));
     const applied = await this.waitForAdd(control, addTotal, beforeTotal);
     if (applied.replacementPrompt) throw new BoltFault("basket_replacement_confirmation_required");
@@ -772,7 +780,7 @@ export class BoltBasketOperations {
         if (diff.ok) {
           const total = changeTotal(beforeTotal, after, diff.lineDeltaMinor ?? addTotal);
           requireBolt(total.observedDeltaMinor === addTotal, "basket_total_delta_mismatch");
-          const warnings = [...after.rows.flatMap((row) => row.warnings)].slice(0, 20);
+          const warnings = after.rows.flatMap((row) => row.warnings).slice(0, 20);
           const previous = before.rows.find((row) => row.ref === diff.row!.ref);
           return {
             status: "verified",

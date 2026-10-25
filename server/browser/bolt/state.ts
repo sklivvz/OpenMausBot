@@ -18,6 +18,8 @@ export interface BoltReceipt {
   verification?: "input_only";
   checkoutHash?: string;
   orderId?: string;
+  /** Basket snapshot the host adapter observed when it wrote add intent. */
+  basketBaseline?: unknown;
 }
 
 /** Durable intent is written before the first effect. Unknown outcomes block new mutations. */

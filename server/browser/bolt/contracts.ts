@@ -22,15 +22,17 @@ export const BOLT_INPUT = z.object({
   tab: z.string().regex(/^t[1-9]\d{0,8}$/).optional(),
 });
 export type BoltInput = z.infer<typeof BOLT_INPUT>;
-const option = z.object({ ref, id: text, label: text, available: z.boolean(), selected: z.boolean(), priceMinor: minor, quantity: quantity.optional(), maxQuantity: quantity.optional(), control: ref, plus: ref.optional(), minus: ref.optional() });
+const option = z.object({ ref, id: text, label: text, available: z.boolean(), selected: z.boolean(), priceMinor: minor.optional(), quantity: quantity.optional(), maxQuantity: quantity.optional(), control: ref, plus: ref.optional(), minus: ref.optional() });
 const group = z.object({ ref, id: text, label: text, min: quantity.nullable(), max: quantity.nullable(), mode: z.enum(["single", "multiple", "quantity"]), choices: z.array(option).max(50) });
 const comment = z.object({ supported: z.boolean(), text, maxLength: z.number().int().nonnegative().nullable(), input: ref.optional(), save: ref.optional() });
 const configured = { id: text.min(1), name: text.min(1), quantity: quantity, unitPriceMinor: minor, options: z.array(z.object({ groupId: text, groupLabel: text.min(1), choiceId: text, choiceLabel: text.min(1), quantity })).max(100), comment: text };
-export const LINE = z.object({ ref, ...configured, edit: ref.optional(), plus: ref.optional(), minus: ref.optional() });
+export const LINE = z.object({ ref, ...configured, /** Extended line total when the page exposes only that amount. */ lineTotalMinor: minor.optional(), priceBasis: z.literal("line_total").optional(), edit: ref.optional(), plus: ref.optional(), minus: ref.optional() });
 export type BoltLine = z.infer<typeof LINE>;
 const delivery = z.object({ ref, id: text.min(1), label: text.min(1), feeMinor: minor.nullable(), eta: text.min(1).nullable(), available: z.boolean(), selected: z.boolean(), control: ref });
 const checkout = z.object({
-  account: text.min(1), branchId: text.min(1), currency: z.literal("EUR"), destination: text.min(1), fulfilment: text.min(1), deliveryOptionId: text.min(1), deliveryLabel: text.min(1), deliveryEta: text.min(1), paymentMethod: text.min(1), courierComment: text,
+  /** Host browser approval scope; never an unproven provider account id. */
+  account: text.min(1), accountScope: z.literal("host_browser_profile").optional(), providerAccountId: text.optional(),
+  branchId: text.min(1), currency: z.literal("EUR"), destination: text.min(1), fulfilment: text.min(1), deliveryOptionId: text.min(1), deliveryLabel: text.min(1), deliveryEta: text.min(1), paymentMethod: text.min(1), courierComment: text,
   lines: z.array(LINE).min(1).max(100), subtotalMinor: minor.nonnegative(), adjustments: z.array(z.object({ label: text.min(1), amountMinor: minor })).max(30), totalMinor: minor.nonnegative(),
 });
 export type BoltCheckout = z.infer<typeof checkout>;

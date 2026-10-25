@@ -8,16 +8,18 @@ export interface CheckoutTransport {
 }
 
 /**
- * Trusted facts from the host's authenticated browser session.
+ * Trusted facts from the host's browser profile and session.
  *
- * `account` is the approval identity already bound to the host profile, for
- * example the profile scope used by the existing payment authority. It is not
- * a claim that Bolt exposed a provider account id. Never populate any of these
- * fields from an agent_browser_bolt tool argument.
+ * `profileKey` is the approval scope the host already binds to this browser
+ * profile, for example the key used by BoltPaymentAuthority. It is not a claim
+ * that Bolt exposed a provider account id. `providerAccountId` is present only
+ * when a host session source proves it. Never populate any of these fields from
+ * an agent_browser_bolt tool argument.
  */
 export interface CheckoutHostFacts {
-  signedIn: boolean;
-  account: string;
+  scope: "host_browser_profile";
+  profileKey: string;
+  providerAccountId?: string;
   branchId?: string;
   paymentMethod?: string;
   courierComment?: string;
@@ -105,6 +107,8 @@ export interface CheckoutQuote {
   courierComment: string;
   branchId?: string;
   account?: string;
+  accountScope?: "host_browser_profile";
+  providerAccountId?: string;
   missing: string[];
   conflicts: string[];
   observedHash: string;
@@ -481,8 +485,8 @@ async function readFromRaw(value: unknown, url: string, options: CheckoutReadOpt
   }
 
   const host = options.host;
-  if (!host?.signedIn) missing.add("signedIn");
-  if (!host?.account?.trim()) missing.add("account");
+  if (host?.scope !== "host_browser_profile") missing.add("hostBrowserProfile");
+  if (!host?.profileKey?.trim()) missing.add("approvalProfile");
   const routeBranch = /\/checkout\/(\d+)(?:\/|$)/.exec(url)?.[1] ?? /\/p\/(\d+)(?:-|\/|$)/.exec(url)?.[1];
   const branchId = host?.branchId ?? routeBranch;
   if (!branchId) missing.add("branchId");
@@ -495,7 +499,9 @@ async function readFromRaw(value: unknown, url: string, options: CheckoutReadOpt
   const observed = {
     destination,
     branchId,
-    account: host?.account,
+    account: host?.profileKey,
+    accountScope: host?.scope,
+    providerAccountId: host?.providerAccountId,
     deliveryOptions: deliveryOptions.map(({ control: _control, ref: _ref, ...choice }) => choice),
     selectedDeliveryOption: selectedDelivery.length === 1 ? selectedDelivery[0].id : undefined,
     paymentOptions: paymentOptions.map(({ control: _control, ref: _ref, ...choice }) => choice),
@@ -513,9 +519,11 @@ async function readFromRaw(value: unknown, url: string, options: CheckoutReadOpt
 
   let checkout: BoltCheckout | undefined;
   if (missing.size === 0 && conflicts.size === 0 && destination && subtotalMinor !== undefined && effectiveTotal !== undefined &&
-      selectedDelivery.length === 1 && finalPaymentMethod && branchId && host?.account && lines.length > 0) {
+      selectedDelivery.length === 1 && finalPaymentMethod && branchId && host?.profileKey && lines.length > 0) {
     checkout = {
-      account: host.account,
+      account: host.profileKey,
+      accountScope: "host_browser_profile",
+      ...(host?.providerAccountId ? { providerAccountId: host.providerAccountId } : {}),
       branchId,
       currency: "EUR",
       destination,
@@ -554,7 +562,9 @@ async function readFromRaw(value: unknown, url: string, options: CheckoutReadOpt
     paymentTotalMinor,
     courierComment,
     branchId,
-    account: host?.account,
+    account: host?.profileKey,
+    accountScope: host?.scope,
+    ...(host?.providerAccountId ? { providerAccountId: host.providerAccountId } : {}),
     missing: [...missing].sort(),
     conflicts: [...conflicts].sort(),
     observedHash,

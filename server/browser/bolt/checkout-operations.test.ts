@@ -44,7 +44,7 @@ function temporaryDirectory(): string {
 async function readFixture(fixture: CheckoutFixture, host: Partial<CheckoutHostFacts> = {}) {
   const window = checkoutWindow(fixture);
   const quote = await readCheckoutQuote(checkoutTransport(window), {
-    host: { signedIn: true, account: fixture.account, branchId: fixture.branchId, ...host },
+    host: { scope: "host_browser_profile", profileKey: fixture.account, branchId: fixture.branchId, ...host },
   });
   return { window, quote };
 }
@@ -243,7 +243,7 @@ describe("atomic Bolt checkout quote", () => {
       <div data-testid="screens.Groceries.GroceriesScreen.activeBasketButton.loading"></div>
       <button aria-label="Delivery address">unrelated empty address control</button>`);
     const quote = await readCheckoutQuote(checkoutTransport(window), {
-      host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
+      host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
     });
     expect(quote.status).toBe("complete");
     expect(quote.totalMinor).toBe(1281);
@@ -256,7 +256,7 @@ describe("atomic Bolt checkout quote", () => {
     mutateTotal(window, 1381);
     mutatePayLabel(window, 1381);
     const second = await readCheckoutQuote(checkoutTransport(window), {
-      host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
+      host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
     });
     expect(second.status).toBe("complete");
     expect(second.totalMinor).toBe(1381);
@@ -274,7 +274,7 @@ describe("atomic Bolt checkout quote", () => {
 
   it("invalidates approval when the destination or selected payment method changes", async () => {
     const { window, quote: first } = await readFixture(E03_CHECKOUT);
-    const options = { host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId } };
+    const options = { host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId } };
     window.document.querySelector('[aria-label^="Delivery address"]')!.setAttribute(
       "aria-label",
       "Delivery address Home, Other 1, Tallinn",
@@ -312,13 +312,13 @@ describe("atomic Bolt checkout quote", () => {
   });
 
   it("keeps useful quote data but withholds approval when authenticated host facts are missing", async () => {
-    const { quote } = await readFixture(E03_CHECKOUT, { signedIn: false, account: "" });
+    const { quote } = await readFixture(E03_CHECKOUT, { profileKey: "" });
     expect(quote.status).toBe("partial");
     expect(quote.totalMinor).toBe(1281);
     expect(quote.feeRows).toHaveLength(4);
     expect(quote.adjustments).toHaveLength(3);
     expect(quote.deliveryOptions).toHaveLength(3);
-    expect(quote.missing).toEqual(expect.arrayContaining(["signedIn", "account"]));
+    expect(quote.missing).toEqual(expect.arrayContaining(["approvalProfile"]));
     const store = approvalStore();
     const authority = boltPaymentAuthority(store, scope, () => 1000);
     const request = vi.spyOn(authority, "request");
@@ -330,7 +330,7 @@ describe("atomic Bolt checkout quote", () => {
     const address = await readFixture(E03_CHECKOUT);
     address.window.document.body.insertAdjacentHTML("afterbegin", '<div aria-label="Delivery address Home, Other 1, Tallinn"></div>');
     const ambiguousAddress = await readCheckoutQuote(checkoutTransport(address.window), {
-      host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
+      host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
     });
     expect(ambiguousAddress.status).toBe("partial");
     expect(ambiguousAddress.conflicts).toContain("destination_ambiguous");
@@ -344,7 +344,7 @@ describe("atomic Bolt checkout quote", () => {
     delivery.window.document.querySelectorAll('[data-testid="components.Checkout.CheckoutDeliveryOptions.dispatchOption"]')[1]
       ?.setAttribute("aria-checked", "true");
     const ambiguousDelivery = await readCheckoutQuote(checkoutTransport(delivery.window), {
-      host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
+      host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
     });
     expect(ambiguousDelivery.status).toBe("partial");
     expect(ambiguousDelivery.conflicts).toContain("delivery_selection_ambiguous");
@@ -356,7 +356,7 @@ describe("atomic Bolt checkout quote", () => {
       .find((row) => row.textContent?.includes("Delivery fee"));
     deliveryRow!.querySelector("span:last-child")!.textContent = "";
     const unparsedQuote = await readCheckoutQuote(checkoutTransport(unparsed.window), {
-      host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
+      host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
     });
     expect(unparsedQuote.status).toBe("partial");
     expect(unparsedQuote.missing).toContain("feeRowUnparsed");
@@ -382,7 +382,7 @@ describe("atomic Bolt checkout quote", () => {
       '<div data-testid="components.OrderFees.feeItem"><span>Mystery charge</span></div>',
     );
     const quote = await readCheckoutQuote(checkoutTransport(window), {
-      host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
+      host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
     });
     expect(quote.status).toBe("partial");
     expect(quote.unparsedFeeRows).toContainEqual({ text: "Mystery charge", reason: "unparsed" });
@@ -394,7 +394,7 @@ describe("atomic Bolt checkout quote", () => {
     const { window } = await readFixture(E03_CHECKOUT);
     mutatePayLabel(window, 1282);
     const quote = await readCheckoutQuote(checkoutTransport(window), {
-      host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
+      host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId },
     });
     expect(quote.status).toBe("partial");
     expect(quote.conflicts).toContain("payable_total_mismatch");
@@ -406,7 +406,7 @@ describe("atomic Bolt checkout quote", () => {
     const authority = boltPaymentAuthority(store, scope, () => 1000);
     const approval = await requestCheckoutApproval(authority, quote);
     resolveBoltApproval(store, scope.threadId, approval.approvalRef, "allow", () => 1000);
-    const options = { host: { signedIn: true, account: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId } };
+    const options = { host: { scope: "host_browser_profile" as const, profileKey: E03_CHECKOUT.account, branchId: E03_CHECKOUT.branchId } };
     await expect(revalidateCheckoutApproval(checkoutTransport(window), options, approval.approvalRef, authority)).resolves.toMatchObject({ status: "complete" });
 
     mutateFeeRow(window, "Service fee", 252);
