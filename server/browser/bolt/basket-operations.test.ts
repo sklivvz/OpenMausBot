@@ -90,6 +90,27 @@ describe("atomic Bolt basket operations on recorded-shape fixtures", () => {
     expect(operations.effectsDispatched).toBe(1);
   });
 
+  it("opens a uniquely labelled basket button without a test id or price", async () => {
+    const fixture = new BasketFixture({ start: "menu", lines: [] });
+    const buttons = [...fixture.window.document.querySelectorAll("[data-action^=basket-]")];
+    for (const button of buttons.slice(1)) button.remove();
+    buttons[0]!.removeAttribute("data-testid");
+    buttons[0]!.textContent = "View basket";
+    const operations = makeOperations(fixture);
+    expect((await operations.read()).basketEntry).toMatchObject({ testId: "accessible:view-basket", priceMinor: null });
+    expect((await operations.open()).after.emptyBasket).toBe(true);
+    expect(fixture.basketMainClicks).toBe(1);
+  });
+
+  it("does not choose between ambiguous labelled basket buttons", async () => {
+    const fixture = new BasketFixture({ start: "menu", lines: [] });
+    for (const button of fixture.window.document.querySelectorAll("[data-action^=basket-]")) button.removeAttribute("data-testid");
+    const operations = makeOperations(fixture);
+    expect((await operations.read()).errors).toContain("basket_entry_ambiguous");
+    await expect(operations.open()).rejects.toThrow();
+    expect(fixture.clicks).toEqual([]);
+  });
+
   it("returns a no-op open result when the checkout is already open", async () => {
     const fixture = new BasketFixture({ start: "checkout" });
     const result = await makeOperations(fixture).open();
