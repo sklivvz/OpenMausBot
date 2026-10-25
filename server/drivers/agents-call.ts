@@ -212,27 +212,47 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     delete canonical.botIds;
     delete canonical.groupId;
     delete canonical.doneWhen;
+    delete canonical.threadId;
     if (canonical.bot_ids === undefined) canonical.bot_ids = args.botIds;
     if (canonical.group_id === undefined) canonical.group_id = args.groupId;
     if (canonical.done_when === undefined) canonical.done_when = args.doneWhen;
+    if (canonical.thread_id === undefined) canonical.thread_id = args.threadId;
     const ids = canonical.bot_ids;
     const optional = (key: string, type: "boolean" | "string") => canonical[key] === undefined || typeof canonical[key] === type;
+    const threadId = canonical.thread_id;
+    const admissionRaw = args.admission;
+    const admissionRecord = admissionRaw && typeof admissionRaw === "object" && !Array.isArray(admissionRaw)
+      ? admissionRaw as Record<string, unknown> : undefined;
+    const admission = admissionRecord
+      ? (() => {
+        const { objective_id, brief_revision, estimated_duration_ms, verification_reserve_ms, ...rest } = admissionRecord;
+        return {
+          ...rest,
+          ...(objective_id !== undefined ? { objectiveId: objective_id } : {}),
+          ...(brief_revision !== undefined ? { briefRevision: brief_revision } : {}),
+          ...(estimated_duration_ms !== undefined ? { estimatedDurationMs: estimated_duration_ms } : {}),
+          ...(verification_reserve_ms !== undefined ? { verificationReserveMs: verification_reserve_ms } : {}),
+        };
+      })()
+      : admissionRaw;
     const usable = Array.isArray(ids) && ids.length > 0 && ids.every((id) => typeof id === "string")
+      && (admission === undefined || (typeof admission === "object" && admission !== null && !Array.isArray(admission)))
       && typeof canonical.message === "string" && canonical.message.trim().length > 0
       && (canonical.thread === undefined || canonical.thread === "standing" || canonical.thread === "new")
       && (canonical.reply === undefined || canonical.reply === "resume" || canonical.reply === "none")
+      && (threadId === undefined || (typeof threadId === "string" && threadId.length > 0 && threadId.length <= 128 && /^[\w-]+$/.test(threadId)))
       && optional("consult", "boolean") && optional("in_my_folder", "boolean")
       && optional("done_when", "string") && optional("reason", "string");
     if (!usable) {
       return {
-        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, thread ("standing" or "new"), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false) and done_when are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
+        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, thread ("standing" or "new"), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false) and done_when are optional. thread_id (at most 128 letters, digits, underscores or dashes) optionally targets the original assignment's thread; admission is the structured deliverable/operation packet when the lead is required to supply one. Received: ${Object.keys(args).join(", ") || "none"}.`,
         isError: true,
       };
     }
     const r = await api("/api/internal/coordinate-bots", { method: "POST", body: JSON.stringify({
       groupId: canonical.group_id, botIds: ids, message: canonical.message,
       reason: typeof canonical.reason === "string" && canonical.reason.trim() ? canonical.reason.trim() : undefined,
-      rework: canonical.rework,
+      rework: canonical.rework, toThreadId: canonical.thread_id, admission,
       thread: canonical.thread, reply: canonical.reply, consult: canonical.consult, inMyFolder: canonical.in_my_folder,
       done_when: typeof canonical.done_when === "string" && canonical.done_when.trim() ? canonical.done_when.trim() : undefined,
     }) });

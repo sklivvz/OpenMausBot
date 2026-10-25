@@ -1,0 +1,196 @@
+{
+  "schema": "marketing-repair-desired-state/v1",
+  "bots": {
+    "darcy": {
+      "id": "38c245f6-5d17-44e2-801a-9cb78c905818",
+      "name": "Darcy McGuire",
+      "soul": "souls/darcy.md",
+      "soulSha256": "6be1a6e2c7618620c48e47797e4429dd528d83d99ac4fffc70968812ceda75b9",
+      "modelSelection": "UNCHANGED",
+      "fallback": "UNCHANGED",
+      "browser": false,
+      "mcpServers": {
+        "mode": "replace",
+        "value": [
+          "company-knowledge-graph",
+          "company-graph",
+          "sonarcloud",
+          "slop-detector",
+          "execution-tools",
+          "review-packet",
+          "assembled-output"
+        ],
+        "removed": [],
+        "rationale": "Keep the existing code-quality research/review server and the business research, classifier, execution receipts, review packets and artifact verification."
+      },
+      "connectorScopes": {
+        "apps": {
+          "todoist": "write",
+          "googlecalendar": "write",
+          "googletasks": "write",
+          "googlesheets": "read",
+          "googledocs": "read",
+          "googledrive": "read",
+          "googleslides": "read",
+          "slack": "write",
+          "gmail": "read",
+          "google_analytics": "read",
+          "reddit_ads": "read",
+          "postmark": "read",
+          "printify": "read",
+          "linkedin": "read"
+        },
+        "rationale": "Coordination, research, artifact review and preparation remain available. Social publishing, email sends, purchases/orders, ad changes and edits to protected Google originals are excluded. LinkedIn stays read-only so Darcy can verify, not publish."
+      },
+      "receiptsFor": {
+        "value": [
+          "$liz"
+        ],
+        "rationale": "Only Darcy->Liz work requires a signed execution receipt before settlement. Other specialists and teams are unaffected."
+      },
+      "toolScope": "UNCHANGED",
+      "soulChars": 3619
+    },
+    "liz": {
+      "id": "d11ebc2e-f29f-4ab8-b524-cc92ad6f5b27",
+      "name": "Liz Lemon",
+      "soul": "souls/liz.md",
+      "soulSha256": "310106e893644a6d35e78af33629b4c76eb75317dcfe2cf6e07d31941f2e15cb",
+      "modelSelection": "UNCHANGED",
+      "fallback": "UNCHANGED",
+      "browser": false,
+      "admissionRequired": true,
+      "mcpServers": {
+        "mode": "merge",
+        "value": [
+          "company-knowledge-graph",
+          "company-graph",
+          "keila-drafts",
+          "execution-tools",
+          "assembled-output",
+          "bluesky-connector",
+          "threads-connector"
+        ],
+        "rationale": "Keep the installed deterministic newsletter and supported social connector paths, and add the installed execution-tools host so Liz can produce the signed receipt the acceptance gate requires."
+      },
+      "connectorScopes": {
+        "apps": {
+          "linkedin": "write",
+          "todoist": "write",
+          "postmark": "read",
+          "googlecalendar": "write",
+          "googledrive": "read",
+          "googlesheets": "read"
+        },
+        "rationale": "Production needs LinkedIn publication, task state, calendar and read-only delivery/source data. Unrelated apps are not granted. The existing Bluesky tool deny remains under the separate connector-approval owner."
+      },
+      "toolScope": "UNCHANGED",
+      "receiptsFor": "UNCHANGED",
+      "soulChars": 3293
+    }
+  },
+  "skills": {
+    "disable": {
+      "darcy": [
+        "personal-project-announcements",
+        "direct-social-publishing",
+        "designed-artifact-production"
+      ],
+      "liz": [
+        "designed-artifact-production",
+        "x-publishing",
+        "mastodon-publishing",
+        "social-platform-publishing-readiness"
+      ]
+    },
+    "install": [
+      {
+        "bot": "darcy",
+        "name": "marketing-work-decomposition",
+        "source": "local:marketing-repair-20261024",
+        "path": "skills/marketing-work-decomposition/SKILL.md",
+        "sha256": "9b3c0dd9a0960cac5fd44bcc79aa551e6152d2694914930be2a04c560f30ca7d",
+        "enabled": true
+      },
+      {
+        "bot": "liz",
+        "name": "channel-execution",
+        "source": "local:marketing-repair-20261024",
+        "path": "skills/channel-execution/SKILL.md",
+        "sha256": "153a6ef2512b39193e91b4f644e45769d76e435acac968b9806c586abd503ce4",
+        "enabled": true
+      }
+    ],
+    "keep": {
+      "darcy": [
+        "announcement-production",
+        "brand-copy-quality",
+        "campaign-execution-tracking",
+        "collateral-delegation-scope",
+        "content-strategy",
+        "copy-preflight",
+        "delegated-collateral-production",
+        "delivery-commitments",
+        "evidence-based-collateral-review",
+        "execute-next-step",
+        "launch",
+        "launch-decision-approval",
+        "marketing-communications-operations",
+        "marketing-deliverable-brief",
+        "marketing-task-management",
+        "report-task-status-accurately",
+        "team-interview-for-announcements"
+      ],
+      "liz": [
+        "announcement-production",
+        "bluesky-post-preparation",
+        "bluesky-publishing",
+        "brand-copy-quality",
+        "campaign-execution-tracking",
+        "campaign-production",
+        "email-platform-readiness",
+        "marketing-deliverable-brief",
+        "newsletter-platform-production",
+        "threads-publishing"
+      ]
+    }
+  },
+  "modelExperiment": {
+    "applyInThisDeployment": false,
+    "reason": "The scope/time boundary is the intervention under test. Model choice is a separate bounded experiment; changing it in the same deployment would confound the result.",
+    "candidates": [
+      {
+        "instanceId": "deepseek",
+        "model": "[\"deepseek-official\",\"deepseek-flash\"]",
+        "variant": "max",
+        "label": "DeepSeek Flash via the installed official dsh ACP",
+        "fallback": [
+          {
+            "instanceId": "claude",
+            "model": "claude-haiku-5-5"
+          }
+        ],
+        "status": "installed; preferred later experiment for established executor work; not validated on live marketing work in this repair"
+      },
+      {
+        "instanceId": "codex",
+        "model": "gpt-6-luna",
+        "effort": "high",
+        "label": "Codex Luna",
+        "fallback": [
+          {
+            "instanceId": "claude",
+            "model": "claude-haiku-5-5"
+          }
+        ],
+        "status": "installed; lower-risk executor experiment through the same driver"
+      }
+    ],
+    "measurement": [
+      "Use a fixed set of established executor tasks (one LinkedIn post, one newsletter template install, one Bluesky/Threads post where granted).",
+      "Compare verified receipts, exact-scope adherence, duplicate writes, elapsed wall time and token/cost where reported.",
+      "Record any unverified/unknown result separately; do not treat turn settlement as success.",
+      "Keep Darcy on gpt-6.1-sol. A model change is not evidence that the boundary works."
+    ]
+  }
+}

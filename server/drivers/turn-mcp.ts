@@ -35,10 +35,17 @@ export function turnStdioMcpServers(turn: SendTurnInput): TurnStdioMcpServer[] {
     if (!stdio) continue;
     servers.push({ name, command: stdio.command, args: stdio.args ?? [], env: stdio.env ?? {} });
   }
-  if (turn.toolScope === undefined) return servers;
-  return servers.filter((server) => canUseMcpServer(turn.toolScope, server.name)).map((server) => {
+  const custom = new Set(Object.keys(turn.integrations?.custom ?? {}));
+  const effectCheck = turn.integrations?.effectCheck;
+  if (turn.toolScope === undefined && !effectCheck) return servers;
+  return servers.filter((server) => turn.toolScope === undefined || canUseMcpServer(turn.toolScope, server.name)).map((server) => {
+    // Built-in proxies already enforce their own authority. A custom server
+    // gets an effect gate so a direct connector call cannot bypass the same
+    // admission and expiry checks as Composio.
+    if (turn.toolScope === undefined && !custom.has(server.name)) return server;
     const gated = gateServer({ name: server.name, server: { command: server.command, args: server.args, env: server.env },
-      threadId: turn.threadId, budget: 0, toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" } });
+      threadId: turn.threadId, budget: 0, toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
+      ...(effectCheck ? { effectCheck } : {}), forceGate: Boolean(effectCheck) });
     if (!gated) throw new Error("Tool selection requires an MCP gate.");
     return { name: server.name, command: gated.command, args: gated.args, env: gated.env };
   });

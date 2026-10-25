@@ -130,13 +130,17 @@ export function gateServer(input: {
   directory?: boolean;
   sourceEnv?: NodeJS.ProcessEnv | Record<string, string | undefined>;
   gateRemote?: boolean;
+  /** Always mount the gate, even with no tool selection or result budget. */
+  forceGate?: boolean;
+  /** A turn-scoped harness capability checked before every forwarded tool call. */
+  effectCheck?: { url: string; token: string };
 }): { command: string; args: string[]; env: Record<string, string> } | null {
   const { name, server, budget } = input;
   const parsed = parseToolScope(input.toolScope);
   if (!parsed.ok) throw new Error(parsed.error);
   const scoped = parsed.scope !== undefined;
-  if (budget <= 0 && !scoped) return null;
-  if (!scoped && input.gateRemote !== true && remoteMcpSpec(server)) return null;
+  if (budget <= 0 && !scoped && !input.forceGate && !input.effectCheck) return null;
+  if (!scoped && input.gateRemote !== true && remoteMcpSpec(server) && !input.forceGate && !input.effectCheck) return null;
   const directory = input.directory === true && remoteMcpSpec(server) !== undefined;
   const spec = mcpStdioServer(server, {
     nodeEnv: input.nodeEnv,
@@ -158,6 +162,7 @@ export function gateServer(input: {
     OMB_GATE_BUDGET: String(budget),
     ...(scoped ? { OMB_GATE_TOOL_SCOPE: JSON.stringify(parsed.scope) } : {}),
     ...(directory ? { OMB_GATE_DIRECTORY: "1" } : {}),
+    ...(input.effectCheck ? { OMB_EFFECT_CHECK_URL: input.effectCheck.url, OMB_EFFECT_CHECK_TOKEN: input.effectCheck.token } : {}),
   };
   if (input.configEnvName && (!scoped || !/^OMB_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
     throw new Error("Invalid private MCP gate configuration.");

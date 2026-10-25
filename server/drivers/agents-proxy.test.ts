@@ -667,13 +667,13 @@ describe("agents-proxy MCP surface", () => {
     expect(coordinate.description).toContain("consult true asks a question");
     expect(coordinate.description).toContain('reply "none" is a one-way notice');
     expect(coordinate.description).toContain("never call assignment_status in the same turn");
-    expect(Object.keys(coordinate.inputSchema.properties)).toEqual(["group_id", "bot_ids", "message", "reason", "rework", "thread", "in_my_folder", "reply", "consult", "done_when"]);
+    expect(Object.keys(coordinate.inputSchema.properties)).toEqual(["group_id", "bot_ids", "message", "reason", "rework", "thread_id", "admission", "thread", "in_my_folder", "reply", "consult", "done_when"]);
     expect(coordinate.inputSchema.properties.thread.enum).toEqual(["standing", "new"]);
     expect(coordinate.inputSchema.properties.reply.enum).toEqual(["resume", "none"]);
     expect(coordinate.inputSchema.properties.consult.type).toBe("boolean");
     const status = tool("assignment_status");
     expect(status.description).toContain("Read-only");
-    expect(status.description).toContain("never needs this to wait");
+    expect(status.description).toContain("Starts and changes nothing");
     expect(status.inputSchema.properties.wait_ms).toMatchObject({ type: "integer", minimum: 0, maximum: 240_000 });
     expect(status.inputSchema.required ?? []).toEqual([]);
     expect(JSON.stringify(list.result.tools)).not.toMatch(/Brief synchronous consultation|DEFAULT FOR ASSIGNING WORK|BLOCKING status tool|Never call it in the same turn as delegate_bot|Deprecated alias/);
@@ -1256,7 +1256,7 @@ describe("agents-proxy MCP surface", () => {
       assignmentStatusCode = 403;
       const foreign = await callTool("assignment_status", { id: "asg-theirs" });
       expect(foreign.result.isError).toBe(true);
-      expect(foreign.result.content[0].text).toContain("Assignment asg-theirs is not this conversation's");
+      expect(foreign.result.content[0].text).toContain("Assignment asg-theirs is not in one of your private conversations");
     } finally {
       assignmentStatusCode = 200;
       assignmentStatusResponse = DONE_ASSIGNMENT;
@@ -2213,11 +2213,11 @@ describe("with computer sharing off and no Chief of Staff (the defaults)", () =>
 describe("coordinate_bots arguments", () => {
   it("maps camelCase aliases onto the canonical snake_case fields", async () => {
     const res = await callTool("coordinate_bots", {
-      botIds: ["bot-helper"], message: "please review the patch",
+      botIds: ["bot-helper"], message: "please review the patch", threadId: "thread-abc_1",
     });
     expect(res.result.isError).toBeFalsy();
     expect(lastCoordinateBody).toMatchObject({
-      botIds: ["bot-helper"], message: "please review the patch",
+      botIds: ["bot-helper"], message: "please review the patch", toThreadId: "thread-abc_1",
     });
   });
 
@@ -2225,11 +2225,12 @@ describe("coordinate_bots arguments", () => {
     const res = await callTool("coordinate_bots", {
       bot_ids: ["bot-helper"], message: "Is the export idempotent?", reason: "need to know before shipping",
       thread: "new", reply: "resume", consult: true, done_when: "a yes or no with the line that proves it",
+      thread_id: "thread-abc_1",
     });
     expect(res.result.isError).toBeFalsy();
     expect(lastCoordinateBody).toEqual({
       botIds: ["bot-helper"], message: "Is the export idempotent?", reason: "need to know before shipping",
-      thread: "new", reply: "resume", consult: true, done_when: "a yes or no with the line that proves it",
+      thread: "new", reply: "resume", consult: true, done_when: "a yes or no with the line that proves it", toThreadId: "thread-abc_1",
     });
     await callTool("coordinate_bots", { bot_ids: ["bot-helper"], message: "notice", reply: "none", doneWhen: "  ", reason: " " });
     expect(lastCoordinateBody).toEqual({ botIds: ["bot-helper"], message: "notice", reply: "none" });
@@ -2241,11 +2242,14 @@ describe("coordinate_bots arguments", () => {
       { bot_ids: ["bot-helper"], message: "m", reply: "poll" },
       { bot_ids: ["bot-helper"], message: "m", consult: "yes" },
       { bot_ids: ["bot-helper"], message: "m", done_when: ["x"] },
+      { bot_ids: ["bot-helper"], message: "m", thread_id: "not a thread" },
+      { bot_ids: ["bot-helper"], message: "m", thread_id: "x".repeat(129) },
     ]) {
       lastCoordinateBody = null;
       const res = await callTool("coordinate_bots", args);
       expect(res.result.isError, JSON.stringify(args)).toBe(true);
       expect(res.result.content[0].text).toContain('thread ("standing" or "new"), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false) and done_when are optional');
+      expect(res.result.content[0].text).toContain("thread_id");
       expect(lastCoordinateBody).toBeNull();
     }
   });
@@ -2253,11 +2257,12 @@ describe("coordinate_bots arguments", () => {
   it("keeps the documented snake_case key when both spellings arrive", async () => {
     const res = await callTool("coordinate_bots", {
       bot_ids: ["bot-helper"], botIds: ["bot-other"], group_id: "room-right", groupId: "room-wrong",
-      message: "m", request_key: "from an older tool list", label: "from an older tool list",
+      message: "m", thread_id: "thread-right", threadId: "thread-wrong",
+      request_key: "from an older tool list", label: "from an older tool list",
     });
     expect(res.result.isError).toBeFalsy();
     expect(lastCoordinateBody).toMatchObject({
-      botIds: ["bot-helper"], groupId: "room-right",
+      botIds: ["bot-helper"], groupId: "room-right", toThreadId: "thread-right",
     });
     expect(lastCoordinateBody.botIds).not.toContain("bot-other");
     expect(lastCoordinateBody).not.toHaveProperty("requestKey");
@@ -2271,7 +2276,7 @@ describe("coordinate_bots arguments", () => {
     });
     expect(res.result.isError).toBe(true);
     const text = res.result.content[0].text;
-    for (const field of ["bot_ids", "message", "group_id", "reason", "rework", "thread", "reply", "consult", "in_my_folder", "done_when"]) {
+    for (const field of ["bot_ids", "message", "group_id", "reason", "rework", "thread_id", "thread", "reply", "consult", "in_my_folder", "done_when"]) {
       expect(text).toContain(field);
     }
     expect(text).toContain("botIds");

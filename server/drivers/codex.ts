@@ -746,13 +746,15 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           // schemaValidation), and Codex does not speak SSE. A plan turn has no tool_search, so its URL
           // servers use the proxy's tool directory.
           const directory = plan && "url" in server;
-          if (turn.toolScope === undefined && !("url" in server)) return server;
+          const effectCheck = turn.integrations?.effectCheck;
+          if (turn.toolScope === undefined && !("url" in server) && !effectCheck) return server;
           const hash = createHash("sha256").update(mountName).digest("hex");
           // Codex starts MCP children with only a few env names.
-          const proxy = turn.toolScope === undefined
+          const proxy = turn.toolScope === undefined && !effectCheck
             ? mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(directory ? { directory: { name } } : {}), configEnvName: `OMB_REMOTE_MCP_CONFIG_${hash}`, sourceEnv: env })
             : gateServer({ name, server, threadId, budget: 0, toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
-              configEnvName: `OMB_GATE_CONFIG_${hash}`, directory, sourceEnv: env });
+              configEnvName: `OMB_GATE_CONFIG_${hash}`, directory, sourceEnv: env,
+              ...(effectCheck ? { effectCheck } : {}), forceGate: Boolean(effectCheck) });
           if (proxy && directory) directoryMounts.add(mountName);
           if (!proxy) return null;
           const shared = { ...proxy.env };
