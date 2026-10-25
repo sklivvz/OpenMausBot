@@ -10,11 +10,12 @@ export function digest(value: unknown): string {
 export interface BoltReceipt {
   operationId: string;
   requestHash: string;
-  status: "pending" | "verified" | "not_executed";
+  status: "pending" | "dispatched" | "verified" | "not_executed";
   input: BoltInput;
   before: BoltView;
   startedAt: string;
   verifiedAt?: string;
+  verification?: "input_only";
   checkoutHash?: string;
   orderId?: string;
 }

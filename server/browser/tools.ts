@@ -153,7 +153,7 @@ const DESCRIPTIONS: Record<ToolName, string> = {
   agent_browser_wait: "Wait until every condition given holds: a time, text on the page, an element appearing or going, the address, or a load state. 60 s at most.",
   agent_browser_eval: "Run JavaScript in the page and return its value. It needs the same control as clicking, and is refused while a filled password is still on the page.",
   agent_browser_selver_cart: "Read the current Selver cart and total through this browser. Requires an authenticated, connected Selver account and reads persisted cart data twice. Use its account and total before claiming the person's cart changed.",
-  agent_browser_bolt: "Mechanical Bolt Food browser operations. Start with inspect; use its observationRef and target refs, with a unique operationId for every mutation. Supports item options, comments, quantities, dynamic delivery choices, checkout and guarded pay. Missing DOM bindings are explicit blockers. After an uncertain mutation use reconcile_operation with the same operationId; never invent another ID to retry. Use request_payment_approval to show the exact checkout to the user; pay requires its approvalRef as approvedCheckoutRef. A bot cannot grant approval.",
+  agent_browser_bolt: "Mechanical Bolt Food browser operations on either browser engine. Start with inspect: it lists supportedActions and returns observationRef and target refs. Unsupported item, basket, address and checkout actions fail before any effect until a host-reviewed DOM mapping exists. Use a unique operationId for every mutation; after an uncertain one use reconcile_operation with the same ID and never invent another ID to retry. Use request_payment_approval for the exact checkout; pay requires its approvalRef as approvedCheckoutRef. A bot cannot grant approval.",
   agent_browser_dialog: "Accept or dismiss the alert, confirm or prompt dialog the page opened (agent_browser_status shows it). Nothing else works on the tab until it is answered.",
   agent_browser_tabs: "List, open, switch between or close your browser's tabs.",
   agent_browser_close: "Close a tab, or with no tab the whole browser. Saved sign-ins are kept.",
@@ -167,6 +167,8 @@ function jsonSchema(schema: z.ZodType): Record<string, unknown> {
 
 export const TOOL_LIST: ReadonlyArray<{ name: ToolName; description: string; inputSchema: Record<string, unknown> }> =
   (Object.keys(TOOL_INPUTS) as ToolName[]).map((name) => ({ name, description: DESCRIPTIONS[name], inputSchema: jsonSchema(TOOL_INPUTS[name].strict()) }));
+
+export const BOLT_TOOL_SPEC = TOOL_LIST.find((tool) => tool.name === "agent_browser_bolt")!;
 
 export const TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(TOOL_INPUTS));
 

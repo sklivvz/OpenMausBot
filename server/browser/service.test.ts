@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -66,18 +66,16 @@ function setup(options: Partial<BrowserServiceOptions> = {}, startUrls?: string[
 }
 
 describe("the bots' browser tools", () => {
-  it("advertises Bolt only after an operator installs its DOM profile", async () => {
-    const { service, target, dataDir } = setup();
-    mkdirSync(join(dataDir, "browser", "bolt"), { recursive: true });
-    writeFileSync(join(dataDir, "browser", "bolt", "dom-bindings.json"), "{}");
+  it("advertises Bolt from the built-in host-reviewed profile without requiring a host file", async () => {
+    const { service, target } = setup();
     const listed = await service.agentRpc(target, "tools/list", {}) as { tools: Array<{ name: string }> };
     expect(listed.tools.map((tool) => tool.name)).toContain("agent_browser_bolt");
   });
   it("advertises browser tools and restart_browser, with OpenMausBot's names and no launch settings", async () => {
     const { service, target } = setup();
     const listed = await service.agentRpc(target, "tools/list", {}) as { tools: Array<{ name: string; inputSchema: { properties?: Record<string, unknown> } }> };
-    expect(listed.tools.map((tool) => tool.name)).toEqual(TOOL_LIST.filter((tool) => tool.name !== "agent_browser_bolt").map((tool) => tool.name));
-    expect(listed.tools).toHaveLength(23);
+    expect(listed.tools.map((tool) => tool.name)).toEqual(TOOL_LIST.map((tool) => tool.name));
+    expect(listed.tools).toHaveLength(24);
     for (const tool of listed.tools) {
       for (const owned of ["session", "extraArgs", "headed", "path", "allowedDomains"]) expect(tool.inputSchema.properties ?? {}).not.toHaveProperty(owned);
     }

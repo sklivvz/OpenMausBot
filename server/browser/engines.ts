@@ -17,11 +17,12 @@ import { sandboxDisabled } from "./chrome/host-setup.ts";
 import type { HostKind } from "./chrome/flags.ts";
 import { ChromeLauncher } from "./chrome/launcher.ts";
 import { ProcessRegistry, sweep } from "./chrome/processes.ts";
-import { browserRoot } from "./chrome/profile.ts";
+import { browserRoot, profileHash, workspaceId } from "./chrome/profile.ts";
 import { browserLanguage, browserTimeZone, languageList } from "./chrome/wrapper.ts";
 import { displayScreen } from "./display.ts";
 import type { Download } from "./cdp/downloads.ts";
 import { BrowserService, type BrowserTarget } from "./service.ts";
+import { BOLT_TOOL_SPEC } from "./tools.ts";
 import { SELVER_CONNECT_TOOL, SELVER_SESSION_CAPTURE } from "./selver-cart.ts";
 import { LiveV1 } from "./viewers/live-v1.ts";
 import { StreamV2, type StreamRequest } from "./viewers/stream-v2.ts";
@@ -227,7 +228,11 @@ export class RuntimeRouter {
     if (method === "tools/list") {
       const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch, boltAuthority) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx));
       const tools = (result as { tools?: unknown })?.tools;
-      return Array.isArray(tools) ? { ...result as object, tools: [...tools.filter((tool) => (tool as { name?: unknown })?.name !== SELVER_CONNECT_TOOL.name), SELVER_CONNECT_TOOL] } : result;
+      return Array.isArray(tools) ? { ...result as object, tools: [
+        ...tools.filter((tool) => !["agent_browser_bolt", SELVER_CONNECT_TOOL.name].includes(String((tool as { name?: unknown })?.name))),
+        BOLT_TOOL_SPEC,
+        SELVER_CONNECT_TOOL,
+      ] } : result;
     }
     if ((params as { name?: unknown } | null)?.name === SELVER_CONNECT_TOOL.name) {
       const args = (params as { arguments?: unknown }).arguments;
@@ -259,7 +264,13 @@ export class RuntimeRouter {
       } finally { await unlink(temporary).catch(() => undefined); }
       return { content: [{ type: "text", text: JSON.stringify({ authenticated: true, account, sessionFile: path }) }] };
     }
-    const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch, boltAuthority) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx));
+    const root = browserRoot(this.#dataDir);
+    const bolt = {
+      directory: join(root, "bolt", profileHash(workspaceId(this.#dataDir), session)),
+      bindingsPath: join(root, "bolt", "dom-bindings.json"),
+      ...(boltAuthority ? { authority: boltAuthority } : {}),
+    };
+    const result = await (target ? this.#chrome.service.agentRpc(target, method, params, beforeDispatch, boltAuthority) : this.#old.agentRpc(session, spec, method, params, beforeDispatch, ctx, bolt));
     return this.#annotate ? this.#annotate(spec, result) : result;
   }
 
