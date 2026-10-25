@@ -28,7 +28,7 @@ const comment = z.object({ supported: z.boolean(), text, maxLength: z.number().i
 const configured = { id: text.min(1), name: text.min(1), quantity: quantity, unitPriceMinor: minor, options: z.array(z.object({ groupId: text, groupLabel: text.min(1), choiceId: text, choiceLabel: text.min(1), quantity })).max(100), comment: text };
 export const LINE = z.object({ ref, ...configured, edit: ref.optional(), plus: ref.optional(), minus: ref.optional() });
 export type BoltLine = z.infer<typeof LINE>;
-const delivery = z.object({ ref, id: text.min(1), label: text.min(1), feeMinor: minor, eta: text.min(1), available: z.boolean(), selected: z.boolean(), control: ref });
+const delivery = z.object({ ref, id: text.min(1), label: text.min(1), feeMinor: minor.nullable(), eta: text.min(1).nullable(), available: z.boolean(), selected: z.boolean(), control: ref });
 const checkout = z.object({
   account: text.min(1), branchId: text.min(1), currency: z.literal("EUR"), destination: text.min(1), fulfilment: text.min(1), deliveryOptionId: text.min(1), deliveryLabel: text.min(1), deliveryEta: text.min(1), paymentMethod: text.min(1), courierComment: text,
   lines: z.array(LINE).min(1).max(100), subtotalMinor: minor.nonnegative(), adjustments: z.array(z.object({ label: text.min(1), amountMinor: minor })).max(30), totalMinor: minor.nonnegative(),
@@ -38,9 +38,15 @@ export const VIEW = z.object({
   session: z.object({ signedIn: z.boolean(), account: text.optional() }).optional(),
   branchId: text.optional(), address: text.optional(), search: text.optional(), searchResultQuery: text.optional(), searchPending: z.boolean().optional(),
   addresses: z.array(z.object({ ref, label: text, destination: text, selected: z.boolean(), control: ref })).max(50).optional(),
-  products: z.array(z.object({ ref, id: text.optional(), name: text, details: text.optional(), priceMinor: minor.optional(), open: ref })).max(100).optional(),
+  products: z.array(z.object({
+    ref, id: text.optional(), name: text, details: text.optional(), priceMinor: minor.optional(),
+    saleDescription: text.optional(), saleQuantity: text.optional(), saleUnit: text.optional(),
+    displayedPriceBasis: z.literal("per_pack").optional(), unitPriceMinor: minor.optional(), unitPriceBasis: text.optional(),
+    open: ref,
+  })).max(100).optional(),
   item: z.object({ ref, id: text.min(1), name: text, mode: z.enum(["new", "edit"]), quantity, unitPriceMinor: minor, groups: z.array(group).max(30), comment, plus: ref.optional(), minus: ref.optional(), add: ref.optional(), close: ref.optional() }).optional(),
   basket: z.array(LINE).max(100).optional(),
+  basketState: z.object({ loading: z.boolean(), ready: z.boolean(), rowsAvailable: z.boolean(), detail: text.optional(), control: ref.optional() }).optional(),
   fulfilmentOptions: z.array(z.object({ ref, id: text, label: text, available: z.boolean(), selected: z.boolean(), control: ref })).max(10).optional(),
   deliveryOptions: z.array(delivery).min(1).max(20).optional(),
   checkout: checkout.optional(),
@@ -50,8 +56,8 @@ export const VIEW = z.object({
   controls: z.record(z.string(), ref).optional(),
 });
 export type BoltView = z.infer<typeof VIEW>;
-export type DomNode = { selector?: string; kind: "text" | "number" | "money" | "boolean" | "control" | "object" | "list"; attribute?: string; fields?: Record<string, DomNode>; item?: DomNode; optional?: boolean };
-const node: z.ZodType<DomNode> = z.lazy(() => z.object({ selector: z.string().min(1).max(2000).optional(), kind: z.enum(["text", "number", "money", "boolean", "control", "object", "list"]), attribute: z.string().max(100).optional(), fields: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9]*$/), node).optional(), item: node.optional(), optional: z.boolean().optional() }).strict());
+export type DomNode = { selector?: string; kind: "text" | "number" | "money" | "boolean" | "enabled" | "exists" | "control" | "object" | "list"; attribute?: string; pattern?: string; group?: number; first?: boolean; fields?: Record<string, DomNode>; item?: DomNode; optional?: boolean };
+const node: z.ZodType<DomNode> = z.lazy(() => z.object({ selector: z.string().min(1).max(2000).optional(), kind: z.enum(["text", "number", "money", "boolean", "enabled", "exists", "control", "object", "list"]), attribute: z.string().max(100).optional(), pattern: z.string().min(1).max(500).optional(), group: z.number().int().min(0).max(9).optional(), first: z.boolean().optional(), fields: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9]*$/), node).optional(), item: node.optional(), optional: z.boolean().optional() }).strict());
 /** Host-reviewed DOM mappings; these are never accepted as bot tool arguments. */
 export const BINDINGS = z.object({ version: z.literal(1), evidence: z.string().min(1).max(2000), root: node }).strict();
 export type BoltBindings = z.infer<typeof BINDINGS>;

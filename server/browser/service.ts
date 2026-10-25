@@ -7,7 +7,7 @@
 // CDP driver instead of Playwright contexts, and OpenMausBot's idle close, caps and person/bot control rules.
 import type { BoltPaymentAuthority } from "./bolt/runner.ts";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { scrubHeldSecrets } from "../../shared/redact.ts";
@@ -351,10 +351,7 @@ export class BrowserService {
   // Bot calls.
 
   async agentRpc(target: BrowserTarget, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, boltAuthority?: BoltPaymentAuthority): Promise<unknown> {
-    if (method === "tools/list") {
-      const boltConfigured = existsSync(join(browserRoot(this.#options.dataDir), "bolt", "dom-bindings.json"));
-      return { tools: TOOL_LIST.filter((tool) => tool.name !== "agent_browser_bolt" || boltConfigured).map((tool) => ({ ...tool })) };
-    }
+    if (method === "tools/list") return { tools: TOOL_LIST.map((tool) => ({ ...tool })) };
     if (method !== "tools/call") throw new Error("Unsupported browser method.");
     const profile = this.profile(target);
     for (let stopping = profile.stopping; stopping; stopping = profile.stopping) await stopping;

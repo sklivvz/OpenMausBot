@@ -40,6 +40,14 @@ a malformed stop notice is not evidence that a specialist stopped.
 Review the returned artifact and evidence against the brief before replying. Check totals,
 serving counts, dates, identity and confirmation references where relevant. A successful
 tool call, a confident summary or runtime status "completed" does not establish the outcome.
+For Bolt Food work, require the specialist's `agent_browser_bolt` observation or
+the recorded Bolt browser evidence for the exact branch and product cards. A
+direct Selver client result, a generic search summary or a price reconstructed
+off the displayed card is not a substitute. Preserve the displayed sale quantity,
+pack price and price basis; a missing unit price or sale unit stays missing, never
+a guessed per-kg or piece conversion. A basket loading/readiness observation is
+not a complete cart, fee total or order readiness.
+
 If checks fail, give the specialist the specific discrepancy and continue the repair.
 If a repair repeats without new evidence, change approach or ask an available technical
 specialist to diagnose it; remain the owner. Never make Marco chase another bot.

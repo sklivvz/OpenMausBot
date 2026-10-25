@@ -1,4 +1,4 @@
-import { BoltFault, requireBolt, type BoltCheckout, type BoltInput, type BoltLine, type BoltView } from "./contracts.ts";
+import { BOLT_ACTIONS, BoltFault, requireBolt, type BoltCheckout, type BoltInput, type BoltLine, type BoltView } from "./contracts.ts";
 import { BoltJournal, digest, type BoltReceipt } from "./state.ts";
 
 export interface BoltObservation {
@@ -95,7 +95,6 @@ function sameItemStructure(before: BoltView, after: BoltView): boolean {
 
 function verified(input: BoltInput, before: BoltView, after: BoltView): boolean {
   switch (input.action) {
-    case "search_branch": return after.search === input.query && after.searchResultQuery === input.query && after.searchPending === false && !!after.products;
     case "open_branch": return new URL(input.branchUrl!).pathname.split("/p/")[1]?.split("/")[0]?.split("-")[0] === after.branchId;
     case "select_saved_address": return after.address === before.addresses?.find((address) => address.ref === input.targetRef)?.destination;
     case "open_product": return !!after.item && after.item.id === before.products?.find((product) => product.ref === input.targetRef)?.id;
@@ -130,8 +129,8 @@ function verified(input: BoltInput, before: BoltView, after: BoltView): boolean 
 }
 
 function receiptSummary(receipt: BoltReceipt) {
-  const { operationId, status, startedAt, verifiedAt, checkoutHash, orderId } = receipt;
-  return { operationId, status, startedAt, verifiedAt, checkoutHash, orderId };
+  const { operationId, status, startedAt, verifiedAt, verification, checkoutHash, orderId } = receipt;
+  return { operationId, status, startedAt, verifiedAt, verification, checkoutHash, orderId };
 }
 
 const READ_FIELDS = {
@@ -153,7 +152,7 @@ export class BoltRunner {
       this.port.guard();
       const before = await this.port.read();
       requireBolt(this.port.supports?.(input.action) !== false, "action_bindings_required");
-      if (input.action === "inspect") return { status: "observed", ...before };
+      if (input.action === "inspect") return { status: "observed", supportedActions: BOLT_ACTIONS.filter((action) => this.port.supports?.(action) !== false), ...before };
       if (input.action === "request_payment_approval") {
         requireBolt(before.view.checkout && this.authority?.request, "checkout_approval_host_required");
         this.plan({ ...input, action: "pay" }, before.view);
@@ -162,6 +161,9 @@ export class BoltRunner {
         return { status: "awaiting_user_approval", approvalRef, checkoutHash: checkoutHash(before.view.checkout), ...before };
       }
       if (Object.hasOwn(READ_FIELDS, input.action)) {
+        if (input.action === "read_basket" && before.view.basket === undefined && before.view.basketState) {
+          return { status: "observed", url: before.url, observationRef: before.observationRef, view: { basketState: before.view.basketState }, basketRows: "unavailable" };
+        }
         const field = READ_FIELDS[input.action as keyof typeof READ_FIELDS];
         requireBolt(before.view[field] !== undefined, `${field}_binding_required`);
         return { status: "observed", url: before.url, observationRef: before.observationRef, view: { [field]: before.view[field] }, ...(before.view.checkout ? { checkoutHash: checkoutHash(before.view.checkout) } : {}) };
@@ -201,6 +203,15 @@ export class BoltRunner {
           this.port.guard();
           await effect();
         }
+        if (input.action === "search_branch") {
+          const after = await this.port.read();
+          requireBolt(after.view.search === input.query, "search_input_not_applied");
+          intent.status = "dispatched";
+          intent.verification = "input_only";
+          intent.verifiedAt = new Date().toISOString();
+          this.journal.write(intent);
+          return { status: "dispatched", verification: "input_only", searchResults: "unknown", receipt: receiptSummary(intent), ...after };
+        }
         const after = await this.waitFor((view) => verified(input, before.view, view));
         intent.status = "verified";
         intent.verifiedAt = new Date().toISOString();
@@ -238,7 +249,8 @@ export class BoltRunner {
         requireBolt(input.branchUrl, "branch_url_required");
         const url = new URL(input.branchUrl);
         requireBolt(url.origin === "https://food.bolt.eu" && !url.username && !url.password && /^\/en\/[^/]+\/p\/\d+(?:-[^/]+)?\/$/.test(url.pathname) && !url.search && !url.hash, "branch_url_invalid");
-        requireBolt(view.basket?.length === 0, "empty_basket_required_before_branch_change");
+        requireBolt(!view.basketState?.loading, "basket_still_loading");
+        requireBolt(view.basket?.length !== undefined ? view.basket.length === 0 : true, "empty_basket_required_before_branch_change");
         return [() => this.port.navigate(url.href)];
       }
       case "select_saved_address": {
