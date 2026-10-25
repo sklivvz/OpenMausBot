@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 
 const log = process.env.BOLT_CALL_LOG;
 const record = (name) => { if (log) appendFileSync(log, `${name}\n`); };
-const url = "https://food.bolt.eu/en/1-tallinn/p/70745-bolt-market/";
+let url = "https://food.bolt.eu/en/1-tallinn/p/70745-bolt-market/";
 const view = {
   search: "",
   address: "Work, Lift99 TELLISKIVI Hub, Telliskivi 60a/5, Tallinn",
@@ -13,7 +13,7 @@ const view = {
     priceMinor: 329, saleDescription: "300g", saleQuantity: "300g", saleUnit: "g",
     displayedPriceBasis: "per_pack", open: "products.0.open",
   }],
-  basketState: { loading: true, ready: false, rowsAvailable: false, detail: "Basket", control: "basket" },
+  basketState: { loading: process.env.BOLT_BASKET_LOADING !== "0", ready: process.env.BOLT_BASKET_READY === "1", rowsAvailable: false, detail: "Basket", control: "basket" },
   fulfilmentOptions: [{
     ref: "fulfilment.0", id: "Priority delivery, 25-50 min", label: "Priority delivery, 25-50 min",
     available: true, selected: false, control: "fulfilment.0",
@@ -49,7 +49,13 @@ lines.on("line", (line) => {
       view.search = String(message.params?.arguments?.text ?? "");
       result = { content: [{ type: "text", text: JSON.stringify({ filled: message.params?.arguments?.selector }) }] };
     } else if (name === "agent_browser_click") result = { content: [{ type: "text", text: JSON.stringify({ clicked: message.params?.arguments?.selector }) }] };
-    else if (name === "agent_browser_navigate") result = { content: [{ type: "text", text: JSON.stringify({ url: message.params?.arguments?.url }) }] };
+    else if (name === "agent_browser_open") {
+      url = String(message.params?.arguments?.url ?? url);
+      view.url = url;
+      view.branchId = /\/p\/(\d+)/.exec(url)?.[1];
+      if (process.env.BOLT_BRANCH_CONFIRM === "1") view.overlay = "replacement";
+      result = { content: [{ type: "text", text: JSON.stringify({ opened: url }) }] };
+    }
     else result = { isError: true, content: [{ type: "text", text: `unexpected ${name}` }] };
   } else result = {};
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);

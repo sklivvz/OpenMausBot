@@ -213,6 +213,11 @@ export class BoltRunner {
           return { status: "dispatched", verification: "input_only", searchResults: "unknown", receipt: receiptSummary(intent), ...after };
         }
         const after = await this.waitFor((view) => verified(input, before.view, view));
+        if (input.action === "open_branch" && (after.view.overlay === "replacement" || after.view.basketState?.ready === true)) {
+          intent.status = "pending";
+          this.journal.write(intent);
+          return { status: "blocked", code: "branch_change_confirmation_unhandled", receipt: receiptSummary(intent), ...after };
+        }
         intent.status = "verified";
         intent.verifiedAt = new Date().toISOString();
         intent.orderId = after.view.order?.id;
@@ -249,7 +254,9 @@ export class BoltRunner {
         requireBolt(input.branchUrl, "branch_url_required");
         const url = new URL(input.branchUrl);
         requireBolt(url.origin === "https://food.bolt.eu" && !url.username && !url.password && /^\/en\/[^/]+\/p\/\d+(?:-[^/]+)?\/$/.test(url.pathname) && !url.search && !url.hash, "branch_url_invalid");
-        requireBolt(!view.basketState?.loading, "basket_still_loading");
+        requireBolt(view.basketState, "basket_state_unavailable");
+        requireBolt(!view.basketState.loading, "basket_still_loading");
+        requireBolt(!view.basketState.ready, "active_basket_preserved_refuse_branch_change");
         requireBolt(view.basket?.length !== undefined ? view.basket.length === 0 : true, "empty_basket_required_before_branch_change");
         return [() => this.port.navigate(url.href)];
       }

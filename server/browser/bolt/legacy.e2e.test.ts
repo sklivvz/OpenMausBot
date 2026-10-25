@@ -52,6 +52,33 @@ describe("the legacy agent-browser Bolt transport", () => {
     expect(searched.value).toMatchObject({ status: "dispatched", verification: "input_only", searchResults: "unknown" });
   });
 
+  it("opens a branch through the actual agent_browser_open tool", async () => {
+    const { runtime, spec, host, calls } = legacy();
+    spec.env.BOLT_BASKET_LOADING = "0";
+    const inspected = await bolt(runtime, spec, host, { action: "inspect" });
+    const opened = await bolt(runtime, spec, host, { action: "open_branch", operationId: "branch-1", observationRef: inspected.value.observationRef, branchUrl: "https://food.bolt.eu/en/1-tallinn/p/456-other/" });
+    expect(opened.value.status).toBe("verified");
+    expect(calls()).toContain("agent_browser_open");
+    expect(calls()).not.toContain("agent_browser_navigate");
+  });
+
+  it("refuses an active basket before branch navigation and reports an unhandled replacement prompt", async () => {
+    const active = legacy();
+    active.spec.env.BOLT_BASKET_LOADING = "0";
+    active.spec.env.BOLT_BASKET_READY = "1";
+    const inspected = await bolt(active.runtime, active.spec, active.host, { action: "inspect" });
+    const blocked = await bolt(active.runtime, active.spec, active.host, { action: "open_branch", operationId: "active", observationRef: inspected.value.observationRef, branchUrl: "https://food.bolt.eu/en/1-tallinn/p/456-other/" });
+    expect(blocked.value).toMatchObject({ status: "blocked", code: "active_basket_preserved_refuse_branch_change" });
+    expect(active.calls()).not.toContain("agent_browser_open");
+
+    const prompt = legacy();
+    prompt.spec.env.BOLT_BASKET_LOADING = "0";
+    prompt.spec.env.BOLT_BRANCH_CONFIRM = "1";
+    const seen = await bolt(prompt.runtime, prompt.spec, prompt.host, { action: "inspect" });
+    const confirmation = await bolt(prompt.runtime, prompt.spec, prompt.host, { action: "open_branch", operationId: "prompt", observationRef: seen.value.observationRef, branchUrl: "https://food.bolt.eu/en/1-tallinn/p/456-other/" });
+    expect(confirmation.value).toMatchObject({ status: "blocked", code: "branch_change_confirmation_unhandled" });
+  });
+
   it("refuses unsupported actions before invoking a browser effect", async () => {
     const { runtime, spec, host, calls } = legacy();
     const inspected = await bolt(runtime, spec, host, { action: "inspect" });
