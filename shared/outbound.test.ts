@@ -65,6 +65,7 @@ describe("isReadOnlyTool", () => {
   it("treats connector reconciliation and readback as reads, not sends", () => {
     expect(isOutboundTool("bluesky_reconcile_post")).toBe(false);
     expect(isOutboundTool("threads_reconcile")).toBe(false);
+    expect(isOutboundTool("bluesky_prepare_post")).toBe(false);
     expect(isReadOnlyTool("bluesky_reconcile_post")).toBe(true);
   });
 

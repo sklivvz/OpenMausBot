@@ -4579,11 +4579,12 @@ const coordinator: Coordinator = createCoordinator({
     },
     receiptSatisfied: node => {
       const task = store.taskByThread(node.botId, node.threadId);
-      const channel = node.admission?.deliverables.find(item => item.channel)?.channel;
+      const deliverable = node.admission?.deliverables.find(item => item.channel);
       return receiptRecorded(store.messagesFor(node.threadId), {
         botId: node.botId, taskId: node.threadId, ...(node.admission?.objectiveId ? { objectiveId: node.admission.objectiveId } : {}),
         ...(node.admission?.operations ? { operations: node.admission.operations } : {}),
-        ...(channel ? { channel } : {}),
+        ...(deliverable?.channel ? { channel: deliverable.channel } : {}),
+        ...(deliverable?.account ? { account: deliverable.account } : {}),
         since: node.startedAt ?? task?.turnStartedAt,
         config: executionReceiptConfig(),
       });

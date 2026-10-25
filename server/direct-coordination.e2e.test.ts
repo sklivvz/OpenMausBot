@@ -747,13 +747,13 @@ it("bounces an undeclared six-channel bundle before an executor turn and refuses
   const six = {
     objective_id: "launch", brief_revision: "brief-v1", workflow: "multi-channel",
     deliverables: ["linkedin", "x", "mastodon", "bluesky", "threads", "hackernews"].map(channel => ({
-      id: channel, channel, acceptance: "provider permalink",
+      id: channel, channel, account: `fixture-${channel}-account`, acceptance: "provider permalink",
     })),
     operations: ["prepare", "publish", "verify"],
   };
   const one = {
     objective_id: "launch", brief_revision: "brief-v1", workflow: "single-channel",
-    deliverables: [{ id: "post", channel: "linkedin", acceptance: "provider URN" }],
+    deliverables: [{ id: "post", channel: "linkedin", account: "fixture-linkedin-account", acceptance: "provider URN" }],
     operations: ["prepare", "publish", "verify"],
   };
   f.plan[f.lead.id] = { reply: "Published" };
@@ -795,7 +795,7 @@ it("rejects a known-infeasible admission inside the person's allocation before a
     bot_ids: [f.lead.id], message: "Publish the LinkedIn post",
     admission: {
       objective_id: "launch", brief_revision: "brief-v1", workflow: "single-channel",
-      deliverables: [{ id: "post", channel: "linkedin", acceptance: "provider URN" }],
+      deliverables: [{ id: "post", channel: "linkedin", account: "fixture-linkedin-account", acceptance: "provider URN" }],
       operations: ["prepare", "publish", "verify"], estimated_duration_ms: 300_000,
     },
   }, expectError: true }], reply: "Refused as infeasible" };
