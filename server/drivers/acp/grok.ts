@@ -493,7 +493,8 @@ const support: AcpSupport = {
   isAuthenticated: (env) => grokSignedIn(env),
 
   // `--append-system-prompt`/`--rules` do not reach the agent-stdio system prompt (1.0.0).
-  buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
+  promptContextPosition: "after",
+  buildPromptText: (turn) => (turn.system ? `${turn.text}\n\n${turn.system}` : turn.text),
 };
 
 export const GrokAgentDriver = createAcpDriver(support);

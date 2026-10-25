@@ -266,6 +266,7 @@ export interface AcpSupport {
   describeAccountError?(code: AccountErrorCode, model?: string): string;
   /** Compose the session/prompt text. Default prepends the persona. */
   buildPromptText?(turn: SendTurnInput): string;
+  promptContextPosition?: "before" | "after";
   /** Rewrite a picker id (`omlx::model`) into the CLI-native id before spawn and session/select. */
   resolveTurnModel?(
     model: string | undefined,
@@ -1617,6 +1618,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 promptTurn.text,
                 Boolean(turn.mentionTurn),
                 ACP_PROMPT_RE_ANCHOR_TURNS,
+                support.promptContextPosition,
               );
               promptInput = { ...promptTurn, system: "", text: composed.text };
               pendingSplitReceipt = { key: receiptKey, receipt: composed.receipt, previous: previousReceipt };
