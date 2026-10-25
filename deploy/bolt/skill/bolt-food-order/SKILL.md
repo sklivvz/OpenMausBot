@@ -21,6 +21,51 @@ the `observationRef` from `read_checkout`. Do not reuse a product ref for a
 basket or checkout action. Do not invent selectors, run ad-hoc DOM experiments,
 or bypass an ambiguous or pending native effect.
 
+## Marco's grocery comparison contract
+
+For Marco's grocery shopping, the purchased amount must be at least 90% and at
+most 200% of the required amount, unless he gives a newer item-specific rule.
+These bounds replace the former symmetric 10% tolerance. Compare whole purchased
+packs, never the portions that will be consumed. Convert compatible units before
+calculating quantity ratios. Do not equate a count of fruit with kilograms without
+an observed per-piece weight or an explicitly authorized conversion.
+
+Compare Bolt Market, Rimi and Selver branches INSIDE Bolt Food for every requested
+item before adding it. Show this exact structure in the user conversation:
+
+ITEM TO BUY: [ingredient and required quantity]
+- BOLT MARKET: [exact product / pack size × count = purchased amount / total price], or NOT FOUND
+- RIMI: [exact product / pack size × count = purchased amount / total price], or NOT FOUND
+- SELVER: [exact product / pack size × count = purchased amount / total price], or NOT FOUND
+- CHOSEN: [store] — CHEAPEST or AVAILABILITY; [quantity ratio and line cost]
+
+Prices must be the actual cost of the full selected pack count. Preserve the
+observed product, branch, availability, quantity and price evidence for each row.
+Do not call a store NOT FOUND when a tool failed or it was not checked: show
+UNCHECKED/BLOCKED and resolve that comparison before choosing a winner. A search
+may need the local product name or a synonym. Use bounded targeted searches;
+do not repeat already evidenced searches without a change that warrants it.
+
+Choose the lowest line cost among suitable, available offers within 90–200%.
+Use AVAILABILITY only if the other two stores were actually checked and have no
+suitable offer. Report delivery fees separately in the overall shop total rather
+than inventing them or hiding them in the item price. Preserve dietary constraints,
+including lactose-free products and requested meat cuts/fat requirements.
+
+If all three stores lack the item, add it to MISSING ITEMS. If available packs
+fall outside 90–200%, or product suitability/quantity cannot be established, add
+it to EXCEPTIONS with exact products, quantities, prices and reasons for Marco's
+decision. Do not add an exception without his decision. Continue independent
+compliant items. A user's examples are a format, not verified stock or prices.
+
+For a multi-store shop, finish and display the comparison before building carts;
+research can be batched by store but the report must be grouped by requested
+item. Never select a product just to prove the tool works. An already-added item
+is not exempt from comparison. Cart preparation must implement the chosen rows,
+verify actual basket lines, and preserve existing user-approved items. Stop and
+report a basket replacement request rather than clearing a cart silently.
+Purchase/payment still requires the exact checkout approval.
+
 ## Mechanical operation route
 
 Start with `inspect`. Use the returned `observationRef` and product `ref`; never
