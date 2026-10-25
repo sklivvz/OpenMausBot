@@ -157,6 +157,7 @@ function checkout() {
     <section id="checkout-items">${state.lines.map((line) => `<button data-testid="features.CheckoutItemRow.editButton2" aria-label="${escape(lineLabel(line))}">${escape(dishOf(line).name)}</button>`).join("")}</section>
     <div data-testid="components.Checkout.CheckoutDeliveryOptions.view">${delivery.map((option) => `
       <button data-testid="components.Checkout.CheckoutDeliveryOptions.dispatchOption" data-action="delivery" aria-label="${escape(option.label)}">
+        <input type="radio" name="delivery" aria-label="${escape(option.label)}"${option.selected ? " checked" : ""}>
         <span data-testid="components.Checkout.CheckoutDeliveryOptions.radio${option.selected ? ":checked" : ""}"></span>
         <span>${escape(option.label)}</span>
       </button>`).join("")}</div>
