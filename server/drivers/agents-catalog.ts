@@ -263,7 +263,7 @@ const TOOL_DEFINITIONS = [
         brief_revision: { type: "string", maxLength: 160 },
         workflow: { type: "string", enum: ["single-channel", "newsletter-platform-production", "artifact-production", "research", "multi-channel"] },
         deliverables: { type: "array", minItems: 1, maxItems: 6, items: { type: "object", additionalProperties: false, properties: {
-          id: { type: "string", maxLength: 160 }, channel: { type: "string", maxLength: 80 }, acceptance: { type: "string", maxLength: 300 },
+          id: { type: "string", maxLength: 160 }, channel: { type: "string", maxLength: 80 }, account: { type: "string", maxLength: 160 }, acceptance: { type: "string", maxLength: 300 },
         }, required: ["id", "acceptance"] } },
         operations: { type: "array", minItems: 1, maxItems: 12, items: { type: "string", enum: ["research", "review", "prepare", "assemble", "install_template", "configure_campaign", "publish", "verify"] } },
         estimated_duration_ms: { type: "integer", minimum: 1 },

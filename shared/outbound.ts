@@ -75,6 +75,13 @@ export function isReadOnlyTool(name: string): boolean {
 /** The built-in agents server's X research tools only read X: x_post reads a post, it does not post one. */
 const AGENTS_X_READS = /^(?:mcp__agents__|agents__|agents_)?x_(?:search|user_posts|post|profile)$/;
 
+/** Actions that are not a send, so a later noun such as POST does not make them one. */
+const NON_SEND_VERBS = new Set([
+  "PREPARE", "DRAFT", "RECONCILE", "READBACK", "RECORD", "VERIFY", "REVIEW",
+  "ANALYZE", "GENERATE", "BUILD", "UPLOAD", "DOWNLOAD", "EDIT", "UPDATE",
+  "DELETE", "ARCHIVE", "CONFIGURE", "INSTALL", "ASSEMBLE",
+]);
+
 /** Does this tool send something to someone, or move money? */
 export function isOutboundTool(name: string): boolean {
   // A raw API call from the workbench can do anything an app tool can, and
@@ -83,10 +90,15 @@ export function isOutboundTool(name: string): boolean {
   if (AGENTS_X_READS.test(name)) return false;
   const tokens = actionTokens(name);
   if (tokens.length === 0) return false;
-  if (isReadOnlyTool(name)) return false;
-  if (tokens.some((token) => SEND_VERBS.has(token))) return true;
-  if (tokens.includes("DRAFT")) return false;
-  return tokens.some((token) => CREATE_VERBS.has(token)) && tokens.some((token) => SENT_NOUNS.has(token));
+  // The first action word decides. "bluesky_prepare_post" prepares a post;
+  // it does not publish it because POST appears later as the object.
+  const first = tokens.findIndex((token) => SEND_VERBS.has(token) || CREATE_VERBS.has(token)
+    || READ_VERBS.has(token) || NON_SEND_VERBS.has(token));
+  if (first < 0) return false;
+  const action = tokens[first]!;
+  if (SEND_VERBS.has(action)) return true;
+  if (READ_VERBS.has(action) || NON_SEND_VERBS.has(action) || tokens.includes("DRAFT")) return false;
+  return CREATE_VERBS.has(action) && tokens.slice(first + 1).some((token) => SENT_NOUNS.has(token));
 }
 
 /** The stored shape, or null when the value is not one. */

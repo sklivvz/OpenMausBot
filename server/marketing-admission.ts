@@ -27,7 +27,7 @@ export interface MarketingAdmission {
   objectiveId: string;
   briefRevision: string;
   workflow: MarketingWorkflow;
-  deliverables: Array<{ id: string; channel?: string; acceptance: string }>;
+  deliverables: Array<{ id: string; channel?: string; account?: string; acceptance: string }>;
   operations: MarketingOperation[];
   estimatedDurationMs?: number;
   verificationReserveMs?: number;
@@ -37,6 +37,7 @@ const identifier = z.string().trim().min(1).max(160).regex(/^[A-Za-z0-9][A-Za-z0
 const deliverable = z.object({
   id: identifier,
   channel: z.string().trim().min(1).max(80).optional(),
+  account: z.string().trim().min(1).max(160).optional(),
   acceptance: z.string().trim().min(1).max(300),
 }).strict();
 export const marketingAdmissionSchema = z.object({
@@ -196,6 +197,15 @@ export function validateMarketingAdmission(raw: unknown, context: AdmissionConte
     return failure("needs_decomposition", "publish_without_channel", "Publishing requires a channel workflow with an exact channel and authority.", admission,
       `${owner} uses single-channel/multi-channel admission with the exact account.`, owner);
   }
+  if (admission.operations.includes("publish")) {
+    const missingAccounts = admission.deliverables.filter(item => !item.account).map(item => item.id);
+    if (missingAccounts.length) {
+      return failure("needs_information", "account_required",
+        `Publishing requires the exact target account for each deliverable. Missing account: ${missingAccounts.join(", ")}.`,
+        admission, `${owner} names the exact account for each published deliverable; channel alone is not enough.`, owner,
+        { offending: { deliverables: missingAccounts } });
+    }
+  }
   if (context.deadlineAt !== undefined) {
     const remainingBeforeReserve = context.deadlineAt - context.now;
     // Reserve at most 20% of the remaining window, capped at one minute, so
@@ -237,7 +247,7 @@ export function validateMarketingAdmission(raw: unknown, context: AdmissionConte
 
 export function admissionBrief(admission: MarketingAdmission, timing: { remainingMs: number | null; estimate: "known" | "unknown"; reserveMs: number }): string {
   const deliverables = admission.deliverables.map(item =>
-    `- ${item.id}${item.channel ? ` (${item.channel})` : ""}: ${item.acceptance}`).join("\n");
+    `- ${item.id}${item.channel ? ` (${item.channel}${item.account ? `, ${item.account}` : ""})` : ""}: ${item.acceptance}`).join("\n");
   return [
     "[ADMITTED SCOPE — execute only this]",
     `Workflow: ${admission.workflow}; objective: ${admission.objectiveId}; brief revision: ${admission.briefRevision}`,

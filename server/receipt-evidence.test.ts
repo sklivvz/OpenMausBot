@@ -96,14 +96,15 @@ describe("receipt evidence", () => {
     })).toBe(false);
     const prepared = JSON.stringify({ status: "prepared", operationId: "op-b", contentSha256: "b".repeat(64) });
     const verified = JSON.stringify({
-      status: "verified", operationId: "op-b", contentSha256: "b".repeat(64),
+      status: "verified", operationId: "op-b", contentSha256: "b".repeat(64), accountDid: "did:plc:fixture",
       uri: "at://did:plc:fixture/app.bsky.feed.post/abc", cid: "cid", permalink: "https://bsky.app/profile/fixture/post/abc",
     });
     const messages = [
       { at: 150, kind: "activity", tool: { name: "bluesky_prepare_post", ok: true, output: prepared } },
       { at: 200, kind: "activity", tool: { name: "bluesky_reconcile_post", ok: true, output: verified } },
     ];
-    expect(receiptRecorded(messages, { ...base(), operations: ["publish"], channel: "bluesky" })).toBe(true);
+    expect(receiptRecorded(messages, { ...base(), operations: ["publish"], channel: "bluesky", account: "did:plc:fixture" })).toBe(true);
+    expect(receiptRecorded(messages, { ...base(), operations: ["publish"], channel: "bluesky", account: "did:plc:other" })).toBe(false);
   });
 
   it("returns a bounded reason for a refused result", () => {

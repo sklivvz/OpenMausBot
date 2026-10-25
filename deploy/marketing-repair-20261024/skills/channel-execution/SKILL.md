@@ -9,7 +9,7 @@ Use for one admitted channel, newsletter or production deliverable. The admitted
 
 ## Procedure
 
-1. Read the admitted scope, current brief and exact acceptance evidence. Verify the account, copy version, media, alt text and authorized operations before acting.
+1. Read the admitted scope, current brief and exact acceptance evidence. Verify the declared account, copy version, media, alt text and authorized operations before acting.
 2. Select the installed deterministic connector or skill for that channel. Use the connected LinkedIn MCP, the Bluesky or Threads connector where granted, and Keila for newsletter platform work. Do not replace a supported connector with a browser, local layout, rewritten copy or a new account.
 3. Execute each external write once. Before a retry or after an ambiguous response, reconcile the provider's existing object or receipt; never repeat blindly.
 4. Read back the actual provider state with a separate read or reconcile call: exact ID, URN or permalink, content hash, media ID and status. Save the provider response as a task artifact. A publish acknowledgement alone is not acceptance.

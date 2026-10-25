@@ -109,7 +109,7 @@
         "name": "marketing-work-decomposition",
         "source": "local:marketing-repair-20261024",
         "path": "skills/marketing-work-decomposition/SKILL.md",
-        "sha256": "9b3c0dd9a0960cac5fd44bcc79aa551e6152d2694914930be2a04c560f30ca7d",
+        "sha256": "ab518f6b2c6eb62c2e3da8f2f05fa5157245707bbee650f82ed75a22a6e68e1c",
         "enabled": true
       },
       {
@@ -117,7 +117,7 @@
         "name": "channel-execution",
         "source": "local:marketing-repair-20261024",
         "path": "skills/channel-execution/SKILL.md",
-        "sha256": "153a6ef2512b39193e91b4f644e45769d76e435acac968b9806c586abd503ce4",
+        "sha256": "4286b6e7e4f6efc0d60cf10ee8318385791c5e152f439fd18271d7ba07da20d4",
         "enabled": true
       }
     ],

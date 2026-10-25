@@ -12,7 +12,7 @@ import {
 const NOW = Date.parse("2026-10-24T19:00:00Z");
 const single = (channel = "linkedin"): MarketingAdmission => ({
   objectiveId: "launch", briefRevision: "brief-v1", workflow: "single-channel",
-  deliverables: [{ id: "post", channel, acceptance: "provider permalink and exact copy hash" }],
+  deliverables: [{ id: "post", channel, account: "fixture-account", acceptance: "provider permalink and exact copy hash" }],
   operations: ["prepare", "publish", "verify"],
 });
 const six = (): MarketingAdmission => ({
@@ -60,6 +60,13 @@ describe("marketing admission", () => {
       deliverables: [single().deliverables[0]!, { id: "second", channel: "bluesky", acceptance: "permalink" }] }, { now: NOW });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("too_many_deliverables");
+  });
+
+  it("refuses publication without the exact target account", () => {
+    const { account: _account, ...deliverable } = single().deliverables[0]!;
+    const result = validateMarketingAdmission({ ...single(), deliverables: [deliverable] }, { now: NOW, owner: "Blake" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result).toMatchObject({ status: "needs_information", code: "account_required", ownership: "Blake" });
   });
 
   it("refuses a child estimate that cannot fit inside the parent's remaining window", () => {

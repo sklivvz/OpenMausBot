@@ -52,7 +52,7 @@ const assignmentSchema = z.object({
     objectiveId: z.string(),
     briefRevision: z.string(),
     workflow: z.enum(["single-channel", "newsletter-platform-production", "artifact-production", "research", "multi-channel"]),
-    deliverables: z.array(z.object({ id: z.string(), channel: z.string().optional(), acceptance: z.string() })).min(1).max(6),
+    deliverables: z.array(z.object({ id: z.string(), channel: z.string().optional(), account: z.string().optional(), acceptance: z.string() })).min(1).max(6),
     operations: z.array(z.enum(["research", "review", "prepare", "assemble", "install_template", "configure_campaign", "publish", "verify"])).min(1).max(12),
     estimatedDurationMs: z.number().int().positive().optional(),
     verificationReserveMs: z.number().int().nonnegative().optional(),

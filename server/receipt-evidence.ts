@@ -24,6 +24,7 @@ export interface ReceiptContext {
   objectiveId?: string;
   operations?: readonly string[];
   channel?: string;
+  account?: string;
   since?: number;
   config?: ReceiptVerificationConfig;
 }
@@ -156,6 +157,7 @@ function providerReadback(calls: readonly { at: number; name: string; output: Re
     if (call.name.includes("bluesky_") && state === "verified") {
       const operation = call.output.operationId;
       if (typeof operation !== "string" || !prepared.has(operation) || call.output.contentSha256 !== prepared.get(operation)) continue;
+      if (context.account && call.output.accountDid !== context.account) continue;
       if (typeof call.output.uri !== "string" || !call.output.uri.startsWith("at://")) continue;
       if (typeof call.output.cid !== "string" || !call.output.cid) continue;
       if (typeof call.output.permalink !== "string" || !call.output.permalink.startsWith("https://")) continue;
@@ -164,6 +166,7 @@ function providerReadback(calls: readonly { at: number; name: string; output: Re
     if (call.name.includes("threads_") && state === "published_verified") {
       const operation = call.output.operationId;
       if (typeof operation !== "string" || !prepared.has(operation) || call.output.manifestSha256 !== prepared.get(operation)) continue;
+      if (context.account && call.output.accountId !== context.account) continue;
       if (typeof call.output.postId !== "string" || !call.output.postId) continue;
       if (typeof call.output.permalink !== "string" || !/^https:\/\/(?:www\.)?threads\.(?:net|com)\//.test(call.output.permalink)) continue;
       return { ok: true, reason: "Threads connector readback verified the exact manifest on the provider", evidence: call.output.permalink };
