@@ -94,6 +94,16 @@ describe("prompt-split receipts", () => {
 describe("splitSessionPrompt", () => {
   const fullSystem = "stable rules.\n\nmemory";
 
+  it("keeps requests first through initial context, updates and re-anchoring", () => {
+    const first = splitSessionPrompt("rules", "memory", null, fullSystem, "request", false, 1, "after");
+    expect(first.text).toBe("request\n\n" + fullSystem);
+    const next = splitSessionPrompt("rules", "changed", first.receipt, fullSystem, "next", false, 1, "after");
+    expect(next.text.startsWith("next\n\n")).toBe(true);
+    expect(next.text).toContain("changed");
+    const anchored = splitSessionPrompt("rules", "changed", next.receipt, fullSystem, "finish", false, 1, "after");
+    expect(anchored.text).toBe("finish\n\n" + fullSystem);
+  });
+
   it("delivers the full prompt to an untracked session, then sends later turns bare", () => {
     const first = splitSessionPrompt("stable rules.", "memory", null, fullSystem, "first");
     expect(first.text).toBe(fullSystem + "\n\nfirst");

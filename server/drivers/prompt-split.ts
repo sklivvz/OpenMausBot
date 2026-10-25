@@ -97,17 +97,18 @@ export function splitSessionPrompt(
   text: string,
   perTurnVolatile = false,
   reAnchorAfterTurns = 0,
+  contextPosition: "before" | "after" = "before",
 ): { text: string; receipt: PromptSplitReceipt } {
   const fingerprints = promptSplitFingerprints(stable, volatile);
   const turnsSinceFull = typeof previous?.turnsSinceFull === "number" ? previous.turnsSinceFull : 0;
   const reAnchor = reAnchorAfterTurns > 0 && previous !== null && turnsSinceFull >= reAnchorAfterTurns;
   if (previous === null || previous.stable !== fingerprints.stable || reAnchor) {
-    return { text: fullSystem ? fullSystem + "\n\n" + text : text, receipt: { ...fingerprints, turnsSinceFull: 0 } };
+    return { text: contextPosition === "after" ? withContextNote(text, fullSystem ?? "") : withContextNote(fullSystem ?? "", text), receipt: { ...fingerprints, turnsSinceFull: 0 } };
   }
   const note = previous.volatile === fingerprints.volatile && !perTurnVolatile
     ? ""
     : volatileContextNote(volatile, previous.volatile !== EMPTY_FINGERPRINT);
-  return { text: withContextNote(note, text), receipt: { ...fingerprints, turnsSinceFull: turnsSinceFull + 1 } };
+  return { text: contextPosition === "after" ? withContextNote(text, note) : withContextNote(note, text), receipt: { ...fingerprints, turnsSinceFull: turnsSinceFull + 1 } };
 }
 
 /** The volatile half as a reminder in a Claude turn, by the CLI's own out-of-band convention: on a

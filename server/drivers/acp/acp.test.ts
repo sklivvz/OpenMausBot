@@ -1053,6 +1053,23 @@ describe("ACP turns (fake CLI)", () => {
     ]);
   });
 
+  it.each([false, true])("puts the Grok request before standing context (split=%s)", async (split) => {
+    await create(GrokAgentDriver);
+    const dump = join(scratch, "grok-request.json");
+    process.env.FAKE_ACP_DUMP = dump;
+    process.env.FAKE_ACP_DUMP_PROMPT = "1";
+    const standing = "Standing bot instructions. ".repeat(2000);
+    await instance.adapter.sendTurn({
+      threadId: "t-request-first", text: "Please give me the itinerary PDF.", system: standing,
+      ...(split ? { systemStable: standing, systemVolatile: "" } : {}),
+    });
+    expect(await recorder.until((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
+    const prompt = JSON.parse(readFileSync(`${dump}.prompt.json`, "utf8")) as Array<{ type: string; text?: string }>;
+    const text = prompt.find(block => block.type === "text")?.text;
+    expect(text?.startsWith("Please give me the itinerary PDF.")).toBe(true);
+    expect(text).toContain(standing);
+  });
+
   it.each([false, true])("mounts Data through the existing stdio transport unless excluded (excluded=%s)", async (excluded) => {
     await create();
     const dump = join(scratch, "data.json");
