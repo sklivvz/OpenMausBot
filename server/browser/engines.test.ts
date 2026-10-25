@@ -68,6 +68,16 @@ describe("which engine runs a session", () => {
 });
 
 describe("the runtime router", () => {
+  it("advertises and routes the mechanical Bolt tool on the legacy agent-browser engine", async () => {
+    const { old, runtime } = engines();
+    old.agentRpc.mockResolvedValueOnce({ tools: [{ name: "agent_browser_open" }] } as never);
+    const listed = await runtime.agentRpc("s", AGENT_BROWSER, "tools/list", {}) as { tools: Array<{ name: string }> };
+    expect(listed.tools.map((tool) => tool.name)).toContain("agent_browser_bolt");
+    old.agentRpc.mockResolvedValueOnce("agent-browser" as never);
+    await expect(runtime.agentRpc("s", AGENT_BROWSER, "tools/call", { name: "agent_browser_bolt", arguments: { action: "inspect" } })).resolves.toBe("agent-browser");
+    expect(old.agentRpc).toHaveBeenLastCalledWith("s", AGENT_BROWSER, "tools/call", { name: "agent_browser_bolt", arguments: { action: "inspect" } }, undefined, undefined, expect.objectContaining({ bindingsPath: expect.stringContaining("dom-bindings.json"), directory: expect.stringContaining("bolt") }));
+  });
+
   it("sends a new-engine session's calls to the browser service and every other to agent-browser", async () => {
     const { old, chrome, runtime } = engines();
     await expect(runtime.agentRpc("s", CHROME, "tools/call", { name: "agent_browser_open" })).resolves.toBe("chrome");

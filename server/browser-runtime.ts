@@ -4,6 +4,10 @@ import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT,
 import { BrowserLanes } from "./browser-lane.ts";
 import { SECRET_ON_PAGE, SecretHolds, type SecretHold } from "./browser-secret-hold.ts";
 import { SELVER_CART_SNAPSHOT, SELVER_CART_TOOL } from "./browser/selver-cart.ts";
+import { BOLT_INPUT, BoltFault } from "./browser/bolt/contracts.ts";
+import { BoltDomPort, loadBindings, type BoltDomTransport } from "./browser/bolt/browser.ts";
+import { BoltRunner, type BoltPaymentAuthority } from "./browser/bolt/runner.ts";
+import { BoltJournal } from "./browser/bolt/state.ts";
 import type { BrowserSteps, StepCall, StepContext } from "./browser-steps.ts";
 import { HARNESS_CALL_BUDGET_MS } from "./harness-budget.ts";
 
@@ -11,6 +15,13 @@ export interface BrowserSpawnSpec {
   command: string;
   args: string[];
   env: Record<string, string | undefined>;
+}
+
+/** Host-owned journal/bindings paths and payment authority for the composite Bolt operation. */
+export interface BoltRuntimeHost {
+  directory: string;
+  bindingsPath: string;
+  authority?: BoltPaymentAuthority;
 }
 
 export const BROWSER_CONTROL_REFUSAL = "Browser tools are paused while a person controls this browser. Wait for them to hand control back; do not try another browser or execution tool.";
@@ -445,7 +456,7 @@ export class BrowserRuntime {
   }
 
   /** Every tool result, recovery notes included, is scrubbed of held secrets. */
-  async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+  async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext, bolt?: BoltRuntimeHost): Promise<unknown> {
     if (method === "tools/call" && readsAroundBrowser(params)) return { isError: true, content: [{ type: "text", text: READ_OPEN_PAGE_ONLY }] };
     if (method === "tools/call" && toolNameOf(params) === SELVER_CART_TOOL.name) {
       const args = (params as { arguments?: unknown }).arguments;
@@ -462,7 +473,7 @@ export class BrowserRuntime {
     const deadline = Date.now() + this.options.callBudgetMs;
     let result: unknown;
     try {
-      const request = () => this.agentRequest(session, spec, method, params, deadline, beforeDispatch, ctx);
+      const request = () => this.agentRequest(session, spec, method, params, deadline, beforeDispatch, ctx, bolt);
       const work = method !== "tools/call" || toolNameOf(params) === BROWSER_RESTART_TOOL || gate.uncertain ? request() : this.lanes.run(session, request, this.options.laneWaitMs);
       result = await this.withinBudget(session, method, toolNameOf(params) ?? "browser", work, deadline);
     } finally { gate.calls--; gate.lastUsed = Date.now(); }
@@ -487,7 +498,7 @@ export class BrowserRuntime {
     return this.gate(session).lostCall === null ? stuckBrowserToolError() : lostCallToolError(call);
   }
 
-  private async agentRequest(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, deadline: number, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+  private async agentRequest(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, deadline: number, beforeDispatch?: () => void, ctx?: StepContext, bolt?: BoltRuntimeHost): Promise<unknown> {
     if (method !== "tools/list" && method !== "tools/call") throw new Error("Unsupported browser method.");
     // tools/list skips withAgentAction, so it must refuse the closing window itself or its client outlives restart().
     if (method !== "tools/call" && this.gate(session).closing) throw new Error("The browser is closing. Try again shortly.");
@@ -541,6 +552,12 @@ export class BrowserRuntime {
         // Launch and session parameters OMB owns never reach the engine from a call.
         const request = method === "tools/call" ? stripHarnessOwnedArguments(params) : params;
         const args = (request as { arguments?: unknown } | null)?.arguments;
+        if (method === "tools/call" && toolName === "agent_browser_bolt") {
+          const started = performance.now();
+          const result = await this.runBolt(entry, session, args, deadline, beforeDispatch, bolt);
+          phases.engineMs = (phases.engineMs ?? 0) + performance.now() - started;
+          return result;
+        }
         const call: StepCall | null = this.steps && method === "tools/call" && toolName !== undefined ? {
           session, spec, tool: toolName, args: args && typeof args === "object" ? args as Record<string, unknown> : {}, ctx,
           stopped: () => gate.owner !== null || gate.uncertain || gate.closing,
@@ -654,6 +671,56 @@ export class BrowserRuntime {
     } catch (error) {
       if (error instanceof Error && error.message === BROWSER_INTERRUPTED) return stuckBrowserToolError();
       if (error instanceof TransportError && gate.uncertain && gate.lostCall !== null) return lostCallToolError(toolName ?? gate.lostCall);
+      throw error;
+    }
+  }
+
+  private async runBolt(entry: ClientEntry, session: string, args: unknown, deadline: number, beforeDispatch: (() => void) | undefined, host: BoltRuntimeHost | undefined): Promise<unknown> {
+    const errorResult = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
+    const textResult = (text: string) => ({ content: [{ type: "text" as const, text }] });
+    if (!host) return errorResult("bolt_host_configuration_required");
+    const parsed = BOLT_INPUT.strict().safeParse(args ?? {});
+    if (!parsed.success) return errorResult(`agent_browser_bolt got arguments it cannot use (${parsed.error.issues.slice(0, 3).map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`).join("; ")}).`);
+    if (parsed.data.tab) return errorResult("agent_browser_bolt cannot select a tab on agent-browser; omit tab.");
+    const timeout = () => Math.max(1, Math.min(this.options.requestTimeoutMs, deadline - Date.now() - this.options.followUpReserveMs));
+    const gate = () => {
+      beforeDispatch?.();
+      const current = this.gate(session);
+      if (current.owner !== null) throw new BoltFault("browser_control_changed");
+      if (current.uncertain) throw new BoltFault("browser_uncertain_reconcile_required");
+      if (current.closing) throw new BoltFault("browser_control_changed");
+      if (Date.now() >= deadline - this.options.followUpReserveMs) throw new BoltFault("call_budget_exhausted");
+    };
+    const rpc = async (name: string, rpcArgs: Record<string, unknown>): Promise<unknown> => {
+      gate();
+      const result = await entry.client.rpc("tools/call", { name, arguments: rpcArgs }, timeout());
+      if (result && typeof result === "object" && (result as { isError?: unknown }).isError === true) {
+        throw new BoltFault(`browser_action_failed:${firstText(result).slice(0, 160)}`);
+      }
+      return result;
+    };
+    const valueOf = (result: unknown): unknown => {
+      let value: unknown = firstText(result);
+      for (let depth = 0; depth < 2 && typeof value === "string"; depth++) {
+        try { value = JSON.parse(value); } catch { break; }
+      }
+      return value;
+    };
+    const pageUrl = async (): Promise<string> => String(valueOf(await rpc("agent_browser_get_url", {})) ?? "").trim();
+    if (await this.holds.refuses(session, pageUrl)) return errorResult(SECRET_ON_PAGE);
+    const transport: BoltDomTransport = {
+      url: pageUrl,
+      evaluate: async (script) => valueOf(await rpc("agent_browser_eval", { script })),
+      click: async (selector) => { await rpc("agent_browser_click", { selector }); },
+      fill: async (selector, value) => { await rpc("agent_browser_fill", { selector, text: value }); },
+      navigate: async (url) => { await rpc("agent_browser_open", { url }); },
+    };
+    try {
+      const port = new BoltDomPort(transport, loadBindings(host.bindingsPath), gate);
+      const runner = new BoltRunner(port, new BoltJournal(host.directory), host.authority);
+      return textResult(JSON.stringify(await runner.run(parsed.data)));
+    } catch (error) {
+      if (error instanceof BoltFault) return errorResult(JSON.stringify({ status: "blocked", code: error.code, operationId: parsed.data.operationId }));
       throw error;
     }
   }

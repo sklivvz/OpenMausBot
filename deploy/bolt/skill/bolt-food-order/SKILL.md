@@ -11,11 +11,16 @@ requirements, quantities, destination, deadline and authority in the assignment.
 Dine-out is outside this procedure. Recommendation-only work uses public menus
 first; login and checkout are not prerequisites for useful recommendations.
 
-Read this procedure before using the browser. Use `agent_browser_bolt` when it
-is exposed and supports the needed action. Otherwise follow the recorded browser
-sequence below with the bot's mounted browser tools. This is an existing browser
-procedure, not permission to rediscover the entire site or use the user's desktop.
-Do not claim the mechanical tool exists merely because this skill describes it.
+Read this procedure before using the browser. `agent_browser_bolt` runs on both
+the native Chrome and legacy agent-browser engines. Call `inspect` first and read
+its `supportedActions`; the built-in host-reviewed mapping currently exposes
+current-address reading, branch search dispatch, product-card reads, basket
+loading state, and fulfilment/delivery reads and selections. Unsupported item,
+basket-row, saved-address and checkout actions fail before any effect. Continue
+those non-payment preparation steps with the recorded browser route below, using
+observed controls and verifying each change. Do not invent selectors, run ad-hoc
+DOM experiments, or bypass an ambiguous or pending native effect. Payment never
+falls back to the generic route.
 
 ## Mechanical operation route
 
@@ -25,12 +30,31 @@ Start with `inspect` or the relevant read. Use the returned `observationRef` and
 requires `reconcile_operation` with that ID before another mutation. Do not use
 another route to bypass an unresolved effect.
 
+The built-in mappings support `inspect`, `search_branch`, `read_basket`,
+`list_fulfilment_options`, `select_fulfilment`, `list_delivery_options`,
+`select_delivery_option` and `reconcile_operation`. `search_branch` returns
+`status: "dispatched"`, `verification: "input_only"` and
+`searchResults: "unknown"`: the search input was filled, but the recorded DOM
+does not prove the result cards finished refreshing. Inspect the cards before
+choosing one. `read_basket` returns a `basketState` with `loading`, `ready` and
+`rowsAvailable: false`; it is not a cart-row read and never a total. Do not claim
+an empty, complete or priced basket from it. Missing `basketRows` or checkout
+fields are explicit gaps, not zero.
+
+Product cards preserve the displayed pack price (`displayedPriceBasis:
+"per_pack"`), the raw sale description, and a parsed sale unit only when the card
+shows one. A card without sale quantity, unit price or basis leaves those fields
+absent. Never infer kilograms from pieces, a per-kilogram price from a pack
+price, or edible quantity from product text.
+
 - Session and destination: `read_session`, `list_saved_addresses`,
-  `select_saved_address`.
-- Menu: `open_branch`, `search_branch`, `open_product`, `close_product`.
+  `select_saved_address` (blocked until their DOM mappings exist).
+- Menu: `search_branch` is available as input-only dispatch. `open_branch`, `open_product` and `close_product` are blocked until their mappings exist; use the recorded route for non-payment preparation.
 - Item: `read_item_options`, `set_item_options`, `set_product_quantity`,
-  `read_item_comment`, `set_item_comment`, `add_configured_product`.
-- Basket: `open_basket`, `read_basket`, `set_basket_quantity`.
+  `read_item_comment`, `set_item_comment`, `add_configured_product` (blocked
+  until dish-sheet mappings exist).
+- Basket: `read_basket` exposes loading/readiness only; `open_basket` and
+  `set_basket_quantity` are blocked until row mappings exist.
 - Fulfilment: `list_fulfilment_options`, `select_fulfilment`,
   `list_delivery_options`, `select_delivery_option`.
 - Checkout: `read_checkout`, `request_payment_approval`, `pay`, `read_order`.
