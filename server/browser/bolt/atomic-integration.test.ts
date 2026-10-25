@@ -145,6 +145,30 @@ function injectYogurtDetail(fixture: BasketFixture): void {
 }
 
 describe("add and reconcile against an existing baseline line", () => {
+  it("opens an unpriced basket by its route and adds the first item from an observed empty baseline", async () => {
+    const fixture = new BasketFixture({ start: "menu", hideEmptyBasketEntry: true, lines: [
+      { key: "yogurt", name: "Tere, Kreeka jogurt maitsestamata, 350 g", quantity: 0, unitPriceMinor: 176 },
+    ] });
+    const navigated: string[] = [];
+    const { runner } = runnerFor({ ...fixture.transport, fill: async () => {}, navigate: async (url) => {
+      navigated.push(url);
+      fixture.showCheckout();
+    } });
+    const closed = await runner.run({ action: "read_basket" }) as { observationRef: string };
+    const opened = await runner.run({ action: "open_basket", observationRef: closed.observationRef, operationId: "open-empty" }) as unknown as { basket: { emptyBasket: boolean } };
+    expect(opened.basket.emptyBasket).toBe(true);
+    expect(navigated).toEqual(["https://food.bolt.eu/en/1-tallinn/checkout/200420/?source=menu_screen"]);
+    fixture.showMenu();
+    injectYogurtDetail(fixture);
+    const product = await runner.run({ action: "read_item_options" }) as { observationRef: string };
+    const added = await runner.run({ action: "add_configured_product", operationId: "first-item", observationRef: product.observationRef });
+    expect(added.status).toBe("verified");
+    expect(fixture.addClicks).toBe(1);
+    expect(fixture.lines[0].quantity).toBe(1);
+    expect((await runner.run({ action: "add_configured_product", operationId: "first-item", observationRef: product.observationRef })).status).toBe("verified");
+    expect(fixture.addClicks).toBe(1);
+  });
+
   it("verifies the configured quantity delta instead of treating the whole line total as a new line", async () => {
     const fixture = new BasketFixture({ start: "checkout", plusTestId: true });
     const { runner } = runnerFor({ ...fixture.transport, fill: async () => {}, navigate: async () => {} });

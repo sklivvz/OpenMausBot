@@ -24,6 +24,22 @@ function lineFor(snapshot: BoltBasketSnapshot, name: string, comment: string | n
 }
 
 describe("atomic Bolt basket operations on recorded-shape fixtures", () => {
+  it("does not infer an empty basket when fallback navigation exposes no basket state", async () => {
+    const fixture = new BasketFixture({ start: "menu", lines: [], hideEmptyBasketEntry: true });
+    const operations = new BoltBasketOperations({ ...fixture.transport, navigate: async () => {} }, { timeoutMs: 20, pollMs: 2 });
+    await expect(operations.open()).rejects.toThrow("verification_incomplete_reconcile_required");
+    expect(fixture.addClicks).toBe(0);
+  });
+
+  it("does not derive a checkout route from an unrelated page", async () => {
+    const fixture = new BasketFixture({ start: "menu", lines: [], hideEmptyBasketEntry: true });
+    fixture.window.history.replaceState({}, "", "https://food.bolt.eu/");
+    let navigated = false;
+    const operations = new BoltBasketOperations({ ...fixture.transport, navigate: async () => { navigated = true; } });
+    await expect(operations.open()).rejects.toThrow("basket_entry_not_found");
+    expect(navigated).toBe(false);
+  });
+
   it("reads exact scoped rows with extended line totals and records provider/basis unknowns", async () => {
     const fixture = new BasketFixture({ start: "checkout" });
     const snapshot = await makeOperations(fixture).read();

@@ -14,6 +14,7 @@ export interface BoltBasketTransport {
   url(): string | Promise<string>;
   evaluate(script: string): Promise<unknown>;
   click(selector: string): Promise<void>;
+  navigate?(url: string): Promise<void>;
 }
 
 export interface BoltBasketEffect {
@@ -707,7 +708,23 @@ export class BoltBasketOperations {
     const before = await this.read();
     requireBolt(before.complete, "basket_observation_incomplete");
     if (before.open) return { status: "verified", effectDispatched: false, alreadyOpen: true, before, after: before };
-    requireBolt(before.basketEntry, "basket_entry_not_found");
+    if (!before.basketEntry) {
+      const url = new URL(before.url);
+      const branch = /^(.*)\/p\/(\d+)(?:-[^/]+)?\/$/.exec(url.pathname);
+      const searchBranch = url.pathname === "/MenuSearchModal/" ? url.searchParams.get("providerId") : null;
+      const branchId = branch?.[2] ?? searchBranch;
+      requireBolt(branchId && /^\d+$/.test(branchId) && this.transport.navigate, "basket_entry_not_found");
+      // Bolt web bundle 6c9f5a6981b9e8534582dd15d4cf5e0b hides WebMenuBasketButton
+      // without a total; its OnePageCheckout route accepts /checkout/:providerId.
+      const checkout = new URL(`${branch?.[1] ?? ""}/checkout/${branchId}/?source=menu_screen`, this.origin);
+      requireBolt(checkout.origin === this.origin, "basket_checkout_origin_invalid");
+      const latest = await this.read();
+      requireBolt(latest.url === before.url && latest.complete && !latest.replacementPrompt, "basket_entry_changed_before_effect");
+      await this.dispatch({ kind: "open_basket", control: checkout.href }, () => this.transport.navigate!(checkout.href));
+      const after = await this.waitFor((snapshot) => snapshot.open && snapshot.complete && (snapshot.emptyBasket || snapshot.rows.length > 0));
+      requireBolt(after.branchId === branchId, "basket_branch_changed");
+      return { status: "verified", effectDispatched: true, alreadyOpen: false, before, after };
+    }
     requireBolt(before.basketEntry.enabled, "basket_entry_disabled");
     const entry = before.basketEntry;
     const latest = await this.read();
