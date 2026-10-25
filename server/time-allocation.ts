@@ -121,9 +121,15 @@ export function timeAllocationState(
   return "within";
 }
 
-/** A new outward effect may not start after the deadline; an in-flight one is reconciled, not killed. */
-export function canStartEffect(allocation: Pick<TimeAllocation, "deadlineAt" | "allocatedMs"> | undefined, now: number): boolean {
-  return !allocation || timeAllocationState(allocation, now) !== "missed";
+function isStartDeadline(allocation: Pick<TimeAllocation, "sourceText">): boolean {
+  return /\byou(?:'ve| have)(?: got)?\s+\d+(?:\.\d+)?\s*(?:seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\s+to\s+(?:start|begin)\b/i.test(allocation.sourceText)
+    && !/\b(?:stop|finish|complete|end|until)\b/i.test(allocation.sourceText);
+}
+
+/** Missing a start commitment does not revoke execution authority; completion allocations remain bounded. */
+export function canStartEffect(allocation: (Pick<TimeAllocation, "deadlineAt" | "allocatedMs"> & Partial<Pick<TimeAllocation, "sourceText">>) | undefined, now: number): boolean {
+  return !allocation || Boolean(allocation.sourceText && isStartDeadline({ sourceText: allocation.sourceText }))
+    || timeAllocationState(allocation, now) !== "missed";
 }
 
 export function isExtension(text: string): boolean {
@@ -180,6 +186,9 @@ export function inheritedTimeAllocation(parent: TimeAllocation): TimeAllocation 
 
 export function timeAllocationLine(allocation: TimeAllocation, now: number, reserveMs = 0): string {
   const state = timeAllocationState(allocation, now, reserveMs);
+  if (isStartDeadline(allocation)) {
+    return `START COMMITMENT (${state}): ${allocation.sourceText} Start deadline ${new Date(allocation.deadlineAt).toISOString()}. Preserve this commitment and report a missed start honestly. This is not a completion deadline or a stop instruction: start the next authorized operation without asking for a new time allocation. Purchase approvals and explicit stops remain in force.`;
+  }
   const remaining = remainingMs(allocation, now);
   const minutes = Math.max(0, Math.ceil(remaining / 60_000));
   return `TIME ALLOCATION (${state}): ${allocation.sourceText} Deadline ${new Date(allocation.deadlineAt).toISOString()}; about ${minutes} minute(s) left. Queueing, delegation, retries, failover and verification do not reset it. Do not start an operation that cannot finish inside the remaining window; reserve time for integration and verification. Only a new explicit person allocation can extend it.`;
