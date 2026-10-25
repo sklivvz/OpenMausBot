@@ -77,6 +77,8 @@ export function view(a: Assignment, parent?: Assignment): HandoffView {
     text: a.brief, createdAt: a.createdAt, status, result: a.result, reported: a.reportedAt !== undefined, executions: a.executions,
     lastProgressAt: a.lastActivityAt, approvalGranted: a.approved ?? false, kind: kindOf(groupId, parent), restarts: a.restarts,
     mode: a.mode, reply: a.reply,
+    ...(a.admission ? { admission: a.admission } : {}),
+    ...(a.evidenceRequired ? { evidenceRequired: true } : {}),
   };
   if (a.outcome !== undefined) node.outcome = a.outcome;
   if (a.outcomeDetail !== undefined) node.outcomeDetail = a.outcomeDetail;
@@ -177,7 +179,7 @@ export class RuntimeCoordinator implements Coordinator {
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, text: string,
     options: HandoffOptions = {}): { node: HandoffView; duplicate: boolean } {
     this.ready();
-    const { approvalGranted = false, rework = false, requestBatchKey, thread } = options;
+    const { approvalGranted = false, rework = false, requestBatchKey, thread, admission, evidenceRequired } = options;
     const mode = options.mode ?? "work";
     const parent = parentId ? this.store.get(parentId) : this.store.get(generation);
     if (!parent) throw new Error(parentId ? NOT_RUNNING : NO_TURN);
@@ -206,6 +208,8 @@ export class RuntimeCoordinator implements Coordinator {
       assignee: { botId: target.botId, destination: { kind: target.groupId ? "room_thread" : thread === "standing" ? "standing_thread" : "work_thread",
         threadId: target.threadId, ...(target.groupId ? { groupId: target.groupId } : {}) } },
       mode, reply, brief: text, rework,
+      ...(admission ? { admission } : {}),
+      ...(evidenceRequired ? { evidenceRequired: true } : {}),
       ...(options.doneWhen ? { doneWhen: options.doneWhen } : {}),
       levels: { own: level.level },
       ...(level.driverKind !== undefined ? { driverKind: level.driverKind } : {}),
@@ -480,6 +484,8 @@ export class RuntimeCoordinator implements Coordinator {
       },
       names: (a, parent) => host.names(view(a, parent), parent && this.project(parent)),
       outward: a => host.outward ? host.outward(this.project(a)) : [],
+      receiptSatisfied: a => host.receiptSatisfied?.(this.project(a)) ?? false,
+      timeExpired: a => host.timeExpired?.(this.project(a)) ?? false,
     };
   }
 

@@ -21,7 +21,8 @@ function gateEnvironment(): NodeJS.ProcessEnv {
     if (process.argv.length !== 4 || process.argv[2] !== "--config-env" || !key || !/^OMB_GATE_CONFIG_[a-f0-9]{64}$/.test(key)) throw new Error();
     const value = JSON.parse(process.env[key] ?? "");
     if (!value || typeof value !== "object" || Array.isArray(value)
-      || !["OMB_GATE_NAME", "OMB_GATE_UPSTREAM", "OMB_GATE_TOOL_SCOPE"].every(name => typeof value[name] === "string")
+      || !["OMB_GATE_NAME", "OMB_GATE_UPSTREAM"].every(name => typeof value[name] === "string")
+      || (value.OMB_GATE_TOOL_SCOPE !== undefined && typeof value.OMB_GATE_TOOL_SCOPE !== "string")
       || !Object.entries(value).every(([name, setting]) => GATE_ENV_KEYS.includes(name) && typeof setting === "string")) throw new Error();
     return value;
   } catch {
@@ -29,7 +30,7 @@ function gateEnvironment(): NodeJS.ProcessEnv {
   }
 }
 /** The gate's own settings never reach the upstream server's environment. */
-const GATE_ENV_KEYS = ["OMB_GATE_NAME", "OMB_GATE_SPILL_DIR", "OMB_GATE_BUDGET", "OMB_GATE_UPSTREAM", "OMB_GATE_SPILL_HINT", "OMB_GATE_TOOL_SCOPE", "OMB_GATE_DIRECTORY"];
+const GATE_ENV_KEYS = ["OMB_GATE_NAME", "OMB_GATE_SPILL_DIR", "OMB_GATE_BUDGET", "OMB_GATE_UPSTREAM", "OMB_GATE_SPILL_HINT", "OMB_GATE_TOOL_SCOPE", "OMB_GATE_DIRECTORY", "OMB_EFFECT_CHECK_URL", "OMB_EFFECT_CHECK_TOKEN"];
 const gateEnv = gateEnvironment();
 const NAME = gateEnv.OMB_GATE_NAME || "mcp";
 const SPILL_DIR = gateEnv.OMB_GATE_SPILL_DIR || "";
@@ -187,7 +188,7 @@ const spec = upstreamSpec();
 if (SPILL_DIR) sweepSpill(SPILL_DIR);
 
 const childEnv: NodeJS.ProcessEnv = { ...process.env, ...spec.env };
-for (const key of Object.keys(childEnv)) if (key.startsWith("OMB_GATE_")) delete childEnv[key];
+for (const key of Object.keys(childEnv)) if (key.startsWith("OMB_GATE_") || key.startsWith("OMB_EFFECT_")) delete childEnv[key];
 
 // CreateProcess cannot exec an npm .cmd shim or a node-shebang script, and a shell would re-interpret JSON argv.
 const resolved = resolveCliSpawn(spec.command, spec.args ?? []);
@@ -224,13 +225,37 @@ child.stderr.pipe(process.stderr);
 
 type Pending = { kind: "call"; tool: string; trim: boolean } | { kind: "list" | "other" };
 
+const EFFECT_URL = gateEnv.OMB_EFFECT_CHECK_URL ?? "";
+const EFFECT_TOKEN = gateEnv.OMB_EFFECT_CHECK_TOKEN ?? "";
+
+/** Ask the turn-scoped harness capability before an outward effect. Fail closed. */
+async function effectRefusal(name: string, args: unknown): Promise<string | undefined> {
+  if (!EFFECT_URL || !EFFECT_TOKEN) return undefined;
+  try {
+    const response = await fetch(EFFECT_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${EFFECT_TOKEN}` },
+      body: JSON.stringify({ server: NAME, tool: name, arguments: args }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return `Effect admission check failed (${response.status}); nothing was sent.`;
+    const body: unknown = await response.json();
+    if (isRecord(body) && body.ok === true) return undefined;
+    return isRecord(body) && typeof body.reason === "string"
+      ? body.reason
+      : "Effect admission could not be verified; nothing was sent.";
+  } catch {
+    return "Effect admission could not be verified; nothing was sent.";
+  }
+}
+
 function callTarget(name: string, args: unknown): string | undefined {
   return DIRECTORY ? directoryCallTarget(name, args) : name;
 }
 /** JSON-RPC string and numeric IDs are separate, even when their text is equal. */
 const pending = new Map<string, Pending>();
 
-createInterface({ input: process.stdin }).on("line", (line) => {
+async function handleLine(line: string): Promise<void> {
   let message: Json | undefined;
   if (line.trim()) {
     try {
@@ -257,6 +282,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   if (scope && message?.method === "tools/list" && !id) {
     return rejectRequest(message.id, -32600, "Tool listing needs a request ID");
   }
+  if (message?.method === "tools/call" && typeof params?.name === "string") {
+    const refusal = await effectRefusal(params.name, params.arguments);
+    if (refusal) return rejectRequest(message.id, -32602, refusal);
+  }
   if (id && typeof message?.method === "string") {
     if (scope && pending.has(id)) fail("duplicate request ID on a restricted connection");
     if (message.method === "tools/call") {
@@ -268,8 +297,17 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     }
   }
   child.stdin.write(`${line}\n`);
+}
+
+let lineQueue = Promise.resolve();
+createInterface({ input: process.stdin }).on("line", (line) => {
+  lineQueue = lineQueue.then(() => handleLine(line)).catch((error) => {
+    process.stderr.write(`mcp-gate(${NAME}): ${String(error)}\n`);
+    process.stdin.destroy();
+    process.exitCode = 1;
+  });
 });
-process.stdin.on("end", () => child.stdin.end());
+process.stdin.on("end", () => { void lineQueue.finally(() => child.stdin.end()); });
 
 createInterface({ input: child.stdout }).on("line", (line) => {
   if (!line.trim()) return;

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,6 +127,36 @@ describe("mcp-gate", () => {
     }
     gate = undefined;
     await removeTempDir(scratch);
+  });
+
+  it("asks the harness before forwarding a direct MCP effect and refuses on denial", async () => {
+    const seen: string[] = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        seen.push(`${req.headers.authorization ?? ""} ${body}`);
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: false, reason: "OUT OF SCOPE: another channel is not admitted" }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("fixture server did not listen");
+    try {
+      start({ content: [{ type: "text", text: "executed" }] }, {
+        OMB_EFFECT_CHECK_URL: `http://127.0.0.1:${address.port}/effect-check`,
+        OMB_EFFECT_CHECK_TOKEN: "fixture-effect-token",
+      }, SCOPED_UPSTREAM);
+      const denied = await call("publish");
+      expect(denied.error?.message).toContain("OUT OF SCOPE");
+      expect(existsSync(join(scratch, "reply.json.calls"))).toBe(false);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toContain("Bearer fixture-effect-token");
+      expect(seen[0]).toContain('"tool":"publish"');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it("relays a frame that is not a tool result untouched", async () => {

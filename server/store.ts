@@ -102,11 +102,11 @@ const ASK_NOW = { approvalMode: "ask" as const, autoApprove: false, alwaysAllow:
 const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
-  "routineRunId", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel",
+  "routineRunId", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel", "timeAllocation",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 
-export type GroupTaskPatch = Partial<Pick<GroupTaskRecord, "title" | "pinned">> & { turnTimeoutMinutes?: number | null };
+export type GroupTaskPatch = Partial<Pick<GroupTaskRecord, "title" | "pinned">> & { turnTimeoutMinutes?: number | null; timeAllocation?: GroupTaskRecord["timeAllocation"] | null };
 
 function mirrorActiveGroupTask(group: GroupRecord, task: GroupTaskRecord): void {
   Object.assign(group, { threadId: task.threadId, pinnedCwd: task.pinnedCwd, pinnedMessageId: task.pinnedMessageId });
@@ -1188,6 +1188,8 @@ export class Store {
       else if (patch.pinned === false) delete task.pinned;
       if (patch.turnTimeoutMinutes === null) delete task.turnTimeoutMinutes;
       else if (patch.turnTimeoutMinutes !== undefined) task.turnTimeoutMinutes = patch.turnTimeoutMinutes;
+      if (patch.timeAllocation === null) delete task.timeAllocation;
+      else if (patch.timeAllocation !== undefined) task.timeAllocation = structuredClone(patch.timeAllocation);
     });
     this.emit({ type: "group", groupId });
     return task;
@@ -2205,6 +2207,7 @@ export class Store {
     this.commitBotChange(bot, "the thread change", () => {
       for (const key of TASK_PATCH_FIELDS) {
         if (Object.prototype.hasOwnProperty.call(patch, key)) {
+          if (key === "timeAllocation" && patch[key] === null) { delete task.timeAllocation; continue; }
           Object.assign(task, { [key]: structuredClone(patch[key]) });
         }
       }

@@ -1187,7 +1187,10 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       }
       for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServers)) {
         if (!canUseMcpServer(turn.toolScope, name)) { delete mcpServers[name]; continue; }
-        const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
+        const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope,
+          ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment),
+          ...(turn.integrations?.effectCheck ? { effectCheck: turn.integrations.effectCheck } : {}),
+          forceGate: Boolean(turn.integrations?.effectCheck) });
         if (gated) mcpServers[name] = { ...gated, ...((mcpServers[name] as { alwaysLoad?: unknown })?.alwaysLoad === true ? { alwaysLoad: true } : {}) };
       }
       allowed.splice(0, allowed.length, ...allowed.filter((name) => Object.hasOwn(mcpServers, name.slice("mcp__".length))));

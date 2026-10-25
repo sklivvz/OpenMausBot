@@ -1,10 +1,16 @@
+import { createHash, createHmac } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { checkInvariants } from "./invariants.ts";
+import { receiptRecorded } from "../receipt-evidence.ts";
 import { Runtime, type BeginRequest } from "./runtime.ts";
 import { openRuntimeStore, type RuntimeStore } from "./store.ts";
 import { CUT_TWICE, INTERRUPTED_OUTWARD, loopStop, nextGuard, outwardDetail } from "./tree.ts";
 import type { Assignment, Clock, EnqueueRequest, Limits, RunInput, RunResult, TurnRunner } from "./types.ts";
+import type { MarketingAdmission } from "../marketing-admission.ts";
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 
@@ -966,5 +972,142 @@ describe("tree.ts: the outward wording and the loop guard", () => {
     expect(loopStop({ stale: 3, errors: [] }, "x")?.detail).toBe("Stopped after 3 continuations without progress: x");
     expect(loopStop({ stale: 0, errors: ["E", "E", "E"] }, "x")).toEqual({ reason: "the same error 3 times", detail: "Stopped after 3 identical errors: E" });
     expect(loopStop({ stale: 2, errors: ["E", "E", "E"] }, "x")?.reason).toBe("2 continuations without a successful tool call");
+  });
+});
+
+describe("Runtime: marketing acceptance and time gates", () => {
+  const admission: MarketingAdmission = {
+    objectiveId: "launch", briefRevision: "brief-v1", workflow: "single-channel",
+    deliverables: [{ id: "post", channel: "linkedin", acceptance: "provider URN" }],
+    operations: ["prepare", "publish", "verify"],
+  };
+
+  it("does not settle a receipt-governed child as complete when no signed receipt exists", async () => {
+    const w = world(() => ({ kind: "completed", text: "Published" }));
+    const root = w.runtime.begin(beginReq());
+    w.runner.receiptSatisfied = () => false;
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id, "Publish the post", { evidenceRequired: true })));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "stalled" });
+    expect(w.store.get(child.id)?.result).toContain("EVIDENCE REQUIRED");
+    expect(w.store.get(child.id)?.result).toContain("Do not repeat an outward action");
+    expect(w.store.events(child.id).map(event => event.kind)).not.toContain("continued");
+  });
+
+  it("accepts the same completion when the signed receipt is present", async () => {
+    const w = world(() => ({ kind: "completed", text: "Published" }));
+    const root = w.runtime.begin(beginReq());
+    w.runner.receiptSatisfied = () => true;
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id, "Publish the post", { evidenceRequired: true })));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "completed", outcome: "done" });
+  });
+
+  it("accepts a completion only through the real bound receipt verifier", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "runtime-receipt-"));
+    const key = Buffer.alloc(32, 7);
+    const canonical = (value: unknown): string => JSON.stringify(value, (_, item) =>
+      item && typeof item === "object" && !Array.isArray(item)
+        ? Object.fromEntries(Object.keys(item).sort().map(name => [name, item[name]])) : item);
+    const digest = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
+    const input = {
+      operationId: "runtime-op", botId: "builder", taskId: "builder-work", objectiveId: "launch",
+      sourceVersion: "brief-v1", nextStep: "prepare", evidence: [{ kind: "artifact", id: "a", path: "/tmp/a" }],
+    };
+    const body = {
+      schemaVersion: 1, producer: "execution-receipts", operationId: "runtime-op", inputSha256: digest(input),
+      checkedAt: new Date(2_000_000).toISOString(), input, sourceComplete: true, outcome: "progressed",
+      observations: [], gaps: [], changedEvidence: ["a"], supportedStatuses: ["in_progress"],
+      businessOutcome: "unverified", acceptance: "unverified", association: "caller_supplied",
+    };
+    const receiptSha256 = digest(body);
+    const signed = { ...body, receiptSha256 };
+    const file = join(directory, "runtime-op.json");
+    writeFileSync(file, JSON.stringify({ ...signed, signature: createHmac("sha256", key).update(canonical(signed)).digest("hex") }), { mode: 0o600 });
+    try {
+      const w = world(() => ({ kind: "completed", text: "Prepared" }));
+      const root = w.runtime.begin(beginReq());
+      w.runner.receiptSatisfied = assignment => receiptRecorded(
+        [{ at: 2_000_000, kind: "activity", tool: { name: "record_execution_receipt", ok: true,
+          output: JSON.stringify({ operationId: "runtime-op", receiptFile: file, sourceComplete: true, receiptSha256 }) } }],
+        { botId: assignment.assignee.botId, taskId: assignment.assignee.destination.threadId,
+          objectiveId: "launch", operations: ["prepare"], since: assignment.createdAt,
+          config: { receiptDir: directory, signingKey: key } },
+      );
+      const child = ok(w.runtime.enqueue(toBot("builder", root.id, "Prepare the post", { evidenceRequired: true })));
+      w.runtime.tick();
+      await flush();
+      expect(w.store.get(child.id)).toMatchObject({ status: "completed", outcome: "done" });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an outward action outside the admitted operations even when the turn says completed", async () => {
+    const w = world(() => ({ kind: "completed", text: "Did something else", evidence: { outward: ["LINKEDIN_CREATE_LINKED_IN_POST"] } }));
+    const root = w.runtime.begin(beginReq());
+    w.runner.receiptSatisfied = () => true;
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id, "Prepare only", {
+      admission: { ...admission, operations: ["prepare", "verify"] },
+    })));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "stalled" });
+    expect(w.store.get(child.id)?.result).toContain("OUT OF SCOPE");
+  });
+
+  it("keeps the parent objective owned after a denied publication and accepts independent preparation", async () => {
+    const w = world((a) => a.brief.includes("publish")
+      ? { kind: "failed", outcome: "denied", text: "publication denied by the person" }
+      : { kind: "completed", text: "prepared" });
+    const root = w.runtime.begin(beginReq());
+    const denied = ok(w.runtime.enqueue(toBot("liz", root.id, "publish the post", { admission })));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(denied.id)).toMatchObject({ status: "failed", outcome: "denied" });
+    expect(w.store.get(root.id)?.status).not.toBe("cancelled");
+    const prepared = ok(w.runtime.enqueue(toBot("liz", root.id, "prepare the post", { admission })));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(prepared.id)).toMatchObject({ status: "completed", outcome: "done" });
+  });
+
+  it("keeps an independent successful channel when a sibling channel fails", async () => {
+    const w = world((a) => a.assignee.botId === "broken"
+      ? { kind: "failed", outcome: "provider_error", text: "connector unavailable" }
+      : { kind: "completed", text: "published" });
+    const root = w.runtime.begin(beginReq());
+    const broken = ok(w.runtime.enqueue(toBot("broken", root.id, "Publish on X")));
+    const working = ok(w.runtime.enqueue(toBot("working", root.id, "Publish on LinkedIn")));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(broken.id)).toMatchObject({ status: "failed", outcome: "provider_error" });
+    expect(w.store.get(working.id)).toMatchObject({ status: "completed", outcome: "done" });
+    expect(w.store.get(root.id)?.status).not.toBe("cancelled");
+  });
+
+  it("does not rerun an expired outward turn and therefore does not duplicate the write", async () => {
+    const w = world(() => ({ kind: "completed", text: "sent", evidence: { outward: ["LINKEDIN_CREATE_LINKED_IN_POST"] } }));
+    const root = w.runtime.begin(beginReq());
+    w.runner.timeExpired = () => true;
+    const child = ok(w.runtime.enqueue(toBot("liz", root.id, "Publish the post", { admission })));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "stalled" });
+    expect(w.runner.runs).toHaveLength(1);
+    expect(w.store.events(child.id).map(event => event.kind)).not.toContain("continued");
+  });
+
+  it("records a missed time commitment instead of accepting a late completion", async () => {
+    const w = world(() => ({ kind: "completed", text: "Done late" }));
+    const root = w.runtime.begin(beginReq());
+    w.runner.timeExpired = () => true;
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id, "Finish it", { evidenceRequired: false })));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "stalled" });
+    expect(w.store.get(child.id)?.result).toContain("TIME ALLOCATION EXPIRED");
   });
 });

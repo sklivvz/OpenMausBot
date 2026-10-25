@@ -269,6 +269,23 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
           patch.connectorTools = parsed.grants;
         }
       }
+      if (body.admissionRequired !== undefined) {
+        if (typeof body.admissionRequired !== "boolean") return json(res, 400, { error: "admissionRequired must be true or false" });
+        patch.admissionRequired = body.admissionRequired;
+      }
+      if (body.receiptsFor !== undefined) {
+        if (body.receiptsFor === null) patch.receiptsFor = undefined;
+        else if (!Array.isArray(body.receiptsFor) || body.receiptsFor.length > 20
+          || body.receiptsFor.some((id: unknown) => typeof id !== "string" || !/^[\w-]{1,128}$/.test(id))) {
+          return json(res, 400, { error: "receiptsFor must be a list of up to 20 teammate ids, or null" });
+        } else {
+          const ids = [...new Set(body.receiptsFor as string[])];
+          const unknown = ids.filter(id => !store.bot(id));
+          if (unknown.length) return json(res, 400, { error: `receiptsFor names bots that do not exist: ${unknown.join(", ")}` });
+          if (ids.includes(m[1]!)) return json(res, 400, { error: "receiptsFor cannot include the bot itself" });
+          patch.receiptsFor = ids;
+        }
+      }
       if (body.parkDirectMessages !== undefined) {
         if (typeof body.parkDirectMessages !== "boolean") return json(res, 400, { error: "parkDirectMessages must be true or false" });
         patch.parkDirectMessages = body.parkDirectMessages;

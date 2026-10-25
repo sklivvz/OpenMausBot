@@ -39,7 +39,7 @@ const SENT_NOUNS = new Set(["MESSAGE", "COMMENT", "POST", "EMAIL", "MAIL", "INVO
 
 /** A read verb first means the rest of the name is what is being read:
  * REDDIT_GET_POST fetches a post, it does not post. */
-const READ_VERBS = new Set(["GET", "LIST", "FETCH", "SEARCH", "READ", "FIND", "RETRIEVE", "LOOKUP", "DOWNLOAD", "VIEW", "CHECK", "COUNT"]);
+const READ_VERBS = new Set(["GET", "LIST", "FETCH", "SEARCH", "READ", "FIND", "RETRIEVE", "LOOKUP", "DOWNLOAD", "VIEW", "CHECK", "COUNT", "RECONCILE", "READBACK"]);
 
 /** The action part of a tool name, as upper-case word tokens. Composio's
  * TOOLKIT_ACTION drops its toolkit; an MCP server's mcp__server__action
@@ -65,7 +65,11 @@ function actionTokens(name: string): string[] {
  * become reads merely because they send nothing to another person. */
 export function isReadOnlyTool(name: string): boolean {
   const tokens = actionTokens(name);
-  return tokens.length > 0 && READ_VERBS.has(tokens[0]);
+  const read = tokens.findIndex(token => READ_VERBS.has(token));
+  if (read < 0) return false;
+  // A toolkit prefix (BLUESKY_, mcp__server__) is not the action. The read
+  // verb must not follow a send/create verb in the same action name.
+  return tokens.slice(0, read).every(token => !SEND_VERBS.has(token) && !CREATE_VERBS.has(token) && !SENT_NOUNS.has(token));
 }
 
 /** The built-in agents server's X research tools only read X: x_post reads a post, it does not post one. */

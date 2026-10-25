@@ -1,5 +1,6 @@
 // The store is the only state: tick() is the only place work is admitted or dispatched, and no timer lives here.
 import { randomUUID } from "node:crypto";
+import { outwardWithinAdmission } from "../marketing-admission.ts";
 
 import { composeEnvelope } from "./envelope.ts";
 import { assignmentLevel } from "./level.ts";
@@ -207,6 +208,8 @@ export class Runtime {
       id: randomUUID(), rootId: parent ? parent.rootId : "", ...(parent ? { parentId: parent.id } : {}), depth: parent ? parent.depth + 1 : 0,
       origin: root ? root.origin : req.origin, requester: req.requester, assignee: target, mode,
       reply: req.reply ?? (mode === "notify" ? "none" : "resume"), brief, ...(req.doneWhen ? { doneWhen: req.doneWhen } : {}),
+      ...(req.admission ? { admission: req.admission } : {}),
+      ...(req.evidenceRequired ? { evidenceRequired: true } : {}),
       status: "queued", level, levelSource: source, executions: 0, restarts: 0, createdAt: now, lastActivityAt: now, result: "",
       rework: Boolean(req.rework), ...(req.approved !== undefined ? { approved: req.approved } : {}),
       ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), version: 1,
@@ -474,6 +477,24 @@ export class Runtime {
       return;
     }
     const ownTurn = !n.parentId;
+    if (result.kind === "completed" && this.runner.timeExpired?.(n) === true) {
+      n.result = clip("TIME ALLOCATION EXPIRED: the assignment settled after its explicit deadline. Completed work and receipts are preserved, but this is a missed commitment, not a success claim. Reconcile any uncertain external effect before retrying; only a new explicit person allocation changes the deadline.", RESULT_MAX);
+      this.settle(n, "failed", "stalled", "time allocation expired before settlement; commitment missed", ownTurn);
+      return;
+    }
+    if (result.kind === "completed" && n.admission && n.evidence?.outward) {
+      const scope = outwardWithinAdmission(n.admission, n.evidence.outward);
+      if (scope !== "within") {
+        n.result = clip(`${scope === "outside" ? "OUT OF SCOPE" : "SCOPE UNVERIFIED"}: this turn performed an outward action outside the admitted operations or channel. The result is not accepted; reconcile the provider state and return the exact scope conflict.`, RESULT_MAX);
+        this.settle(n, "failed", "stalled", "outward action outside or unverifiable against admitted scope; result unverified", ownTurn);
+        return;
+      }
+    }
+    if (result.kind === "completed" && n.evidenceRequired && this.runner.receiptSatisfied?.(n) !== true) {
+      n.result = clip("EVIDENCE REQUIRED: no signed execution receipt was recorded after this assignment started. The result is unverified and is not accepted. Do not repeat an outward action; reconcile provider state, attach the exact receipt, and continue this same thread with rework=true and its thread_id.", RESULT_MAX);
+      this.settle(n, "failed", "stalled", "required execution receipt absent; result unverified", ownTurn);
+      return;
+    }
     if (result.kind === "completed") this.settle(n, "completed", "done", undefined, ownTurn);
     else this.settle(n, "failed", result.outcome, undefined, ownTurn);
   }

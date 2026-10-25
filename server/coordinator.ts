@@ -1,4 +1,5 @@
 import { RuntimeCoordinator } from "./runtime-coordinator.ts";
+import type { MarketingAdmission } from "./marketing-admission.ts";
 import type { WorkOrigin } from "./peer-provenance.ts";
 import type { LegacyThreadResolver } from "./runtime/import-legacy.ts";
 import type { Assignment, EnvelopeNames, Level, Limits, Mode, Origin, Outcome, Owner, Reply, Requester, StatusView, TurnEvidence, WaitDependency } from "./runtime/types.ts";
@@ -11,6 +12,10 @@ export type CoordinateBotsCall = {
   reason?: string;
   rework: boolean;
   thread: "standing" | "new";
+  /** Exact existing work thread to continue for a correction. */
+  threadId?: string;
+  /** Structured admission required for work sent from a lead that configures receipts. */
+  admission?: MarketingAdmission;
   reply: "resume" | "none";
   consult: boolean;
   inMyFolder?: boolean;
@@ -47,6 +52,10 @@ export interface HandoffView {
   restart?: "rerun" | "cut" | "teammates";
   /** work: do it; consult: answer, act on nothing; notify: one-way. */
   mode: Mode;
+  /** The structured admission this work ran under, when one was required. */
+  admission?: MarketingAdmission;
+  /** A signed execution receipt is required before this can settle complete. */
+  evidenceRequired?: boolean;
   /** resume: the requester is woken; poll: it reads its inbox; none: nothing comes back. */
   reply: Reply;
   outcome?: Outcome;
@@ -87,6 +96,8 @@ export interface HandoffOptions {
   thread?: "standing" | "new";
   approvalGranted?: boolean;
   rework?: boolean;
+  admission?: MarketingAdmission;
+  evidenceRequired?: boolean;
   requestBatchKey?: string;
   doneWhen?: string;
 }
@@ -130,6 +141,10 @@ export interface CoordinatorHost {
   personInputAllowed?(node: HandoffView): boolean;
   /** What the cut turn already did outward (sent, posted, paid): a turn that acted outward is not run again. */
   outward?(node: HandoffView): string[];
+  /** A signed execution receipt appeared in this assignment's thread after it started. */
+  receiptSatisfied?(node: HandoffView): boolean;
+  /** The explicit allocation for this assignment's thread has ended. */
+  timeExpired?(node: HandoffView): boolean;
 }
 
 export interface Coordinator {

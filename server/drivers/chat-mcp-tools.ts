@@ -216,6 +216,24 @@ class ChatMcpClient {
   }
 }
 
+async function effectRefusal(check: { url: string; token: string } | undefined, server: string, tool: string, args: unknown): Promise<string | undefined> {
+  if (!check) return undefined;
+  try {
+    const response = await fetch(check.url, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${check.token}` },
+      body: JSON.stringify({ server, tool, arguments: args }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return `Effect admission check failed (${response.status}); nothing was sent.`;
+    const body: unknown = await response.json();
+    if (object(body) && body.ok === true) return;
+    return object(body) && typeof body.reason === "string" ? body.reason : "Effect admission could not be verified; nothing was sent.";
+  } catch {
+    return "Effect admission could not be verified; nothing was sent.";
+  }
+}
+
 function boundedText(value: string): string {
   const bytes = Buffer.from(value);
   if (bytes.length <= OUTPUT_BYTES) return value;
@@ -381,6 +399,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       validate(name, args);
       if (callSignal.aborted) { await close(); throw aborted(); }
       const tool = registered.get(name)!;
+      const refusal = await effectRefusal(integrations?.effectCheck, tool.server, tool.name, args);
+      if (refusal) return { text: refusal, ok: false };
       try {
         const result = await tool.client.call("tools/call", { name: tool.name, arguments: args }, AbortSignal.any([signal, callSignal]), callTimeoutMs);
         if (signal.aborted || callSignal.aborted) throw aborted();

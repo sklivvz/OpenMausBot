@@ -99,8 +99,17 @@ describe("the review prompt", () => {
     expect(prompt).toContain('<skill name="weekly-report">');
     expect(prompt).not.toContain('<skill name="huge-skill">');
     expect(prompt).toContain("## When to Use");
-    expect(prompt).toContain("Be ACTIVE");
+    expect(prompt).toContain("Be ACTIVE only within those boundaries");
     expect(prompt).toContain("Never delete or rename a skill");
+  });
+
+  it("carries the bot's role boundaries into the review", () => {
+    const prompt = skillReviewPrompt({ botName: "Darcy", role: "You own marketing outcomes; never publish or write copy.", transcript: "Person: post this", skills });
+    expect(prompt).toContain("<role>");
+    expect(prompt).toContain("never publish or write copy");
+    expect(prompt).toContain("Never create or update a skill that grants work outside these boundaries");
+    expect(prompt).toContain("If the lesson is off-role or the conversation ended unresolved, return no changes");
+    expect(prompt).toContain("Unresolved failures: if the conversation ended WITHOUT a method that worked, do not write the attempts up as a workflow");
   });
 });
 

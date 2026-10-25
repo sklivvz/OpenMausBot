@@ -115,6 +115,28 @@ export interface GroupThreadUsage extends TaskUsage {
   lastSpeaker?: { botId: string; name: string };
 }
 
+/** An explicit person allocation. Queueing, retries and verification consume it. */
+export interface TimeAllocationExtension {
+  sourceMessageId?: string;
+  sourceText: string;
+  at: number;
+  previousDeadlineAt: number;
+  deadlineAt: number;
+}
+
+export interface TimeAllocation {
+  sourceMessageId?: string;
+  sourceText: string;
+  sourceAt: number;
+  startedAt: number;
+  deadlineAt: number;
+  originalDeadlineAt: number;
+  allocatedMs: number;
+  kind: "duration" | "deadline";
+  timeZone?: string;
+  extensions?: TimeAllocationExtension[];
+}
+
 /** One task = one conversation with its own context, thread and provider
  * session. */
 export interface WireTask {
@@ -134,6 +156,8 @@ export interface WireTask {
   openedBy?: TaskOpenedBy;
   /** Set by close_thread; absent while the thread is open. */
   closedBy?: TaskClosedBy;
+  /** The current explicit person allocation, if one was stated. */
+  timeAllocation?: TimeAllocation;
   archivedAt?: number;
   /** Only true is stored; absent means unpinned. */
   pinned?: boolean;
@@ -347,6 +371,12 @@ export interface WireBot {
    * none. Grants never travel in shareable exports. */
   connectorTools?: Record<string, ConnectorToolGrant>;
   connectorScopes?: { apps: Record<string, "read" | "write"> };
+  /** Recipient bot ids whose work assignments from this bot must attach a
+   * signed execution receipt before the assignment can settle as complete. */
+  receiptsFor?: string[];
+  /** Delegated work sent to this bot requires the structured admission contract
+   * from any sender; a person's own direct request and consultations remain exempt. */
+  admissionRequired?: boolean;
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   /** Ordered backups used only by opt-in, pre-prompt startup recovery. */
   fallback?: Array<{ instanceId: string; model: string }>;
@@ -778,6 +808,8 @@ export interface GroupTask {
   /** This conversation's own turn ceiling, in whole minutes. Absent uses
    * the global group turn limit. Direct chats do not use this ceiling. */
   turnTimeoutMinutes?: number;
+  /** The current explicit person allocation for this room conversation. */
+  timeAllocation?: TimeAllocation;
   /** Epoch ms of the newest message, or createdAt when the thread has none. */
   updatedAt?: number;
   lastThreadOrderAt?: number;

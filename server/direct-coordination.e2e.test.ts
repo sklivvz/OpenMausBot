@@ -484,9 +484,9 @@ it("continues one recipient thread for every follow-up from the same conversatio
   f.plan[f.chief.id] = { turns: [
     { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Implement the CSV export" } }], reply: "Assigned the build" },
     { reply: "The export is implemented" },
-    { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Add the header row to that export" } }], reply: "Assigned the header row" },
+    { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Add the header row to that export", rework: true } }], reply: "Assigned the header row" },
     { reply: "The header row is in" },
-    { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Document the export you just built" } }], reply: "Assigned the write-up" },
+    { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Document the export you just built", rework: true } }], reply: "Assigned the write-up" },
     { reply: "It is documented" },
   ] };
   f.save();
@@ -534,7 +534,7 @@ it.each<[string, NodeJS.ProcessEnv]>([
   f.plan[f.lead.id] = { turns: [{ gateFile: gate, reply: "Export implemented" }, { reply: "Header row added" }] };
   f.plan[f.chief.id] = { turns: [
     { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Implement the CSV export" } }], reply: "Assigned the build" },
-    { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Also add a header row to that export" } }], reply: "Sent the change" },
+    { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Also add a header row to that export", rework: true } }], reply: "Sent the change" },
     { reply: "Reviewed" },
     { reply: "Reviewed" },
   ] };
@@ -567,7 +567,7 @@ it.each<[string, NodeJS.ProcessEnv]>([
   expect(closed.filter((now, at) => now && !closed[at - 1])).toHaveLength(1);
 }, env), 60_000);
 
-it("runs two assignments to one teammate from one turn in its thread, one after the other", () => fixture(async f => {
+it("keeps two independent assignments from one turn in separate threads", () => fixture(async f => {
   f.plan[f.lead.id] = { turns: [{ reply: "Export implemented" }, { reply: "Benchmark finished" }] };
   f.plan[f.chief.id] = { steps: [
     { arguments: { bot_ids: [f.lead.id], message: "Implement the CSV export" } },
@@ -576,15 +576,17 @@ it("runs two assignments to one teammate from one turn in its thread, one after 
   await f.start();
   expect((await f.wait()).status).toBe("settled");
   const tasks = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id).tasks;
-  expect(tasks).toHaveLength(2);
-  const work = tasks.find((task: any) => task.openedBy?.kind === "work");
-  expect(work).toMatchObject({ title: "@Clive · work", closedBy: { botId: f.chief.id } });
-  expect(f.nodes().filter((node: any) => node.botId === f.lead.id).map((node: any) => node.threadId)).toEqual([work.threadId, work.threadId]);
-  expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).map((turn: any) => [turn.turnIndex, turn.threadId]))
-    .toEqual([[0, work.threadId], [1, work.threadId]]);
-  const transcript = (await f.messages(work.threadId)).map((message: any) => message.text).filter(Boolean).join("\n");
-  expect(transcript).toContain("Implement the CSV export");
-  expect(transcript).toContain("Benchmark the exporter");
+  expect(tasks).toHaveLength(3);
+  const work = tasks.filter((task: any) => task.openedBy?.kind === "work").sort((a: any, b: any) => a.createdAt - b.createdAt);
+  expect(work).toHaveLength(2);
+  expect(work[0]!.threadId).not.toBe(work[1]!.threadId);
+  expect(f.nodes().filter((node: any) => node.botId === f.lead.id).map((node: any) => node.threadId))
+    .toEqual([work[0]!.threadId, work[1]!.threadId]);
+  const evidenceThreads = f.evidence().filter((turn: any) => turn.botId === f.lead.id).map((turn: any) => turn.threadId);
+  expect(evidenceThreads).toHaveLength(2);
+  expect(new Set(evidenceThreads)).toEqual(new Set([work[0]!.threadId, work[1]!.threadId]));
+  expect((await f.messages(work[0]!.threadId)).map((message: any) => message.text).filter(Boolean).join("\n")).toContain("Implement the CSV export");
+  expect((await f.messages(work[1]!.threadId)).map((message: any) => message.text).filter(Boolean).join("\n")).toContain("Benchmark the exporter");
 }), 60_000);
 
 it("gives another conversation of the same Chief its own thread with the teammate", () => fixture(async f => {
@@ -648,6 +650,205 @@ it.each<[string, Record<string, unknown>, string]>([
   expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).map((turn: any) => turn.threadId)).toEqual([first.threadId, first.threadId]);
   expect((await f.messages(f.chief.activeTaskId)).some((message: any) => message.text === "The suite is green")).toBe(true);
 }), 60_000);
+
+it("continues one exact recipient thread across rework calls while independent work gets its own", () => fixture(async f => {
+  f.plan[f.lead.id] = { reply: "Handled" };
+  f.plan[f.chief.id] = { steps: [
+    { arguments: { bot_ids: [f.lead.id], message: "Build the CSV export" }, capture: { thread: '"threadId":"([\\w-]+)"' } },
+    { arguments: { bot_ids: [f.lead.id], message: "Add the header row to that export", rework: true, thread_id: "{{thread}}" }, capture: { corrected: '"threadId":"([\\w-]+)"' } },
+    { arguments: { bot_ids: [f.lead.id], message: "Document the export you just built", rework: true, thread_id: "{{thread}}" }, capture: { documented: '"threadId":"([\\w-]+)"' } },
+    { arguments: { bot_ids: [f.lead.id], message: "Prepare the unrelated invoices export", thread: "new" }, capture: { independent: '"threadId":"([\\w-]+)"' } },
+    { arguments: { bot_ids: [f.lead.id], message: "Prepare the quarterly invoices export", thread: "new" }, capture: { independentTwo: '"threadId":"([\\w-]+)"' } },
+  ], reply: "Sent the build, two corrections and two independent jobs", resumeReply: "All five are done" };
+  await f.start();
+  expect((await f.wait()).status).toBe("settled");
+  const receipts = sendReceipts(f, f.chief.id);
+  expect(receipts).toHaveLength(5);
+  const [first, corrected, documented, independent, independentTwo] = receipts;
+  expect(first.threadId).toEqual(expect.any(String));
+  expect(corrected.threadId).toBe(first.threadId);
+  expect(documented.threadId).toBe(first.threadId);
+  expect(independent.threadId).not.toBe(first.threadId);
+  expect(independentTwo.threadId).not.toBe(first.threadId);
+  expect(independentTwo.threadId).not.toBe(independent.threadId);
+  const lead = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id);
+  const work = lead.tasks.filter((task: any) => task.threadId !== f.lead.activeTaskId);
+  expect(work.filter((task: any) => task.threadId === first.threadId)).toHaveLength(1);
+  expect(work.filter((task: any) => task.threadId === independent.threadId)).toHaveLength(1);
+  expect(work.filter((task: any) => task.threadId === independentTwo.threadId)).toHaveLength(1);
+  expect(work).toHaveLength(3);
+  const leadNodes = f.nodes().filter((node: any) => node.botId === f.lead.id);
+  expect(leadNodes.filter((node: any) => node.threadId === first.threadId)).toHaveLength(3);
+  expect(leadNodes.filter((node: any) => node.threadId === independent.threadId)).toHaveLength(1);
+  expect(leadNodes.filter((node: any) => node.threadId === independentTwo.threadId)).toHaveLength(1);
+  const transcript = (await f.messages(first.threadId)).map((message: any) => message.text).filter(Boolean).join("\n");
+  expect(transcript).toContain("Build the CSV export");
+  expect(transcript).toContain("Add the header row to that export");
+  expect(transcript).toContain("Document the export you just built");
+}), 60_000);
+
+it("refuses a thread_id from another conversation or recipient, and one closed by another bot", () => fixture(async f => {
+  f.plan[f.lead.id] = { reply: "Handled" };
+  f.plan[f.chief.id] = { steps: [
+    { arguments: { bot_ids: [f.lead.id], message: "Build the CSV export" }, capture: { thread: '"threadId":"([\\w-]+)"' } },
+  ], reply: "Sent", resumeReply: "Both finished" };
+  await f.start();
+  expect((await f.wait()).status).toBe("settled");
+  const [first] = sendReceipts(f, f.chief.id);
+  const stepTexts = () => {
+    const turn = [...f.evidence()].reverse().find((entry: any) => entry.botId === f.chief.id
+      && entry.evidence.some((item: any) => item.step));
+    return turn.evidence.filter((entry: any) => entry.step).map((entry: any) => entry.response.result.content[0].text);
+  };
+  const other = (await f.api(`/api/bots/${f.chief.id}/tasks`, { title: "Other conversation" })).task.threadId;
+  f.plan[f.chief.id] = { steps: [
+    { arguments: { bot_ids: [f.lead.id], message: "Correct the export", rework: true, thread_id: first.threadId }, expectError: true },
+    { arguments: { bot_ids: [f.specialist.id], message: "Correct the export", rework: true, thread_id: first.threadId }, expectError: true },
+    { arguments: { bot_ids: [f.lead.id, f.specialist.id], message: "Correct both", rework: true, thread_id: first.threadId }, expectError: true },
+  ], reply: "All refused" };
+  f.save();
+  await f.cli("send", "--bot", f.chief.id, "--task", other, "--text", "Correct the earlier export from this other conversation.");
+  expect((await f.cli("wait", "--bot", f.chief.id, "--task", other, "--timeout", "30")).status).toBe("settled");
+  const [sourceRefusal, recipientRefusal, severalRefusal] = stepTexts();
+  expect(sourceRefusal).toContain("belongs to a different conversation");
+  expect(recipientRefusal).toContain("No thread with id");
+  expect(recipientRefusal).toContain("Reviewer");
+  expect(severalRefusal).toContain("thread_id targets one existing assignment");
+
+  f.plan[f.lead.id] = { fail: true };
+  f.plan[f.chief.id] = { steps: [
+    { arguments: { bot_ids: [f.lead.id], message: "Try the failing export" }, capture: { failedThread: '"threadId":"([\\w-]+)"' } },
+  ], reply: "Sent", resumeReply: "It failed" };
+  f.save();
+  await f.cli("send", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--text", "Send the failing export.");
+  expect((await f.wait()).status).toBe("settled");
+  const failedStep = f.evidence().filter((entry: any) => entry.botId === f.chief.id)
+    .flatMap((entry: any) => entry.evidence).findLast((entry: any) => entry.step?.arguments?.message === "Try the failing export");
+  const failedThread = JSON.parse(failedStep.response.result.content[0].text).receipts[0].threadId;
+  f.plan[f.lead.id] = { steps: [{ tool: "close_thread", arguments: { thread_id: failedThread } }], reply: "Closed the failed thread" };
+  f.save();
+  await f.cli("send", "--bot", f.lead.id, "--task", f.lead.activeTaskId, "--text", "Close the failed work thread.");
+  expect((await f.cli("wait", "--bot", f.lead.id, "--task", f.lead.activeTaskId, "--timeout", "30")).status).toBe("settled");
+  expect((await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id).tasks
+    .find((task: any) => task.threadId === failedThread).closedBy).toMatchObject({ botId: f.lead.id });
+
+  f.plan[f.chief.id] = { steps: [
+    { arguments: { bot_ids: [f.lead.id], message: "Retry the failing export", rework: true, thread_id: failedThread }, expectError: true },
+  ], reply: "Refused" };
+  f.save();
+  await f.cli("send", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--text", "Retry the failed export.");
+  expect((await f.wait()).status).toBe("settled");
+  const closedRefusal = stepTexts()[0];
+  expect(closedRefusal).toContain("closed by Engineering lead, not you");
+}), 90_000);
+
+it("bounces an undeclared six-channel bundle before an executor turn and refuses a receipt-less completion", () => fixture(async f => {
+  await f.api(`/api/bots/${f.chief.id}`, { receiptsFor: [f.lead.id] }, "PATCH");
+  const six = {
+    objective_id: "launch", brief_revision: "brief-v1", workflow: "multi-channel",
+    deliverables: ["linkedin", "x", "mastodon", "bluesky", "threads", "hackernews"].map(channel => ({
+      id: channel, channel, acceptance: "provider permalink",
+    })),
+    operations: ["prepare", "publish", "verify"],
+  };
+  const one = {
+    objective_id: "launch", brief_revision: "brief-v1", workflow: "single-channel",
+    deliverables: [{ id: "post", channel: "linkedin", acceptance: "provider URN" }],
+    operations: ["prepare", "publish", "verify"],
+  };
+  f.plan[f.lead.id] = { reply: "Published" };
+  f.plan[f.chief.id] = { turns: [
+    { steps: [
+      { arguments: { bot_ids: [f.lead.id], message: "Publish all six channels", admission: six }, expectError: true },
+      { arguments: { bot_ids: [f.lead.id], message: "Publish all six channels", admission: six }, expectError: true },
+      { arguments: { bot_ids: [f.lead.id], message: "Publish all six channels", admission: six }, expectError: true },
+    ], reply: "The bundle was bounced" },
+    { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Publish the LinkedIn post", admission: one, done_when: "provider URN" } }], reply: "Sent one admitted job" },
+    { reply: "Reviewed the unverified result" },
+  ] };
+  await f.start();
+  await f.wait();
+  const leadTasksBefore = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id).tasks.length;
+  const firstTurn = f.evidence().find((turn: any) => turn.botId === f.chief.id);
+  const errors = firstTurn.evidence.filter((entry: any) => entry.step).map((entry: any) => entry.response.result);
+  expect(errors).toHaveLength(3);
+  expect(errors[0].content[0].text).toContain("not a demonstrated multi-deliverable workflow");
+  expect(errors[1].content[0].text).toContain("not a demonstrated multi-deliverable workflow");
+  expect(errors[2].content[0].text).toContain("planning_required");
+  expect((await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id).tasks.length).toBe(leadTasksBefore);
+  await f.cli("send", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--text", "Now send the one admitted post.");
+  await f.wait();
+  const child = f.nodes().find((node: any) => node.botId === f.lead.id);
+  expect(child).toMatchObject({ status: "failed", outcome: "stalled" });
+  expect(child.result).toContain("EVIDENCE REQUIRED");
+  const leadTask = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id).tasks.find((task: any) => task.threadId === child.threadId);
+  expect(leadTask).toBeTruthy();
+  const brief = (await f.messages(child.threadId)).map((message: any) => message.text).filter(Boolean).join("\n");
+  expect(brief).toContain("[ADMITTED SCOPE");
+  expect(brief).toContain("linkedin");
+  expect(JSON.stringify(await f.messages(f.chief.activeTaskId))).toContain("EVIDENCE REQUIRED");
+}), 90_000);
+
+it("rejects a known-infeasible admission inside the person's allocation before an executor turn", () => fixture(async f => {
+  await f.api(`/api/bots/${f.chief.id}`, { receiptsFor: [f.lead.id] }, "PATCH");
+  f.plan[f.chief.id] = { steps: [{ arguments: {
+    bot_ids: [f.lead.id], message: "Publish the LinkedIn post",
+    admission: {
+      objective_id: "launch", brief_revision: "brief-v1", workflow: "single-channel",
+      deliverables: [{ id: "post", channel: "linkedin", acceptance: "provider URN" }],
+      operations: ["prepare", "publish", "verify"], estimated_duration_ms: 300_000,
+    },
+  }, expectError: true }], reply: "Refused as infeasible" };
+  f.save();
+  await f.cli("send", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--text", "YOU HAVE 2 MINUTES. Send the post.");
+  expect((await f.wait()).status).toBe("settled");
+  const result = f.evidence().find((turn: any) => turn.botId === f.chief.id).evidence.find((entry: any) => entry.step).response.result;
+  expect(result.isError).toBe(true);
+  expect(result.content[0].text).toContain("exceeds the");
+  expect(result.content[0].text).toContain("remaining");
+  expect((await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id).tasks).toHaveLength(1);
+}), 45_000);
+
+it("keeps an expired allocation across status and continue, then records only an explicit extension or new objective", () => fixture(async f => {
+  f.plan[f.chief.id] = { turns: [
+    { reply: "Acknowledged" }, { reply: "Status only" }, { reply: "Still the same work" },
+    { reply: "Extension recorded" }, { reply: "New objective started" },
+  ] };
+  f.save();
+  const alloc = async () => (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.chief.id).tasks
+    .find((task: any) => task.threadId === f.chief.activeTaskId)?.timeAllocation;
+  const send = async (text: string) => {
+    await f.cli("send", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--text", text);
+    await f.cli("wait", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--timeout", "30");
+  };
+  await send("YOU HAVE 1 SECOND. Acknowledge this allocation.");
+  const first = await alloc();
+  expect(first).toMatchObject({ kind: "duration", allocatedMs: 1_000 });
+  await new Promise(resolve => setTimeout(resolve, 1_200));
+  await send("status?");
+  expect(await alloc()).toEqual(first);
+  await send("continue");
+  expect(await alloc()).toEqual(first);
+  await send("You have another 60 seconds. Finish the same work.");
+  const extended = await alloc();
+  expect(extended.originalDeadlineAt).toBe(first.originalDeadlineAt);
+  expect(extended.deadlineAt).toBeGreaterThan(first.deadlineAt);
+  expect(extended.extensions).toHaveLength(1);
+  await send("Start a new objective: prepare the unrelated invoices report.");
+  expect(await alloc()).toBeUndefined();
+}), 90_000);
+
+it("requires admission on an executor marked admissionRequired even from a sender without receiptsFor", () => fixture(async f => {
+  await f.api(`/api/bots/${f.lead.id}`, { admissionRequired: true }, "PATCH");
+  f.plan[f.chief.id] = { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Publish six channels" }, expectError: true }], reply: "Refused" };
+  f.save();
+  await f.start();
+  expect((await f.wait()).status).toBe("settled");
+  const result = f.evidence().find((turn: any) => turn.botId === f.chief.id).evidence.find((entry: any) => entry.step).response.result;
+  expect(result.isError).toBe(true);
+  expect(result.content[0].text).toContain("structured admission");
+  expect((await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id).tasks).toHaveLength(1);
+}), 45_000);
 
 it("dispatches to a spare recipient thread without waiting for unrelated work", () => fixture(async f => {
   await f.api("/api/config", { threads: { maxConcurrentPerBot: 2 } }, "PUT");

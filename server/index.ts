@@ -2,7 +2,7 @@
 import { BOOT_CLOUD_SECRETS } from "./cloud-secrets-boot.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { rm as removeDirectory } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -123,6 +123,9 @@ import { hostTimeZone, takesTurnClock, turnClockLine, withTurnClock } from "./tu
 import { createMemoryUpkeep, upkeepEnabled } from "./memory-upkeep.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createSkillReview, turnToolSteps } from "./skill-review.ts";
+import { canStartEffect, parseExplicitTimeAllocation, timeAllocationLine, timeAllocationState, updateTimeAllocation } from "./time-allocation.ts";
+import { receiptRecorded, type ReceiptVerificationConfig } from "./receipt-evidence.ts";
+import { AdmissionBounceGuard, admissionBrief, effectWithinAdmission, validateMarketingAdmission } from "./marketing-admission.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import type { CaptureTurn, RoomLine } from "./memory-capture.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profile-learned.ts";
@@ -1787,7 +1790,7 @@ type InternalCapability = {
   threadId: string;
   generation: string;
   depth: number;
-  kind: "agents" | "connectors" | "computer" | "browser" | "hooks" | "phone" | "data" | "highlevel";
+  kind: "agents" | "connectors" | "computer" | "browser" | "hooks" | "phone" | "data" | "highlevel" | "effects";
   skillAuthoring: boolean;
   createdBots: number;
   createdRooms?: number;
@@ -2076,6 +2079,21 @@ function hooksIntegration(botId: string, threadId: string, generation: string): 
     openedThreads: 0,
   });
   return { url: `http://127.0.0.1:${PORT}`, token };
+}
+/** A turn-scoped capability for direct MCP servers to ask the harness before an effect. */
+function effectsIntegration(botId: string, threadId: string, generation: string, roomHandoffId?: string): { url: string; token: string } {
+  const token = mintInternalCapability({
+    botId,
+    threadId,
+    generation,
+    depth: 0,
+    kind: "effects",
+    skillAuthoring: false,
+    createdBots: 0,
+    openedThreads: 0,
+    ...(roomHandoffId ? { roomHandoffId } : {}),
+  });
+  return { url: `http://127.0.0.1:${PORT}/api/internal/effect-check`, token };
 }
 
 type DirectTurnDispatchClaim = {
@@ -3125,6 +3143,34 @@ const store = new Store(
   (instanceId) => registry.cliTarget(instanceId)?.driverKind,
   () => cfg.language ?? Intl.DateTimeFormat().resolvedOptions().locale,
 );
+function timeAllocationForNode(node: Pick<HandoffView, "botId" | "threadId" | "groupId">) {
+  return store.taskByThread(node.botId, node.threadId)?.timeAllocation
+    ?? (node.groupId ? store.groupTaskByThread(node.groupId, node.threadId)?.timeAllocation : undefined);
+}
+
+function executionReceiptConfig(): ReceiptVerificationConfig | undefined {
+  for (const raw of Object.values(cfg.mcpServers ?? {})) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const env = (raw as { env?: unknown }).env;
+    if (!env || typeof env !== "object" || Array.isArray(env)) continue;
+    const file = (env as Record<string, unknown>).EXECUTION_TOOLS_CONFIG_FILE;
+    if (typeof file !== "string" || !file) continue;
+    try {
+      const configStat = statSync(file);
+      if (!configStat.isFile() || configStat.size > 1024 * 1024 || (configStat.mode & 0o077) !== 0) continue;
+      const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      const { receiptDir, signingKeyFile } = parsed as { receiptDir?: unknown; signingKeyFile?: unknown };
+      if (typeof receiptDir !== "string" || typeof signingKeyFile !== "string") continue;
+      const keyStat = statSync(signingKeyFile);
+      if (!keyStat.isFile() || keyStat.size < 32 || keyStat.size > 4096 || (keyStat.mode & 0o077) !== 0) continue;
+      return { receiptDir, signingKey: readFileSync(signingKeyFile) };
+    } catch {
+      // A broken or privately unreadable receipt configuration is not evidence.
+    }
+  }
+  return undefined;
+}
 const creditMoves = cloudCredit && createCreditMoves({ credit: cloudCredit, store, context: selectionContext, threadBusy, saveDefault: saveNewBotModel,
   defaults: () => [cfg.defaultModelSelection, cfg.newBotDefaults?.profile.modelSelection], engineName: id => registry.get(id)?.displayName ?? id,
   log: line => console.warn(line) });
@@ -4306,10 +4352,20 @@ const coordinator: Coordinator = createCoordinator({
     botOfThread: threadId => store.botByThread(threadId)?.id,
   },
   host: {
-    validate: (node, parent) => node.mode === "notify" && node.status !== "queued" ? undefined
-      : !node.parentId && node.groupId ? roomRootProblem(node)
-      : roomHandoffProblem(node, parent) ??
-      (parent && store.bot(parent.botId)?.approvePeerComms && !fullAccessForSource(parent.botId, parent.threadId) && !node.approvalGranted ? "Sender now requires peer approval; submit a new approved request" : undefined),
+    validate: (node, parent) => {
+      if (node.mode === "notify" && node.status !== "queued") return undefined;
+      // A queued child is not allowed to start after the allocation has ended.
+      // A running turn is left to report/reconcile; it is never killed at expiry.
+      if ((node.parentId || node.groupId) && (node.status === "queued" || node.status === "resume")) {
+        const allocation = timeAllocationForNode(node);
+        if (allocation && timeAllocationState(allocation, Date.now()) === "missed") {
+          return "TIME ALLOCATION EXPIRED: this assignment may not start a new turn; preserve completed work and record the unmet commitment.";
+        }
+      }
+      if (!node.parentId && node.groupId) return roomRootProblem(node);
+      return roomHandoffProblem(node, parent) ??
+        (parent && store.bot(parent.botId)?.approvePeerComms && !fullAccessForSource(parent.botId, parent.threadId) && !node.approvalGranted ? "Sender now requires peer approval; submit a new approved request" : undefined);
+    },
     dependencyReady: dependency => dependency.kind === "resource"
       ? turnResources.free(dependency.resource)
       : browserRuntime.heldBy(dependency.session) === null && turnResources.free(`browser:${dependency.session}`),
@@ -4521,8 +4577,43 @@ const coordinator: Coordinator = createCoordinator({
       }
       return outwardActions(turnRows(node));
     },
+    receiptSatisfied: node => {
+      const task = store.taskByThread(node.botId, node.threadId);
+      const channel = node.admission?.deliverables.find(item => item.channel)?.channel;
+      return receiptRecorded(store.messagesFor(node.threadId), {
+        botId: node.botId, taskId: node.threadId, ...(node.admission?.objectiveId ? { objectiveId: node.admission.objectiveId } : {}),
+        ...(node.admission?.operations ? { operations: node.admission.operations } : {}),
+        ...(channel ? { channel } : {}),
+        since: node.startedAt ?? task?.turnStartedAt,
+        config: executionReceiptConfig(),
+      });
+    },
+    timeExpired: node => {
+      const allocation = timeAllocationForNode(node);
+      return Boolean(allocation && timeAllocationState(allocation, Date.now()) === "missed");
+    },
   },
 });
+
+/** The live assignment behind a turn capability, if it still exists. */
+function assignmentForCapability(capability: InternalCapability): HandoffView | undefined {
+  if (capability.roomHandoffId) return coordinator.node(capability.roomHandoffId);
+  return coordinator.node(capability.generation)
+    ?? coordinator.all().findLast(node => node.botId === capability.botId && node.threadId === capability.threadId && !ENDED.has(node.status));
+}
+
+/** One deterministic gate for connector, direct-MCP, browser and computer effects. */
+function effectRefusalFor(capability: InternalCapability, tool: string, args: unknown): string | undefined {
+  const allocation = timeAllocationForNode({ botId: capability.botId, threadId: capability.threadId, groupId: store.groupByThread(capability.threadId)?.id });
+  if (!canStartEffect(allocation, Date.now())) {
+    return "TIME ALLOCATION EXPIRED: this conversation's explicit allocation has ended, so no new outward action may start. Preserve completed work and reconcile any uncertain provider effect before retrying; only a new explicit person allocation extends the deadline.";
+  }
+  const assignment = assignmentForCapability(capability);
+  if (!assignment?.admission) return undefined;
+  const decision = effectWithinAdmission(assignment.admission, tool, args);
+  if (decision.ok) return undefined;
+  return `${decision.code === "scope_unverifiable" ? "SCOPE UNVERIFIED" : "OUT OF SCOPE"}: ${decision.reason ?? "the outward action is outside the admitted scope"}. The action was not run. Return the exact conflict to the lead; a new admitted assignment is required for more work.`;
+}
 threadsAwaitingTeammates = () => coordinator.awaitingTeammateThreads();
 const groupUsageReader = new GroupUsageReader(DATA_DIR);
 try { groupUsageReader.refresh(); } catch {}
@@ -5849,6 +5940,8 @@ bus.subscribe((event: RuntimeEvent) => {
     console.warn(`memory upkeep: could not queue a turn for capture: ${(error as Error).message}`);
   }
 });
+
+const marketingBounceGuard = new AdmissionBounceGuard();
 
 const skillReview = createSkillReview({
   enabled: () => skillReviewEnabled(cfg),
@@ -8370,6 +8463,20 @@ async function startTurn(
   }
   const personLine = !opts?.coordination && !opts?.cardContinuation && !opts?.automationSource && !opts?.compactOnly
     && !opts?.computerSelectionContinuation && !opts?.editedMessageId && !commsDepth && !opts?.peerAsk && !userMessage.peerAsk;
+  // A coordination brief is teammate-authored, never a person allocation. An
+  // edit is still the same request, so neither may extend or reset the clock.
+  const personStated = personLine;
+  const statedAt = Date.now();
+  const parsedAllocation = personStated ? parseExplicitTimeAllocation(text, { now: statedAt, messageId: userMessage.id }) : null;
+  const priorAllocation = store.taskByThread(bot.id, threadId)?.timeAllocation;
+  const nextAllocation = personStated
+    ? updateTimeAllocation(priorAllocation, text, parsedAllocation, statedAt)
+    : priorAllocation ?? null;
+  if (nextAllocation === null && priorAllocation) store.patchTask(bot.id, threadId, { timeAllocation: null as never });
+  else if (nextAllocation && JSON.stringify(nextAllocation) !== JSON.stringify(priorAllocation)) {
+    store.patchTask(bot.id, threadId, { timeAllocation: nextAllocation });
+  }
+  const turnTimeAllocation = store.taskByThread(bot.id, threadId)?.timeAllocation;
   if (personLine && coordinator.answer(threadId, text)) {
     store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Answer passed to the waiting work", ok: true } });
     opts?.onTurnSettled?.();
@@ -9026,10 +9133,14 @@ async function startTurn(
         coordinationNode.parentId ? coordinator.node(coordinationNode.parentId) : undefined))) {
         throw new DirectTurnSetupCancelled("Coordination access changed before dispatch");
       }
+      if (turnTimeAllocation || coordinationNode?.admission) {
+        integrations.effectCheck = effectsIntegration(bot.id, threadId, dispatchClaimId, opts?.coordination?.id);
+      }
       // The tool bridge is decided here: the folder the turn is launched in is known, and the prompt is not built yet.
       applyAgentsBridge(threadId, integrations, cfg, bot, turnEngine(instance, providerConfigs(), registry.lastSnapshot(instance.instanceId), cwd));
       const prompt = buildSystemPrompt(persona, liveBot?.soul ?? bot.soul ?? "", [
         { id: "user-profile", label: "About the user", text: userProfileSystemPrompt(cfg.profile) },
+        { id: "time-allocation", label: "Time allocation", text: turnTimeAllocation ? timeAllocationLine(turnTimeAllocation, Date.now()) : "" },
         { id: "setup", label: "Setup", text: setupSystemPrompt(setupMode, {
           skills: skillAuthoring,
           cwd: liveBot?.cwd ?? bot.cwd,
@@ -10819,8 +10930,23 @@ async function runClaimedGroupMemberTurn(
   const outsideRoom = integrations.agents && orchestration && !orchestration.roomHandoffId
     ? reachablePeers(store.bots, bot).filter((peer) => !readyGroup.memberIds.includes(peer.id))
     : [];
+  const roomTask = store.groupTaskByThread(readyGroup.id, threadId);
+  if (latestUser?.text && roomTask?.timeAllocation?.sourceMessageId !== latestUser.id) {
+    const statedAt = Date.now();
+    const parsed = parseExplicitTimeAllocation(latestUser.text, { now: statedAt, messageId: latestUser.id });
+    const next = updateTimeAllocation(roomTask?.timeAllocation, latestUser.text, parsed, statedAt);
+    if (next === null && roomTask?.timeAllocation) store.patchGroupTask(readyGroup.id, threadId, { timeAllocation: null });
+    else if (next && JSON.stringify(next) !== JSON.stringify(roomTask?.timeAllocation)) {
+      store.patchGroupTask(readyGroup.id, threadId, { timeAllocation: next });
+    }
+  }
+  const roomTimeAllocation = store.groupTaskByThread(readyGroup.id, threadId)?.timeAllocation;
+  if (roomTimeAllocation || roomHandoff?.admission) {
+    integrations.effectCheck = effectsIntegration(bot.id, threadId, internalGeneration, orchestration?.roomHandoffId);
+  }
   const system = [
     `You are ${bot.name}, a bot in the room "${readyGroup.name}" in OpenMausBot.`,
+    roomTimeAllocation ? timeAllocationLine(roomTimeAllocation, Date.now()) : "",
     bot.title && `Role: ${bot.title}.`,
     bot.description && `About: ${bot.description}`,
     `Room members: ${roster}, and ${userName} (the human).`,
@@ -14157,6 +14283,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
       }
       const requiredCapabilityKind = path === "/api/internal/hook"
         ? "hooks"
+        : path === "/api/internal/effect-check"
+        ? "effects"
         : path === "/api/internal/browser/mcp"
         ? "browser"
         : path === DATA_INTERNAL_MCP_PATH
@@ -14337,6 +14465,10 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           const files = namedUploadPaths(upload.files.map((file, i) => ({ file, name: attachmentNameInThread(internalCapability.threadId, requested[i]!) })), join(DATA_DIR, "browser-uploads"));
           params = { ...params, arguments: { ...params.arguments, files } };
         }
+        if (body.method === "tools/call" && typeof params?.name === "string") {
+          const refusal = effectRefusalFor(internalCapability, params.name, params.arguments);
+          if (refusal) return json(res, 200, { result: { isError: true, content: [{ type: "text", text: refusal }] } });
+        }
         const result = await browserRuntime.agentRpc(browser.session, browser.spec, body.method, params, () => {
           requireActiveInternalCapability();
           const current = store.bot(bot.id);
@@ -14358,6 +14490,13 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
       if (method === "POST" && path === "/api/internal/computer/mcp") {
         const body = await readInternalBody();
         if (internalCapability.boxId === undefined) return json(res, 403, { error: "this turn has no cloud computer" });
+        if (body && typeof body === "object" && !Array.isArray(body) && (body as { method?: unknown }).method === "tools/call") {
+          const params = (body as { params?: { name?: unknown; arguments?: unknown } }).params;
+          if (typeof params?.name === "string") {
+            const refusal = effectRefusalFor(internalCapability, params.name, params.arguments);
+            if (refusal) return json(res, 200, { result: { isError: true, content: [{ type: "text", text: refusal }] } });
+          }
+        }
         const abort = new AbortController();
         res.once("close", () => { if (!res.writableEnded) abort.abort(); });
         return json(res, 200, { result: await cloudComputerRpc(body, {
@@ -14944,7 +15083,17 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         const groupId = call.groupId ?? (source && botIds.every(id => source.memberIds.includes(id)) ? source.id : undefined);
         const destination = groupId ? store.group(groupId) : undefined;
         if (groupId && !destination) return refuse(404, "No such room; use list_room_targets.");
-        const fresh = !destination && (call.thread === "new" || (!call.consult && call.reply !== "none"));
+        if (call.threadId !== undefined) {
+          if (botIds.length !== 1) return refuse(400, "thread_id targets one existing assignment; omit it when sending to more than one teammate");
+          if (destination) return refuse(400, "thread_id is only for a direct teammate thread; rooms and shared conversations cannot use it");
+          if (!call.rework) return refuse(400, "thread_id continues an existing assignment; set rework true for a scoped correction");
+          if (call.consult) return refuse(400, "thread_id is for work corrections, not consultations");
+        }
+        const explicitNew = call.thread === "new";
+        // A first work assignment is isolated. Only rework continues the most
+        // recent work thread, and an exact thread_id continues that one.
+        const fresh = !destination && call.threadId === undefined && !call.rework
+          && (explicitNew || (!call.consult && call.reply !== "none") || Boolean(call.admission));
         const folder = inMyFolderCwd(call.inMyFolder, fresh, store.taskByThread(internalSender.id, address.threadId)?.cwd, DATA_DIR);
         if (folder.error) return refuse(400, folder.error);
         if (fresh && !EXTERNAL && internalCapability.openedThreads >= MAX_THREADS_OPENED_PER_TURN) {
@@ -14962,6 +15111,67 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
             : addressed.hidden ? `The bot with id "${target.botId}" is no longer available — call list_bots for the ones you can reach`
             : roomHandoffProblem(target, address);
           if (eligibility) return refuse(403, eligibility);
+        }
+        const targeted = call.threadId === undefined ? undefined : store.taskByThread(botIds[0]!, call.threadId);
+        if (call.threadId !== undefined) {
+          const recipientName = store.bot(botIds[0]!)?.name ?? botIds[0]!;
+          if (!targeted) return refuse(404, `No thread with id "${call.threadId}" exists on ${recipientName} — copy thread_id from the original coordinate_bots receipt, or omit it for a new job`);
+          const openedBy = targeted.openedBy;
+          if (openedBy?.kind !== "work") return refuse(403, `Thread "${call.threadId}" on ${recipientName} is not a work assignment opened by a teammate handoff; only the original work assignment can be continued`);
+          if (openedBy.botId !== internalSender.id) return refuse(403, `Thread "${call.threadId}" on ${recipientName} was opened by another sender; only the bot that opened it can continue it`);
+          if (openedBy.threadId !== address.threadId) return refuse(403, `Thread "${call.threadId}" on ${recipientName} belongs to a different conversation; only the conversation that opened it can continue it`);
+          if (targeted.closedBy && targeted.closedBy.botId !== internalSender.id) {
+            return refuse(409, `Thread "${call.threadId}" on ${recipientName} was closed by ${targeted.closedBy.name || targeted.closedBy.botId}, not you; a thread closed by someone else cannot be revived`);
+          }
+        }
+        const workMode = call.consult ? "consult" : call.reply === "none" ? "notify" : "work";
+        const sourceTaskForTime = store.taskByThread(internalSender.id, address.threadId)
+          ?? (source ? store.groupTaskByThread(source.id, address.threadId) : undefined);
+        if (workMode === "work" && !canStartEffect(sourceTaskForTime?.timeAllocation, Date.now())) {
+          return refuse(409, "TIME ALLOCATION EXPIRED: this conversation's explicit allocation has ended, so no new work may start. Preserve completed work and record the unmet commitment; only a new explicit person allocation extends the deadline.", {
+            code: "time_budget_insufficient", status: "time_budget_insufficient", ownership: internalSender.name,
+            nextAction: "Record the missed commitment and continue only independent work that already completed; do not infer an extension.",
+          });
+        }
+        const receiptTargets = workMode === "work" ? targets.filter(target => internalSender.receiptsFor?.includes(target.botId)) : [];
+        const admissionTargets = workMode === "work" ? targets.filter(target =>
+          internalSender.receiptsFor?.includes(target.botId) || store.bot(target.botId)?.admissionRequired === true) : [];
+        // A genuine correction can continue the exact original admission rather
+        // than inventing a new one. It cannot add a channel/operation: the
+        // pre-effect gate still enforces the original admitted scope.
+        let admission = call.admission;
+        if (!admission && call.rework && targeted) {
+          const original = coordinator.all().findLast(node => node.botId === botIds[0] && node.threadId === targeted.threadId);
+          admission = original?.admission;
+        }
+        if (admissionTargets.length) {
+          if (targets.length !== 1) {
+            return refuse(400, "A receipt-governed work assignment targets one executor and one independently verifiable deliverable. Send each recipient and each channel separately.", {
+              code: "needs_decomposition", status: "needs_decomposition", ownership: internalSender.name,
+              nextAction: `${internalSender.name} splits the work and sends one admitted assignment per recipient/channel.`,
+            });
+          }
+          const target = targets[0]!;
+          const parentTask = store.taskByThread(internalSender.id, address.threadId)
+            ?? (source ? store.groupTaskByThread(source.id, address.threadId) : undefined);
+          const allocation = parentTask?.timeAllocation;
+          const key = `${address.threadId}:${target.botId}:${admission?.objectiveId ?? "unstated"}`;
+          const decision = validateMarketingAdmission(admission, {
+            now: Date.now(), owner: internalSender.name, ...(allocation ? { deadlineAt: allocation.deadlineAt } : {}),
+          });
+          if (!decision.ok) {
+            const bounce = marketingBounceGuard.record(key, Date.now());
+            if (bounce.blocked) {
+              return refuse(429, `planning_required: this is the ${bounce.count}th refused dispatch for the same objective/recipient. Stop retrying and decompose in your own turn. ${decision.reason}`, {
+                ...decision, attempts: bounce.count, maxAttempts: 2,
+                nextAction: `${internalSender.name} decomposes in its own turn; do not ask Marco and do not send the same bundle again.`,
+              });
+            }
+            return refuse(400, decision.reason, { ...decision, attempts: bounce.count, maxAttempts: 2 });
+          }
+          marketingBounceGuard.clear(key);
+          if (call.admission) call.message = `${call.message}\n\n${admissionBrief(decision.admission, decision.timing)}`;
+          call.admission = decision.admission;
         }
         let approvalGranted = false;
         if (peerReviewRequired(internalSender, address.threadId)) {
@@ -14996,23 +15206,29 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
             requireActiveInternalCapability();
             const recipient = store.bot(target.botId);
             if (!recipient) throw new Error("The recipient no longer exists");
-            const continued = destination || fresh ? undefined : store.workThread(target.botId, internalSender.id, address.threadId);
+            const continued = targeted ?? (destination || fresh ? undefined : store.workThread(target.botId, internalSender.id, address.threadId));
             const lane = destination && lanes ? roomJobs.openLane(destination, target.threadId, target.botId, internalSender, call.message) : undefined;
             if (lane?.created) createdThread = lane.threadId;
             if (lane) applyDelegatedLevel(internalSender, internalCapability.threadId, recipient, lane.threadId);
             if (!destination) {
-              const opened = { botId: internalSender.id, name: internalSender.name, threadId: address.threadId, at: Date.now() };
-              const task = continued ?? (fresh
+              const opened = { botId: internalSender.id, name: internalSender.name, threadId: address.threadId, at: Date.now(), kind: "work" as const };
+              const titled = explicitNew || Boolean(call.admission);
+              const task = continued ?? (titled
                 ? store.createTask(target.botId, call.title ?? (call.message.replace(/\s+/g, " ").trim().slice(0, 60) || `From ${internalSender.name}`), false, call.projectId, opened, undefined, undefined, folder.cwd)
                 : store.createTask(target.botId, `@${internalSender.name} · work`, false, undefined, { ...opened, kind: "work" }));
               if (!task) throw new Error("The recipient no longer exists");
               target.threadId = task.threadId;
+              const parentAllocation = store.taskByThread(internalSender.id, address.threadId)?.timeAllocation;
+              if (parentAllocation) store.patchTask(target.botId, task.threadId, { timeAllocation: parentAllocation });
               if (!continued) createdThread = task.threadId;
               applyDelegatedLevel(internalSender, internalCapability.threadId, recipient, target.threadId);
             }
             const routed = lane ? { botId: target.botId, threadId: lane.threadId } : target;
+            const evidenceRequired = receiptTargets.some(item => item.botId === target.botId);
             const { node, duplicate } = coordinator.enqueue(address, generation, internalCapability.roomHandoffId, routed, call.message, {
               mode, reply, thread: lane || fresh ? "new" : call.thread, approvalGranted, rework: call.rework, ...(lane ? {} : { requestBatchKey }),
+              ...(call.admission ? { admission: call.admission } : {}),
+              ...(evidenceRequired ? { evidenceRequired: true } : {}),
               ...(call.doneWhen ? { doneWhen: call.doneWhen } : {}),
             });
             if (duplicate && createdThread) store.deleteTask(target.botId, createdThread);
@@ -15134,15 +15350,17 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           message: z.string().trim().min(1).max(4000),
           reason: z.string().trim().max(200).optional(),
           rework: z.boolean().default(false),
+          toThreadId: z.string().max(128).regex(/^[\w-]+$/).optional(),
+          admission: z.unknown().optional(),
           thread: z.enum(["standing", "new"]).default("standing"),
           reply: z.enum(["resume", "none"]).default("resume"),
           consult: z.boolean().default(false),
           inMyFolder: z.boolean().default(false),
           done_when: z.string().trim().max(1000).optional(),
         }).safeParse(await readInternalBody());
-        if (!parsed.success) return json(res, 400, { error: "Provide 1-4 distinct botIds and a message of 1-4000 characters; thread is standing or new, reply is resume or none, consult is a boolean, done_when at most 1000 characters." });
-        const { groupId, botIds, message, reason, rework, thread, reply, consult, inMyFolder, done_when: doneWhen } = parsed.data;
-        const result = await coordinateBots({ groupId, botIds, message, reason: reason || undefined, rework, thread, reply, consult, inMyFolder, doneWhen: doneWhen || undefined });
+        if (!parsed.success) return json(res, 400, { error: "Provide 1-4 distinct botIds and a message of 1-4000 characters; thread is standing or new, reply is resume or none, consult is a boolean, done_when at most 1000 characters; toThreadId is optional and at most 128 letters, digits, underscores or dashes." });
+        const { groupId, botIds, message, reason, rework, toThreadId, admission, thread, reply, consult, inMyFolder, done_when: doneWhen } = parsed.data;
+        const result = await coordinateBots({ groupId, botIds, message, reason: reason || undefined, rework, threadId: toThreadId, admission: admission as never, thread, reply, consult, inMyFolder, doneWhen: doneWhen || undefined });
         return json(res, result.status, result.body);
       }
       if (method === "GET" && path === "/api/internal/room-targets") {
@@ -15681,6 +15899,17 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           throw error;
         }
       }
+      if (method === "POST" && path === "/api/internal/effect-check") {
+        if (internalCapability.kind !== "effects") return json(res, 403, { error: "effect check requires a turn-scoped effects capability" });
+        const parsed = z.object({
+          server: z.string().min(1).max(64).optional(),
+          tool: z.string().min(1).max(256),
+          arguments: z.unknown().optional(),
+        }).strict().safeParse(await readInternalBody());
+        if (!parsed.success) return json(res, 400, { error: "effect check needs a tool name and optional arguments" });
+        const refusal = effectRefusalFor(internalCapability, parsed.data.tool, parsed.data.arguments);
+        return json(res, 200, refusal ? { ok: false, reason: refusal } : { ok: true });
+      }
       if (method === "POST" && path === "/api/internal/connectors/mcp") {
         const body = await readInternalBody();
         // Re-read the live bot right before relay, so turning Connected Apps off wins over a request authenticated under the old value.
@@ -15768,6 +15997,10 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
           return res.end(JSON.stringify({ jsonrpc: "2.0", id: rpc?.id ?? null, result: { content: [{ type: "text", text }], isError: true } }));
         };
+        if (rpc?.method === "tools/call" && typeof rpcParams?.name === "string") {
+          const refusal = effectRefusalFor(internalCapability, rpcParams.name, rpcParams.arguments);
+          if (refusal) return refuseOutbound(refusal);
+        }
         // An app this bot may not touch is refused outright, never turned into a question for the person.
         const connectorCalls = rpc?.method === "tools/call" && typeof rpcParams?.name === "string"
           ? connectorCallsIn(rpcParams.name, rpcParams.arguments)

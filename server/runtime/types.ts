@@ -91,6 +91,10 @@ export interface Assignment {
   assignee: Assignee;
   mode: Mode;
   reply: Reply;
+  /** A structured admission the lead supplied for this work. */
+  admission?: import("../marketing-admission.ts").MarketingAdmission;
+  /** A signed execution receipt is required before this can settle complete. */
+  evidenceRequired?: boolean;
   /** The request, harness-stored (at most 12 000 characters). */
   brief: string;
   /** The requester's own completion criterion, if it gave one. */
@@ -200,6 +204,8 @@ export interface EnqueueRequest {
   brief: string;
   doneWhen?: string;
   rework?: boolean;
+  admission?: import("../marketing-admission.ts").MarketingAdmission;
+  evidenceRequired?: boolean;
   /** The requester's own level and, for a Chief lineage, the Chief
    * conversation's level, as the harness knows them. */
   levels: { own: Level; chief?: Level };
@@ -295,6 +301,10 @@ export interface TurnRunner {
   /** What the cut turn of this node already did outward, as short labels. Read at open() only: a
    * turn that acted outward is not run again. Absent or empty: the turn reruns once. */
   outward?(a: Assignment): string[];
+  /** A signed receipt was recorded in this assignment's thread after it started. */
+  receiptSatisfied?(a: Assignment): boolean;
+  /** The explicit time allocation for this assignment's thread has ended. */
+  timeExpired?(a: Assignment): boolean;
 }
 
 export interface Clock {
