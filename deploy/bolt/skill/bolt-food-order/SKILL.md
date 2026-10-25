@@ -58,13 +58,19 @@ it to EXCEPTIONS with exact products, quantities, prices and reasons for Marco's
 decision. Do not add an exception without his decision. Continue independent
 compliant items. A user's examples are a format, not verified stock or prices.
 
-For a multi-store shop, finish and display the comparison before building carts;
-research can be batched by store but the report must be grouped by requested
-item. Never select a product just to prove the tool works. An already-added item
-is not exempt from comparison. Cart preparation must implement the chosen rows,
-verify actual basket lines, and preserve existing user-approved items. Stop and
-report a basket replacement request rather than clearing a cart silently.
-Purchase/payment still requires the exact checkout approval.
+Work on exactly one requested item at a time. Complete its three-store checks,
+then immediately post its comparison and decision as a visible chat message in
+the exact format above BEFORE researching the next item. Do not batch by store,
+wait for a whole-shop report, dump whole catalogs, or replace item results with
+progress narration. Use already observed evidence for this item when applicable;
+limit additional research to its missing facts. If blocked, report this item's
+exact unresolved store check; never silently skip it or call it NOT FOUND.
+
+Marco's current task is comparison and per-item reporting ONLY. Do not add items,
+build carts afterwards, or perform unrelated work. After all requested items are
+reported, await his next instruction. Missing items and exceptions belong in the
+same visible item-by-item sequence. Never select an item just to prove a tool.
+Purchase/payment always requires the exact checkout approval.
 
 ## Mechanical operation route
 
