@@ -713,7 +713,7 @@ export class BrowserRuntime {
       evaluate: async (script) => valueOf(await rpc("agent_browser_eval", { script })),
       click: async (selector) => { await rpc("agent_browser_click", { selector }); },
       fill: async (selector, value) => { await rpc("agent_browser_fill", { selector, text: value }); },
-      navigate: async (url) => { await rpc("agent_browser_navigate", { url, readiness: "load" }); },
+      navigate: async (url) => { await rpc("agent_browser_open", { url }); },
     };
     try {
       const port = new BoltDomPort(transport, loadBindings(host.bindingsPath), gate);
