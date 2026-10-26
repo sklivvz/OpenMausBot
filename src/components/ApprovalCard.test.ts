@@ -46,7 +46,7 @@ describe("Bolt checkout approval", () => {
 });
 
 describe("ApprovalCard decided by voice", () => {
-  const bash = (answered: string, via?: "call"): Message => ({
+  const bash = (answered: string, via?: "call" | "reaction"): Message => ({
     id: "bash-card",
     role: "bot",
     kind: "options",
@@ -67,8 +67,16 @@ describe("ApprovalCard decided by voice", () => {
     expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("deny", "call") }))).toMatch(/Denied.*by voice/);
   });
 
+  it("says a card was decided by a 👍 or 👎 on it", () => {
+    expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("allow", "reaction") }))).toMatch(/Allowed.*by reaction/);
+    expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("deny", "reaction") }))).toMatch(/Denied.*by reaction/);
+    expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("allow", "reaction") }))).not.toContain("by voice");
+  });
+
   it("says nothing extra for a tap", () => {
-    expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("allow") }))).not.toContain("by voice");
+    const tapped = renderToStaticMarkup(createElement(ApprovalCard, { message: bash("allow") }));
+    expect(tapped).not.toContain("by voice");
+    expect(tapped).not.toContain("by reaction");
   });
 });
 
@@ -277,7 +285,7 @@ describe("ApprovalCard learned skills", () => {
     expect(markup).toContain("shared with Colorist");
     expect(markup).not.toContain("shared with Cutter");
     expect(markup).toContain("not shared with Sound");
-    expect(markup).not.toContain("Share with team");
+    expect(markup).not.toContain("Share with department");
   });
 
   it("maps create and update choices to approval while keeping refusals denied", () => {
@@ -691,7 +699,7 @@ describe("ApprovalCard for a change that applied on its own", () => {
     expect(deleted).not.toContain(">Undo<");
     const memory = render(applied({ tool: "propose_team_memory", subtitle: "Person: Ada Lovelace — Runs the payroll review.",
       teamMemoryRequest: { section: "", entryId: "e", kind: "person", revision: "v1" } }));
-    expect(memory).toContain("Scout saved to team memory: Person: Ada Lovelace");
+    expect(memory).toContain("Scout saved to department memory: Person: Ada Lovelace");
     expect(memory).toContain(">Undo<");
     expect(memory).not.toContain("Remember");
   });

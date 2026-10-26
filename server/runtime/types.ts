@@ -52,7 +52,7 @@ export type Status =
   | "running"         // a turn of the assignee is executing it
   | "needs_input"     // parked on the person (a card or a NEEDS INPUT line)
   | "waiting"         // its turn ended after handing out work; waits on children
-  | "resume"          // every child settled; owes its own follow-up turn
+  | "resume"          // every child settled, or one it waits on parked a new question; owes its own follow-up turn
   | "completed"
   | "failed"
   | "cancelled";
@@ -144,6 +144,9 @@ export interface Assignment {
   /** While a node continues in place, for the loop guard: `stale` counts consecutive continuations
    * with no successful tool call; `errors` holds the last three tool error texts. */
   guard?: { stale: number; errors: string[] };
+  /** While a turn runs: the awaited children whose open questions its input carries. A restart that cuts the turn
+   * reruns it with them once more; no other turn carries them again. */
+  carrying?: string[];
   /** A peer-review card allowed this before it was sent. */
   approved?: boolean;
   /** A room brief shown once per call: every recipient of that call shares it. */
@@ -220,7 +223,7 @@ export type EnqueueResult =
   | { ok: false; reason: string; outcome: "refused" | "budget" | "duplicate" };
 
 export interface RunInput {
-  /** first; resume (returns settled children's results); rerun (after a restart cut it); answered; continued. */
+  /** first; resume (returns settled children's results and awaited children's open questions); rerun (after a restart cut it); answered; continued. */
   turn: "first" | "resume" | "rerun" | "answered" | "continued";
   /** Not the node's first turn (any `turn` but "first"). */
   resumed: boolean;
@@ -232,7 +235,10 @@ export interface RunInput {
   answer?: string;
   /** The settled children whose results this (resume) turn returns. */
   settled?: Assignment[];
-  /** Children with newly delivered requests for input; they remain unfinished. */
+  /** The awaited children parked on a question this turn passes on: a question not yet delivered, or, in the rerun
+   * of a turn a restart cut, the questions that turn carried. */
+  asked?: Assignment[];
+  /** The awaited children parked on cards whose requests for input this turn passes on; they remain unfinished. */
   blocked?: Assignment[];
   /** For a continued turn: why it continues and, after a step cap, where
    * the steps so far are listed. */
@@ -258,6 +264,8 @@ export interface EndResult {
   needsInput?: { question: string; cards?: string[] };
   /** The turn stopped short and continues in place. */
   continue?: { note: string; handoffPath?: string; waitFor?: WaitDependency };
+  /** The host's stall watchdog stopped the turn. */
+  stalled?: boolean;
 }
 
 export interface Owner {

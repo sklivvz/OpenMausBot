@@ -76,27 +76,27 @@ const FULL = "skills+shared+voice+escalations+x";
  * either: lock a saving in by lowering the number. A Chief's list is longer
  * than another bot's only by the Chief-only names in find_tool's description. */
 const BUDGET_BASELINE: Record<string, number> = {
-  "default": 14912,
-  "voice": 15653,
-  "shared": 14952,
-  "shared+voice": 15693,
-  "skills": 14939,
-  "skills+voice": 15680,
-  "skills+shared": 14979,
-  "skills+shared+voice": 15720,
-  "non-chief": 14801,
-  "voice+non-chief": 15542,
-  "shared+non-chief": 14841,
-  "shared+voice+non-chief": 15582,
-  "skills+non-chief": 14828,
-  "skills+voice+non-chief": 15569,
-  "skills+shared+non-chief": 14868,
-  "skills+shared+voice+non-chief": 15609,
-  "skills+shared+voice+cloud-home": 15718,
-  "skills+shared+voice+non-chief+cloud-home": 15607,
-  "skills+shared+voice+escalations": 15738,
-  "skills+shared+voice+escalations+x": 15832,
-  "default+legacy-switches": 14912,
+  "default": 17930,
+  "voice": 18742,
+  "shared": 17970,
+  "shared+voice": 18782,
+  "skills": 17957,
+  "skills+voice": 18769,
+  "skills+shared": 17997,
+  "skills+shared+voice": 18809,
+  "non-chief": 17800,
+  "voice+non-chief": 18612,
+  "shared+non-chief": 17840,
+  "shared+voice+non-chief": 18652,
+  "skills+non-chief": 17827,
+  "skills+voice+non-chief": 18639,
+  "skills+shared+non-chief": 17867,
+  "skills+shared+voice+non-chief": 18679,
+  "skills+shared+voice+cloud-home": 18807,
+  "skills+shared+voice+non-chief+cloud-home": 18677,
+  "skills+shared+voice+escalations": 18827,
+  "skills+shared+voice+escalations+x": 18921,
+  "default+legacy-switches": 17930,
 };
 
 type RpcAnswer = { id: number; result?: { tools?: unknown[]; content?: Array<{ text: string }>; isError?: boolean }; error?: { code: number; message: string } };
@@ -265,7 +265,7 @@ describe("agents proxy tools/list golden with the tool bridge on", () => {
   it("keeps the same hot tools whatever the role and features, except the ones a profile does not have", () => {
     const hotOf = (name: string) => toolsOf(wires[name]!).slice(0, -2).map((tool) => tool.name);
     const base = hotOf("default");
-    expect(base).toEqual(["tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "post_to_room", "request_credential", "request_sign_in", "fill_login", "memory_update"]);
+    expect(base).toEqual(["tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "post_to_room", "request_credential", "request_sign_in", "fill_login", "memory_update"]);
     for (const name of Object.keys(PROFILES)) {
       expect(hotOf(name).filter((tool) => tool !== "send_voice_note"), name).toEqual(base);
       expect(hotOf(name).includes("send_voice_note"), name).toBe(PROFILES[name]!.OMB_VOICE_NOTES === "1");

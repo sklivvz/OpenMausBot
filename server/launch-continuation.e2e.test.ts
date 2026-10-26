@@ -41,8 +41,11 @@ it("carries a launch commitment into the next run and reports into its existing 
     const final = await api("GET", "/api/routines");
     expect(final.routines.find((r: any) => r.id === unrelated.id)).toEqual(unrelated);
     expect(final.routines.find((r: any) => r.id === routine.id)).toMatchObject({ continuity: true, schedule, resultsThreadId: threadId });
+    const reported = async () => (await api("GET", `/api/threads/${threadId}/messages?limit=30`)).messages
+      .filter((m: any) => m.automation).map((m: any) => m.automation.runId).sort();
+    await expect.poll(reported, { timeout: 15_000 }).toEqual(runs.map((r) => r.id).sort());
     const messages = await api("GET", `/api/threads/${threadId}/messages?limit=30`);
-    expect(messages.messages.filter((m: any) => m.kind === "routine.run")).toHaveLength(2);
+    expect(messages.messages.filter((m: any) => m.automation?.name === "Launch ownership")).toHaveLength(2);
     evidence.push({ final, messages });
   } finally {
     writeFileSync(`${fixture.info.logPath}.launch-continuation.json`, JSON.stringify(evidence, null, 2));

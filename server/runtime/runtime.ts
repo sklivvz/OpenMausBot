@@ -5,7 +5,7 @@ import { outwardWithinAdmission } from "../marketing-admission.ts";
 import { composeEnvelope } from "./envelope.ts";
 import { assignmentLevel } from "./level.ts";
 import type { RuntimeStore } from "./store.ts";
-import { awaited, childrenSince, clip, continuations, CUT_TWICE, duration, isTerminal, loopStop, nextGuard, outwardDetail, ownsConversation, path, restartNote, wakeOwner } from "./tree.ts";
+import { asking, awaited, carded, childrenSince, clip, continuations, CUT_TWICE, duration, isTerminal, loopStop, nextGuard, outwardDetail, ownsConversation, path, restartNote, wakeOwner } from "./tree.ts";
 import { DEFAULT_LIMITS, type Assignment, type Assignee, type Clock, type EndResult, type EnqueueRequest, type EnqueueResult, type EnvelopeNames,
   type EventKind, type InboxItem, type InboxKind, type Level, type Limits, type LiveEdge, type Origin, type Outcome, type Owner,
   type Reply, type Requester, type RunInput, type RunResult, type StatusView, type TurnRunner } from "./types.ts";
@@ -41,7 +41,9 @@ const DETAIL_MAX = 400;
 
 const defaultClock: Clock = { now: () => Date.now(), monotonic: () => performance.now() };
 
-interface LiveTurn { controller: AbortController; rootId: string; activeAt: number }
+/** `interruption`: a resume for a teammate's question while other work is still out; the node's restart note waits for its real resume.
+ * `carried`: the settled children whose results the turn's input carried; one that settles later owes the node another resume. */
+interface LiveTurn { controller: AbortController; rootId: string; activeAt: number; interruption: boolean; carried: ReadonlySet<string> }
 
 type TerminalStatus = "completed" | "failed" | "cancelled";
 
@@ -144,6 +146,7 @@ export class Runtime {
     const n = this.store.get(rootId);
     if (!n || n.parentId !== undefined || n.status !== "running") { this.log(`end(${rootId}): not a running root`); return; }
     if (!result.ok && !result.needsInput && !result.continue && this.closing) return;
+    const live = this.turns.get(rootId);
     // Dropping the handle without an abort makes turnEnded ignore the run() result that follows.
     this.turns.delete(rootId);
     const evidence = result.evidence ? { evidence: result.evidence } : {};
@@ -153,9 +156,9 @@ export class Runtime {
         ? { kind: "continue", text: result.text, note: result.continue.note, ...(result.continue.handoffPath ? { handoffPath: result.continue.handoffPath } : {}), ...(result.continue.waitFor ? { waitFor: result.continue.waitFor } : {}), ...evidence }
         : result.ok
           ? { kind: "completed", text: result.text, ...evidence }
-          : { kind: "failed", outcome: "provider_error", text: result.text, ...evidence };
+          : { kind: "failed", outcome: result.stalled ? "stalled" : "provider_error", text: result.text, ...evidence };
     try {
-      this.withBatch(() => this.finishTurn(n, outcome));
+      this.withBatch(() => this.finishTurn(n, outcome, live));
     } catch (error) {
       this.log(`end(${rootId}) failed: ${String(error)}`);
     }
@@ -285,16 +288,13 @@ export class Runtime {
       if (snapshot.status !== "waiting") continue;
       const n = this.store.get(snapshot.id);
       if (!n || n.status !== "waiting") continue;
-      const kids = awaited(this.store.children(n.id));
-      const blockedIds = new Set(kids.filter(c => c.status === "needs_input" && c.cards?.length && c.reply === "resume").map(c => c.id));
-      const blockerDue = n.reply !== "poll" && this.store.inbox({ threadId: n.assignee.destination.threadId }, true)
-        .some(item => item.kind === "needs_input" && blockedIds.has(item.assignmentId));
-      if (!blockerDue && (kids.length === 0 || !kids.every(c => isTerminal(c) && c.reportedAt !== undefined))) continue;
-      if (!blockerDue && !n.parentId && n.reply === "poll") {
+      const due = this.resumeReason(n);
+      if (!due) continue;
+      if (due === "settled" && !n.parentId && n.reply === "poll") {
         this.settle(n, "completed", "done");
       } else {
         n.status = "resume";
-        this.store.update(n, { kind: "resume_due", at: now, detail: blockerDue ? "resume: child needs input" : "resume" });
+        this.store.update(n, { kind: "resume_due", at: now, detail: due === "settled" ? "resume" : due === "asked" ? "resume: a teammate asks" : "resume: child needs input" });
         this.touch(n);
       }
     }
@@ -308,6 +308,12 @@ export class Runtime {
       if (snapshot.status !== "queued" && snapshot.status !== "resume") continue;
       const n = this.store.get(snapshot.id);
       if (!n || (n.status !== "queued" && n.status !== "resume")) continue;
+      if (n.status === "resume" && n.restart !== "rerun" && !this.resumeReason(n)) {
+        n.status = "waiting";
+        this.store.update(n, { kind: "waiting", at: this.clock.now(), detail: "waiting: nothing left to resume for" });
+        this.touch(n);
+        continue;
+      }
       const thread = n.assignee.destination.threadId;
       // Same-conversation turns never overlap; same-room speakers take turns.
       if (busyThreads.has(thread)) continue;
@@ -344,35 +350,45 @@ export class Runtime {
     if (!root) { this.log(`dispatch(${n.id}): root ${n.rootId} is missing`); return false; }
     let input: RunInput;
     let delivered: string[];
+    let carrying: string[];
+    let carried: Set<string>;
+    let interruption: boolean;
     try {
       const children = this.store.children(n.id);
       // Every settled result, not only new ones: the host keeps reports out of the transcript it replays.
       const settled = awaited(children).filter(isTerminal);
-      const pending = this.store.inbox({ threadId: n.assignee.destination.threadId }, true);
-      const blocked = awaited(children).filter(child => child.status === "needs_input" && child.cards?.length && child.reply === "resume"
-        && pending.some(item => item.kind === "needs_input" && item.assignmentId === child.id));
+      const ids = new Set(children.map(c => c.id));
+      const inbox = this.store.inbox({ threadId: n.assignee.destination.threadId }, true).filter(i => ids.has(i.assignmentId));
+      const fresh = new Set(inbox.filter(i => i.kind === "needs_input").map(i => i.assignmentId));
+      const again = new Set(n.restart === "rerun" ? n.carrying : undefined);
+      const asked = awaited(children).filter(c => asking(c) && (fresh.has(c.id) || again.has(c.id)));
+      const blocked = awaited(children).filter(c => carded(c) && c.reply === "resume" && (fresh.has(c.id) || again.has(c.id)));
+      interruption = resumed && n.restart !== "rerun" && (asked.length > 0 || blocked.length > 0);
       const names = this.names(n, parent);
       const turn: RunInput["turn"] = resumed ? "resume" : n.restart === "rerun" ? "rerun" : n.answer !== undefined ? "answered"
         : n.continuation ? "continued" : "first";
       input = {
         turn,
         resumed: turn !== "first",
-        restartNote: restartNote(n, children, child => this.names(child, n).assignee),
+        restartNote: interruption ? "" : restartNote(n, children, child => this.names(child, n).assignee),
         envelope: composeEnvelope(n, names, parent),
         ...(n.answer !== undefined ? { answer: n.answer } : {}),
         ...(n.continuation ? { continuation: { note: n.continuation.note, ...(n.continuation.handoffPath ? { handoffPath: n.continuation.handoffPath } : {}) } } : {}),
         ...(settled.length ? { settled } : {}),
+        ...(asked.length ? { asked } : {}),
         ...(blocked.length ? { blocked } : {}),
         level: n.level, mode: n.mode,
       };
-      const ids = new Set(children.map(c => c.id));
-      delivered = this.store.inbox({ threadId: n.assignee.destination.threadId }, true).filter(i => ids.has(i.assignmentId)).map(i => i.id);
+      delivered = inbox.map(i => i.id);
+      carrying = [...asked, ...blocked].map(c => c.id);
+      carried = new Set(settled.map(c => c.id));
     } catch (error) {
       this.log(`dispatch(${n.id}) could not compose the turn: ${String(error)}`);
       return false;
     }
     n.status = "running"; n.startedAt = now; n.executions += 1; n.lastActivityAt = now;
     delete n.continuation; delete n.cards;
+    if (carrying.length) n.carrying = carrying; else delete n.carrying;
     if (root.id !== n.id) root.lastActivityAt = now;
     if (root.budgets) root.budgets.executions += 1;
     try {
@@ -389,7 +405,7 @@ export class Runtime {
     this.admissionNoted.delete(n.id);
     this.touch(n, root);
     const controller = new AbortController();
-    const live: LiveTurn = { controller, rootId: root.id, activeAt: this.clock.monotonic() };
+    const live: LiveTurn = { controller, rootId: root.id, activeAt: this.clock.monotonic(), interruption, carried };
     this.turns.set(n.id, live);
     this.rootActivity.set(root.id, now);
     let turn: Promise<RunResult>;
@@ -415,16 +431,17 @@ export class Runtime {
       const n = this.store.get(id);
       if (!n || n.status !== "running") return;
       if (this.closing && result.kind === "failed") return;
-      this.withBatch(() => this.finishTurn(n, result));
+      this.withBatch(() => this.finishTurn(n, result, live));
     } catch (error) {
       this.log(`settling ${id} failed: ${String(error)}`);
     }
   }
 
-  private finishTurn(n: Assignment, result: RunResult): void {
+  /** `live`: the handle of the dispatched turn ending; a host turn begun with begin() has none. */
+  private finishTurn(n: Assignment, result: RunResult, live?: LiveTurn): void {
     const now = this.clock.now();
-    delete n.restart;
-    delete n.answer;
+    if (!live?.interruption) delete n.restart;
+    delete n.answer; delete n.carrying;
     // Access is rechecked as the turn ends: a reply that lands after the route closed is never retained.
     const parentRow = n.parentId ? this.store.get(n.parentId) : undefined;
     const problem = this.safe("validate", () => this.runner.validate(n, parentRow));
@@ -465,7 +482,8 @@ export class Runtime {
     }
     n.result = clip(result.text, RESULT_MAX);
     const kids = awaited(this.store.children(n.id));
-    const outstanding = kids.some(c => !isTerminal(c)) || awaited(childrenSince(this.store, n)).length > 0;
+    const unseen = live !== undefined && kids.some(c => isTerminal(c) && !live.carried.has(c.id));
+    const outstanding = unseen || kids.some(c => !isTerminal(c)) || awaited(childrenSince(this.store, n)).length > 0;
     if (outstanding) {
       n.status = "waiting"; n.lastActivityAt = now;
       if (root) this.renew(root, now);
@@ -621,7 +639,7 @@ export class Runtime {
     if (detail !== undefined) n.outcomeDetail = clip(detail, DETAIL_MAX); else delete n.outcomeDetail;
     if (status !== "completed" && detail !== undefined && n.result === "") n.result = clip(detail, RESULT_MAX);
     if (outcome === "refused" && detail !== undefined) { n.result = clip(detail, RESULT_MAX); delete n.evidence; }
-    delete n.question; delete n.answer; delete n.restart;
+    delete n.question; delete n.answer; delete n.restart; delete n.carrying;
     const kind: EventKind = status === "cancelled" ? "cancelled" : outcome === "refused" ? "refused" : "settled";
     const root = n.parentId ? this.store.get(n.rootId) : n;
     this.store.transaction(() => {
@@ -682,6 +700,21 @@ export class Runtime {
 
   private since(at: number): number {
     return Math.max(at, this.bootAt);
+  }
+
+  /** Each needs_input inbox item resumes its waiting requester at most once: dispatch marks it delivered in the
+   * same transaction that starts the turn, and a delivered item never counts again, across restarts too. */
+  private resumeReason(n: Assignment): "settled" | "asked" | "blocked" | undefined {
+    const kids = awaited(this.store.children(n.id));
+    if (kids.length === 0) return undefined;
+    if (kids.every(c => isTerminal(c) && c.reportedAt !== undefined)) return "settled";
+    if (!n.parentId && n.reply === "poll") return undefined;
+    const parked = kids.filter(c => c.status === "needs_input");
+    if (parked.length === 0) return undefined;
+    const fresh = new Set(this.store.inbox({ threadId: n.assignee.destination.threadId }, true)
+      .filter(i => i.kind === "needs_input").map(i => i.assignmentId));
+    if (parked.some(c => asking(c) && fresh.has(c.id))) return "asked";
+    return parked.some(c => carded(c) && c.reply === "resume" && fresh.has(c.id)) ? "blocked" : undefined;
   }
 
   private inputExpires(n: Assignment): boolean {
