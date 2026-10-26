@@ -165,10 +165,10 @@ test('missing conversation returns current scoped candidates without issuing a s
   await assert.rejects(f.call('read_work_context',{taskId:'task',threadId:'obsolete'}),(error:Error)=>{assert.match(error.message,/Do not repeat this ID/);assert.match(error.message,/current/);assert.doesNotMatch(error.message,/hidden/);return true;});
 });
 
-test('default source reads Positron Tasks with the configured Bill credential and never the attention scanner', async () => {
+test('default source reads Positron Tasks with the calling bot\'s own credential and never the attention scanner', async () => {
   const requests: { url: string; authorization?: string }[] = [];
   const task = { id: 't_1', title: 'Prepare filing', status: 'unestimated', department: { id: 'dept_b3f25b3be28aed00', name: 'Legal' }, due_on: null, archived_at: null };
-  const call = createBridge({ now: () => timestamp,
+  const call = createBridge({ now: () => timestamp, tasksServer: () => 'positron-tasks-bill-lumbergh',
     config: () => ({ mcpServers: { 'positron-tasks-bill-lumbergh': { type: 'http', url: 'http://positron-mcp:8080/mcp', headers: { Authorization: 'Bearer fixture-bill-token-0123' }, enabled: true } } }),
     fetchImpl: (async (url: any, init: any) => {
       requests.push({ url: String(url), authorization: init?.headers?.authorization });

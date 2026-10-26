@@ -4,7 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { jevBackend } from '../../server/decider/jev.ts';
 import { threadRefUrl } from '../../src/lib/thread-refs.ts';
-import { authorizationFrom, createTaskSnapshotReader, departments, taskUrl, TASKS_WEB_ORIGIN, type TaskSnapshot } from '../positron-tasks/snapshot.ts';
+import { authorizationFrom, callerServer, createTaskSnapshotReader, departments, taskUrl, TASKS_WEB_ORIGIN, type TaskSnapshot } from '../positron-tasks/snapshot.ts';
 import { createAttentionReader } from './attention.ts';
 
 function sourceUrls(text: string, taskOrigin: string): string[] {
@@ -53,8 +53,8 @@ export const toolDefinitions = [
 ].map(t => ({ ...t, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } }));
 
 export function createBridge({ fetchImpl = fetch, config = () => JSON.parse(fs.readFileSync(path.join(os.homedir(), '.openmausbot/config.json'), 'utf8')), now = Date.now, scanUrl = 'http://127.0.0.1:8798', appUrl = 'http://127.0.0.1:8799', taskWebOrigin = TASKS_WEB_ORIGIN,
-  readTasks = createTaskSnapshotReader({ fetchImpl, now, authorization: () => authorizationFrom(config()) }) }: {
-  fetchImpl?: typeof fetch; config?: () => any; now?: () => number; scanUrl?: string; appUrl?: string; taskWebOrigin?: string; readTasks?: () => Promise<TaskSnapshot>;
+  tasksServer = () => callerServer(), readTasks = createTaskSnapshotReader({ fetchImpl, now, authorization: () => authorizationFrom(config(), { server: tasksServer() }) }) }: {
+  fetchImpl?: typeof fetch; config?: () => any; tasksServer?: () => string; now?: () => number; scanUrl?: string; appUrl?: string; taskWebOrigin?: string; readTasks?: () => Promise<TaskSnapshot>;
 } = {}) {
   const attention = createAttentionReader(fetchImpl, scanUrl, now);
   const taskOrigin = new URL(taskWebOrigin).origin;

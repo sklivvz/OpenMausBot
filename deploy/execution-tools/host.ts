@@ -5,7 +5,7 @@ import { createQueueReader, queueToolDefinitions } from '../execution-queue/read
 import { validateHandoff, handoffToolDefinition } from '../agentic/handoff-validation.ts';
 import { createAssignmentTracker, assignmentTrackingToolDefinition } from '../assignment-tracking/tracker.ts';
 import { createEvidenceObserver, createExecutionRecorder, executionReceiptToolDefinition, receiptInput } from '../execution-receipts/receipts.ts';
-import { TASKS_CONFIG_FILE, TASKS_ORIGIN, TASKS_SERVER, configuredAuthorization, createTaskSnapshotReader } from '../positron-tasks/snapshot.ts';
+import { TASKS_CONFIG_FILE, TASKS_ORIGIN, configuredAuthorization, createTaskSnapshotReader } from '../positron-tasks/snapshot.ts';
 
 const absolute = z.string().min(1).max(4096).refine(path.isAbsolute);
 const project = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
@@ -20,7 +20,7 @@ const configuredUrl = z.url().refine(value => {
 export const executionConfigSchema = z.object({
   appUrl: configuredUrl.default('http://127.0.0.1:8799'),
   tasksOrigin: z.url().refine(value => plainUrl(value) && ['http:', 'https:'].includes(new URL(value).protocol)).default(TASKS_ORIGIN),
-  tasksConfigFile: absolute.default(TASKS_CONFIG_FILE), tasksServer: z.string().min(1).max(200).default(TASKS_SERVER),
+  tasksConfigFile: absolute.default(TASKS_CONFIG_FILE), tasksServer: z.string().min(1).max(200).optional(),
   evidenceDir: absolute, receiptDir: absolute,
   signingKeyFile: absolute, artifactRoots: z.array(absolute).min(1).max(64),
   allowedProjects: z.array(project).min(1).max(64),
@@ -56,7 +56,7 @@ export function createExecutionTools(rawConfig: unknown, { fetchImpl = fetch }: 
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   };
   const readTasks = createTaskSnapshotReader({ origin: config.tasksOrigin, fetchImpl,
-    authorization: () => configuredAuthorization({ configFile: config.tasksConfigFile, server: config.tasksServer, origin: config.tasksOrigin }) });
+    authorization: () => configuredAuthorization({ configFile: config.tasksConfigFile, ...(config.tasksServer ? { server: config.tasksServer } : {}), origin: config.tasksOrigin }) });
   const queue = createQueueReader({ readTasks, fetchImpl, appUrl: config.appUrl, directory: config.evidenceDir });
   const tracker = createAssignmentTracker({ readJob });
   const recorder = createExecutionRecorder({ directory: config.receiptDir, signingKey: key, observe: createEvidenceObserver({ artifactRoots: roots, readJob }) });

@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const TASKS_ORIGIN = 'http://positron-mcp:8080';
-export const TASKS_SERVER = 'positron-tasks-bill-lumbergh';
 export const TASKS_CONFIG_FILE = path.join(os.homedir(), '.openmausbot', 'config.json');
+export const BOTS_FILE = path.join(os.homedir(), '.openmausbot', 'bots.json');
 export const TASKS_WEB_ORIGIN = 'http://localhost:8080';
 export const departments: Record<string, string> = {
   dept_e89d8f9cc151db21: 'Accounting',
@@ -50,8 +50,17 @@ export function taskUrl(taskId: string, webOrigin = TASKS_WEB_ORIGIN): string {
   return new URL(`/tasks/${encodeURIComponent(taskId)}`, webOrigin).href;
 }
 
+/** Each bot reads Positron Tasks only with its own credential: `positron-tasks-<bot name slug>` for the bot running this process. */
+export function callerServer(botId = process.env.OMB_BOT_ID, botsFile = BOTS_FILE): string {
+  need(typeof botId === 'string' && botId.length > 0, 'Positron Tasks read refused: no calling bot (OMB_BOT_ID)');
+  const raw = JSON.parse(fs.readFileSync(botsFile, 'utf8'));
+  const bot = (Array.isArray(raw) ? raw : raw.bots ?? []).find((b: any) => b?.id === botId);
+  need(bot && typeof bot.name === 'string', `Positron Tasks read refused: unknown bot ${botId}`);
+  return `positron-tasks-${bot.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
 /** The token is sent only to the origin its own MCP registration names. */
-export function authorizationFrom(config: any, { server = TASKS_SERVER, origin = TASKS_ORIGIN } = {}): string {
+export function authorizationFrom(config: any, { server = callerServer(), origin = TASKS_ORIGIN } = {}): string {
   const entry = config?.mcpServers?.[server];
   need(entry && entry.enabled !== false && typeof entry.url === 'string', `Positron Tasks credential ${server} is not configured`);
   need(new URL(entry.url).origin === new URL(origin).origin, `Positron Tasks credential ${server} belongs to another origin`);
@@ -60,7 +69,7 @@ export function authorizationFrom(config: any, { server = TASKS_SERVER, origin =
   return authorization;
 }
 
-export function configuredAuthorization({ configFile = TASKS_CONFIG_FILE, server = TASKS_SERVER, origin = TASKS_ORIGIN } = {}): string {
+export function configuredAuthorization({ configFile = TASKS_CONFIG_FILE, server = callerServer(), origin = TASKS_ORIGIN } = {}): string {
   return authorizationFrom(JSON.parse(fs.readFileSync(configFile, 'utf8')), { server, origin });
 }
 

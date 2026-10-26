@@ -9,7 +9,7 @@ const root = process.env.OMB_OBJECTIVE_STATE ?? "/state";
 const api = loopbackApi(process.env.OMB_OBJECTIVE_URL ?? "http://127.0.0.1:8799");
 const capacity = Number(process.env.OMB_OBJECTIVE_CAPACITY ?? 2);
 if (!Number.isInteger(capacity) || capacity < 1 || capacity > 6) throw new Error("Objective capacity must be 1..6");
-const readTasks = createTaskSnapshotReader({ authorization: () => configuredAuthorization({ configFile: process.env.OMB_TASKS_CONFIG_FILE ?? TASKS_CONFIG_FILE }) });
+const readTasks = createTaskSnapshotReader({ authorization: () => configuredAuthorization({ configFile: process.env.OMB_TASKS_CONFIG_FILE ?? TASKS_CONFIG_FILE, server: process.env.OMB_TASKS_SERVER ?? '' }) });
 const controllers = new Map<string, ObjectiveController>();
 const health = await api("GET", "/api/health");
 if (health.capabilities?.guardedMessages !== 1 || health.capabilities?.guardedRequests !== 1) throw new Error("Guarded message/request capabilities required");
