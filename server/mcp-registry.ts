@@ -64,7 +64,7 @@ export function isRemoteMcpServer(server: McpServerSpec): server is RemoteMcpSpe
   return "url" in server;
 }
 
-export const MAX_MCP_SERVERS = 20;
+export const MAX_MCP_SERVERS = 64;
 const MAX_ARGS = 64;
 const MAX_ENV = 64;
 const MAX_HEADERS = 32;
