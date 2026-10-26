@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { z } from 'zod';
+import { departments, type TaskSnapshot } from '../positron-tasks/snapshot.ts';
 
 const id = z.string().regex(/^[\w-]{1,160}$/);
 const cursor = z.string().regex(/^[\w-]+:\d+$/);
@@ -12,20 +13,19 @@ const contextInput = z.union([
   z.object({ cursor }).strict(),
 ]);
 const hash = (value: unknown) => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const projects: Record<string, string> = { '6hjrmJ99PmfVmfwJ': 'Accounting', '6hjrcrRM8XH9hVJQ': 'Legal', '6hjrccFccMCw7QFf': 'Marketing', '6hjrccFMwC8f5RgH': 'Operations', '6hjrcc9gJ5995XhG': 'Sales' };
 type Row = Record<string, any>;
 type Snapshot = { id: string; at: string; expires: number; full: Row; rows: Row[]; read: Set<number>; file: string; sha256: string; sourceComplete: boolean; gaps: string[] };
 const schema = (name: string, description: string, input: z.ZodType) => ({ name, description, inputSchema: { ...z.toJSONSchema(input), type: 'object' }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false } });
 export const queueToolDefinitions = [
-  schema('read_execution_queue', 'Collect the complete open Todoist queue through the existing read-only source, without model classification. Return stable compact pages and exact private evidence. Follow returned cursors; sourceComplete differs from allPagesRead. Does not choose work or change tasks.', queueInput),
+  schema('read_execution_queue', 'Collect the complete open Positron Tasks queue through its read-only API, without model classification. Return stable compact pages and exact private evidence. Follow returned cursors; sourceComplete differs from allPagesRead. Does not choose work or change tasks.', queueInput),
   schema('read_execution_context', 'Collect the selected task conversation and actual assignment tree without model calls. Pin a task from read_execution_queue. Fetch all bounded source pages, preserve full evidence, and return compact pages with explicit coverage and change detection. Thread relevance and business completion remain unverified.', contextInput),
 ];
 
-export function createQueueReader({ fetchImpl = fetch, now = Date.now, queueUrl = 'http://127.0.0.1:8798/review', appUrl = 'http://127.0.0.1:8799', directory = path.join(os.homedir(), '.openmausbot', 'execution-queue'), maxMessagePages = 100, maxSourceBytes = 8_000_000, maxSnapshotBytes = 32_000_000 } = {}) {
+export function createQueueReader({ readTasks, fetchImpl = fetch, now = Date.now, appUrl = 'http://127.0.0.1:8799', directory = path.join(os.homedir(), '.openmausbot', 'execution-queue'), maxMessagePages = 100, maxSourceBytes = 8_000_000, maxSnapshotBytes = 32_000_000 }: { readTasks: () => Promise<TaskSnapshot>; fetchImpl?: typeof fetch; now?: () => number; appUrl?: string; directory?: string; maxMessagePages?: number; maxSourceBytes?: number; maxSnapshotBytes?: number }) {
   const snapshots = new Map<string, Snapshot>();
   const pageSize = 15;
-  const read = async (url: string, method = 'GET') => {
-    const response = await fetchImpl(url, { method, redirect: 'error', signal: AbortSignal.timeout(150000) });
+  const read = async (url: string) => {
+    const response = await fetchImpl(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(150000) });
     if (!response.ok) throw Error(`http_${response.status}`);
     let text = '';
     const decoder = new TextDecoder();
@@ -76,11 +76,11 @@ export function createQueueReader({ fetchImpl = fetch, now = Date.now, queueUrl 
       const input = parsed.data;
       if ('cursor' in input) return fromCursor(input.cursor, 'queue');
       try {
-        const source = await read(queueUrl, 'POST');
+        const source: Row = await readTasks();
         if (source.complete !== true || !Array.isArray(source.tasks) || !Number.isInteger(source.totalOpen) || source.totalOpen !== source.tasks.length || typeof source.checkedAt !== 'string') return failure('queue', 'incomplete_source');
         if (source.tasks.some((t: Row) => !id.safeParse(t.id).success || !id.safeParse(t.projectId).success || typeof t.title !== 'string' || typeof t.description !== 'string') || new Set(source.tasks.map((t: Row) => t.id)).size !== source.tasks.length) return failure('queue', 'invalid_or_duplicate_tasks');
         const tasks = source.tasks.filter((t: Row) => !input.projectId || t.projectId === input.projectId);
-        const rows = tasks.map((t: Row) => ({ record: 'task', taskId: t.id, projectId: t.projectId, title: t.title.slice(0, 160), titleTruncated: t.title.length > 160, priority: t.priority, due: t.due, deadline: t.deadline, updatedAt: t.updatedAt ?? null, taskSha256: hash(t), descriptionCharacters: t.description.length }));
+        const rows = tasks.map((t: Row) => ({ record: 'task', taskId: t.id, projectId: t.projectId, project: t.project, title: t.title.slice(0, 160), titleTruncated: t.title.length > 160, status: t.status, due: t.due, responsible: t.responsible, updatedAt: t.updatedAt ?? null, taskSha256: hash(t), descriptionCharacters: t.description.length }));
         return page(save({ kind: 'queue', checkedAt: source.checkedAt, source, tasks, projectId: input.projectId ?? null }, rows, []));
       } catch { return failure('queue', 'retrieval_unavailable_or_limit'); }
     }
@@ -99,7 +99,7 @@ export function createQueueReader({ fetchImpl = fetch, now = Date.now, queueUrl 
       const inventory = await read(`${appUrl}/api/bots?messages=0`);
       if (!Array.isArray(inventory.bots)) return failure('threads', 'invalid_inventory');
       const owner = inventory.bots.find((bot: Row) => bot.tasks?.some((thread: Row) => thread.threadId === input.threadId));
-      if (!owner || (projects[task.projectId] && owner.section !== projects[task.projectId])) return failure('thread', 'missing_or_wrong_team');
+      if (!owner || (departments[task.projectId] && owner.section !== departments[task.projectId])) return failure('thread', 'missing_or_wrong_team');
       full.owner = { id: owner.id, name: owner.name, section: owner.section };
       const seen = new Set(), max = maxMessagePages;
       let before: string | undefined, leaf: string | null | undefined, finished = false;

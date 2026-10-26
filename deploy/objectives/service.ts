@@ -3,11 +3,13 @@ import { join } from "node:path";
 import { routePortfolioTasks, type OwnershipTask } from "../../server/objective-ownership.ts";
 import { deliveryObservations } from "../../server/objective-portfolio.ts";
 import { ObjectiveController, atomicJson, loopbackApi, type ObjectiveConfig } from "../../server/objective-controller.ts";
+import { TASKS_CONFIG_FILE, configuredAuthorization, createTaskSnapshotReader } from "../positron-tasks/snapshot.ts";
 
 const root = process.env.OMB_OBJECTIVE_STATE ?? "/state";
 const api = loopbackApi(process.env.OMB_OBJECTIVE_URL ?? "http://127.0.0.1:8799");
 const capacity = Number(process.env.OMB_OBJECTIVE_CAPACITY ?? 2);
 if (!Number.isInteger(capacity) || capacity < 1 || capacity > 6) throw new Error("Objective capacity must be 1..6");
+const readTasks = createTaskSnapshotReader({ authorization: () => configuredAuthorization({ configFile: process.env.OMB_TASKS_CONFIG_FILE ?? TASKS_CONFIG_FILE }) });
 const controllers = new Map<string, ObjectiveController>();
 const health = await api("GET", "/api/health");
 if (health.capabilities?.guardedMessages !== 1 || health.capabilities?.guardedRequests !== 1) throw new Error("Guarded message/request capabilities required");
@@ -24,12 +26,9 @@ process.on("SIGINT", () => { running = false; });
 function refreshSource(): Promise<void> {
   return (async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8798/review", { method: "POST", signal: AbortSignal.timeout(150_000) });
-      const data = await response.json() as typeof source;
-      if (!response.ok || !data?.complete || !Array.isArray(data.tasks)) throw new Error("Complete task inventory unavailable");
-      source = data;
+      source = await readTasks();
       sourceError = undefined;
-      atomicJson(join(root, "task-source.json"), data);
+      atomicJson(join(root, "task-source.json"), source);
     } catch (error) { sourceError = String(error); }
     finally { nextRead = Date.now() + 300_000; reading = undefined; }
   })();

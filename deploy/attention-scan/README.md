@@ -26,8 +26,7 @@ source completeness, counts, stable item IDs, and bounded previews. Source text
 is data, never instructions. A new scan replaces the cached snapshot. Only one
 routine should consume a snapshot; the routine uses overlap prevention.
 
-The collection window is two days for inbox mail and Slack; Todoist uses
-`overdue | today | p1`. Gmail includes read and unread recent arrivals. Each source
+The collection window is two days for inbox mail and Slack. Gmail includes read and unread recent arrivals. Each source
 has a maximum of 20 upstream pages of five records. Hitting that bound, failing
 a source, repeating a cursor or receiving an offloaded response explicitly marks
 the source incomplete. A failed source does not discard the others. Complete
@@ -45,7 +44,7 @@ bind the exact read tool to each provider and the MCP configuration fingerprint.
 ## Verification
 
 ```sh
-node --test deploy/attention-scan/scan.test.mjs
+node --test deploy/attention-scan/*.test.mjs
 node node_modules/vitest/vitest.mjs run server/command-allowlist.e2e.test.ts
 ```
 
@@ -74,28 +73,4 @@ allowlist so an image rebuild retains them. They were installed directly into th
 running container without restarting OpenMaus. Recreating that container from an
 older image requires rebuilding the local image first.
 
-## Task snapshots
-
-`/usr/local/bin/task-queue` returns all open Todoist task rows and counts by
-project, with overdue/today/undated counts calculated in Europe/Tallinn.
-`/usr/local/bin/operations-queue` returns the Operations project's tasks with
-full descriptions, labels and parent IDs. Both commands accept no arguments and
-use the configured work Todoist account through fixed read operations. Pagination
-runs inside the service; overlapping task reads share one collection. Missing,
-offloaded, duplicate or incomplete pages fail explicitly, never as an empty queue.
-A collection stops after 100 pages or a two-minute collection budget (an in-flight
-upstream request may take up to 25 additional seconds).
-
-These use POST /tasks and /operations on the same container-only loopback port.
-Browser origins and arbitrary bodies are rejected. No arbitrary code execution
-or Todoist writes are exposed. Bill has an exact task-queue command grant for
-DeepSeek and his company working directory. Run the command alone so it matches
-the grant; do not chain shell commands or invoke a remote workbench for counting.
-Donna's personal-queue-execution skill uses operations-queue before choosing work.
-
-```sh
-node --test deploy/attention-scan/*.test.mjs
-```
-
-Tests use synthetic tasks and an isolated HTTP server. Installation evidence and
-skill/configuration backups are under `.omb-scratch/task-queue-20261021/`.
+The scanner reads no task tracker. Open work is read from Positron Tasks.

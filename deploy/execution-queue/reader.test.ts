@@ -5,24 +5,25 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { createQueueReader, queueToolDefinitions } from './reader.ts';
 
-const projectId = '6hjrccFccMCw7QFf';
+const projectId = 'dept_ae3fffd71e795bbb';
 function fixture(options: { count?: number; tweak?: (url: URL, value: any) => any; maxMessagePages?: number; maxSourceBytes?: number } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'queue-fixture-'));
   let now = 1792780000000;
   const calls: string[] = [];
-  const tasks = Array.from({ length: options.count ?? 18 }, (_, i) => ({ id: `task-${i}`, projectId, title: 'Work ' + i, description: 'Exact source '.repeat(300), updatedAt: '2026-10-23T18:00:00Z', priority: 2 }));
+  const tasks = Array.from({ length: options.count ?? 18 }, (_, i) => ({ id: `task-${i}`, projectId, project: 'Marketing', title: 'Work ' + i, status: 'unestimated', description: 'Exact source '.repeat(300), updatedAt: '2026-10-23T18:00:00Z' }));
+  const tweak = options.tweak ?? ((_: URL, value: any) => value);
   const read = createQueueReader({ directory, now: () => now, maxMessagePages: options.maxMessagePages, maxSourceBytes: options.maxSourceBytes,
+    readTasks: async () => { calls.push('tasks'); return tweak(new URL('positron-tasks:/snapshot'), { complete: true, checkedAt: '2026-10-23T18:00:00Z', totalOpen: tasks.length, tasks }); },
     fetchImpl: (async (address: string, init: RequestInit) => {
       const url = new URL(address); calls.push((init.method ?? 'GET') + ' ' + url.pathname + url.search);
       let value: any;
-      if (url.pathname === '/review') value = { complete: true, checkedAt: '2026-10-23T18:00:00Z', totalOpen: tasks.length, tasks };
-      else if (url.pathname === '/api/bots') value = { bots: [{ id: 'bot-1', name: 'Darcy', section: 'Marketing', tasks: [{ threadId: 'thread-1' }] }] };
+      if (url.pathname === '/api/bots') value = { bots: [{ id: 'bot-1', name: 'Darcy', section: 'Marketing', tasks: [{ threadId: 'thread-1' }] }] };
       else if (url.pathname.endsWith('/messages')) value = url.searchParams.has('before')
         ? { messages: [{ id: 'm1', role: 'user', kind: 'text', text: 'Exact original task.', at: 1 }], hasMore: false, activeLeafId: 'm3' }
         : { messages: [{ id: 'm2', role: 'bot', kind: 'text', text: 'x'.repeat(500), at: 2 }, { id: 'm3', role: 'user', kind: 'text', text: 'Keep the send on hold.', at: 3 }], hasMore: true, activeLeafId: 'm3' };
       else if (url.pathname.endsWith('/job')) value = { threadId: 'thread-1', version: 'job-v1', hidden: 0, counts: { running: 1 }, nodes: [{ id: 'assignment-1', rootId: 'assignment-1', botId: 'liz', threadId: 'child-thread', status: 'running', result: 'Full result' }] };
       else throw Error('Unexpected request');
-      value = options.tweak ? options.tweak(url, value) : value;
+      value = tweak(url, value);
       return new Response(JSON.stringify(value), { status: 200 });
     }) as typeof fetch,
   });
@@ -89,7 +90,8 @@ test('network failures retain earlier snapshots and explicit failure', async () 
 });
 test('response limits and arbitrary commands/URLs are refused', async () => {
   const f = fixture({ maxSourceBytes: 50 }); try {
-    assert.equal((await f.read('read_execution_queue') as any).status, 'source_failed');
+    const q: any = await f.read('read_execution_queue');
+    assert.equal((await f.read('read_execution_context', { snapshotId: q.snapshotId, taskId: 'task-0', threadId: 'thread-1' }) as any).status, 'source_failed');
     await assert.rejects(f.read('read_execution_queue', { url: 'https://example.com' }), /Invalid/);
     await assert.rejects(f.read('publish', {}), /Invalid/);
     assert(queueToolDefinitions.every(d => d.inputSchema.type === 'object' && d.annotations.readOnlyHint));

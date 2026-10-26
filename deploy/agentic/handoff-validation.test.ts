@@ -5,7 +5,7 @@ import { handoffToolDefinition, validateHandoff, validHandoffReference } from '.
 
 function packet() {
   return {
-    task: { id: 'task-1', objectiveId: 'objective-1', reference: 'record:todoist/task-1', revision: 'v3' },
+    task: { id: 'task-1', objectiveId: 'objective-1', reference: 'record:positron-tasks/task-1', revision: 'v3' },
     assignment: { botId: 'specialist-1', objectiveId: 'objective-1', briefRevision: 'v3', contribution: 'Review the supplied contract for the listed issues.', operations: ['review'] },
     artifactMode: 'existing',
     artifacts: [{ id: 'contract-1', reference: '/workspace/Contract draft.docx', version: 'sha256-a', currentVersion: 'sha256-a' }],
@@ -73,8 +73,8 @@ test('holds apply to exact operations without suspending independent preparation
 });
 
 test('reference forms follow real thread links and reject ambiguous or active schemes', () => {
-  for (const ref of ['https://example.com/a?version=2', '/workspace/Contract draft.docx', 'record:todoist/task-1', 'openmausbot://thread/request-1?bot=lead-1']) assert(validHandoffReference(ref), ref);
-  for (const ref of ['artifact.docx', '../artifact.docx', '/workspace/../secret', 'javascript:alert(1)', 'https://user:secret@example.com', 'openmausbot://thread/a/b', 'openmausbot://thread/a?bot=b&extra=c', 'record:todoist/', 'https://example.com/\nsecret']) assert.equal(validHandoffReference(ref), false, ref);
+  for (const ref of ['https://example.com/a?version=2', '/workspace/Contract draft.docx', 'record:positron-tasks/task-1', 'openmausbot://thread/request-1?bot=lead-1']) assert(validHandoffReference(ref), ref);
+  for (const ref of ['artifact.docx', '../artifact.docx', '/workspace/../secret', 'javascript:alert(1)', 'https://user:secret@example.com', 'openmausbot://thread/a/b', 'openmausbot://thread/a?bot=b&extra=c', 'record:positron-tasks/', 'https://example.com/\nsecret']) assert.equal(validHandoffReference(ref), false, ref);
 });
 
 test('oversized rendered message and acceptance criteria fail without truncation', () => {

@@ -25,10 +25,6 @@ const recorder = createExecutionRecorder({
   signingKey: hostOwnedSigningKeyBytes,
   observe,
 });
-const progress = createTodoistProgress({
-  // Existing connector, allowed projects and update-receipt directory.
-  verifyEvidence: recorder.verifyEvidence,
-});
 ```
 
 Use a persistent random signing key of at least 32 bytes, supplied by trusted
@@ -42,8 +38,8 @@ Do not give untrusted agents key/storage administration access.
 Inputs contain `operationId`, `botId`, `taskId`, `objectiveId`, optional
 `projectId`, `sourceVersion`, `nextStep`, and up to eight evidence selectors.
 Artifact selectors are `{kind:'artifact', id, path}`. Assignment selectors are
-`{kind:'assignment', id, threadId, rootId}`. Project ID is required when a receipt
-will authorize a Todoist progress update; it must match the target project.
+`{kind:'assignment', id, threadId, rootId}`. Project ID is the Positron Tasks
+department ID; `verifyEvidence` requires it to match the target project.
 Selectors/association and brief version are caller-supplied context, not semantic
 proof that an artifact satisfies that objective. No caller-provided success flag,
 result, outcome, timestamp or approval is accepted.
@@ -65,19 +61,18 @@ not accepted as a delivered or approved artifact.
 - Missing, changing or partial source: `source_failed`.
 - Returned text, stopped work, empty evidence of progress: `unverified`.
 
-Only `progressed` and `delegated_active` currently support Todoist `in_progress`.
+Only `progressed` and `delegated_active` currently support an `in_progress` task update.
 Waiting for a person, external dependencies, business holds and no-actionable
 judgments require evidence paths not implemented here. They remain unsupported;
 the module does not invent them from bot prose or a prepared review packet.
 Business outcome and acceptance always remain unverified. File changes prove
 mechanical activity, not relevance, quality or business achievement.
 
-`recorder.verifyEvidence(ids, {taskId, projectId, status})` matches the E11
-progress-updater contract. It authenticates stored receipts, checks target
+`recorder.verifyEvidence(ids, {taskId, projectId, status})` authenticates stored receipts, checks target
 identity/status, and rereads every referenced source. Changed bytes or assignment
 state invalidate evidence for that update. It returns receipt identity, hash,
-file reference and supported statuses. It requires no Todoist readback receipt:
-source evidence precedes the task update, whose separate readback follows it.
+file reference and supported statuses. Source evidence precedes the task update,
+whose separate readback follows it.
 
 ## Persistence and failure handling
 

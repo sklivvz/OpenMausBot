@@ -230,7 +230,7 @@ describe("groupTranscript", () => {
   });
 
   it("folds settled progress messages and leaves the terminal answer visible", () => {
-    const user: Message = { id: "u1", at: 1_000, role: "user", kind: "text", text: "check todoist" };
+    const user: Message = { id: "u1", at: 1_000, role: "user", kind: "text", text: "check the task list" };
     const first = assistant("I'm checking connected apps.", "turn-1", false, 2_000);
     const second = assistant("I'm reading your tasks.", "turn-1", false, 3_000);
     const final = assistant("You have three tasks.", "turn-1", true, 5_000);

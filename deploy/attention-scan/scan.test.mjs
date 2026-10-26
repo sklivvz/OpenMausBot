@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { createReader, runScan, unwrap } from './scan.mjs';
 import { createServer } from './server.mjs';
 
-const accounts = { gmailWork: 'work-mail', gmailPersonal: 'personal-mail', slack: 'slack', todoist: 'tasks', slackUser: 'U123' };
+const accounts = { gmailWork: 'work-mail', gmailPersonal: 'personal-mail', slack: 'slack', slackUser: 'U123' };
 const frame = data => ({ result: { content: [{ type: 'text', text: JSON.stringify({ successful: true,
   data: { results: [{ response: { successful: true, data } }] } }) }] } });
 
@@ -18,32 +18,32 @@ test('fixed read-only operations paginate all sources and return compact evidenc
     if (call.tool_slug === 'GMAIL_FETCH_EMAILS') data = call.arguments.page_token
       ? { messages: [{ id: 'm2', subject: 'Second page' }] }
       : { messages: [{ id: 'm1', subject: 'First page', payload: { secret: 'unneeded full body' } }], nextPageToken: 'next' };
-    else if (call.tool_slug === 'SLACK_SEARCH_MESSAGES') data = { messages: { matches: [{ ts: '1', channel: { id: 'D1' }, text: 'Please review' }], paging: { page: 1, pages: 1 } } };
-    else data = call.arguments.cursor ? { results: [{ id: 't2', content: 'Task two' }], next_cursor: null }
-      : { results: [{ id: 't1', content: 'Task one', due: { date: '2026-10-20' } }], next_cursor: 'next' };
+    else data = call.arguments.page === 1
+      ? { messages: { matches: [{ ts: '1', channel: { id: 'D1' }, text: 'Please review' }], paging: { page: 1, pages: 2 } } }
+      : { messages: { matches: [{ ts: '2', channel: { id: 'D1' }, text: 'Second page' }], paging: { page: 2, pages: 2 } } };
     return new Response('data: ' + JSON.stringify({ id: request.id, ...frame(data) }) + '\n\n');
   } });
   const report = await runScan({ read, accounts, now: Date.UTC(2026, 9, 20) });
   assert.equal(report.complete, true);
-  assert.equal(report.sources.length, 5);
+  assert.deepEqual(report.sources.map(s => s.source), ['work_email', 'personal_email', 'slack_mentions', 'slack_direct']);
   assert.equal(report.sources[0].items.length, 2);
-  assert.equal(report.sources[4].items.length, 2);
+  assert.equal(report.sources[3].items.length, 2);
   assert.ok(!JSON.stringify(report).includes('unneeded full body'));
   assert.equal(calls.length, 8);
+  assert.ok(calls.every(c => ['GMAIL_FETCH_EMAILS', 'SLACK_SEARCH_MESSAGES'].includes(c.tool_slug)));
   assert.ok(calls.every(c => c.account));
   assert.ok(calls.filter(c => c.tool_slug === 'GMAIL_FETCH_EMAILS').every(c => c.arguments.include_payload === false));
-  await assert.rejects(read('GMAIL_SEND_EMAIL', 'work-mail', {}), /Only the fixed/);
+  for (const tool of ['GMAIL_SEND_EMAIL', 'TODOIST_GET_ALL_TASKS']) await assert.rejects(read(tool, 'work-mail', {}), /Only the fixed/);
 });
 
 test('one failed source does not hide other results or claim the scan is complete', async () => {
   const report = await runScan({ accounts, read: async (tool, account) => {
     if (account === 'work-mail') throw new Error('Connector HTTP 503');
     if (tool === 'GMAIL_FETCH_EMAILS') return { messages: [] };
-    if (tool === 'SLACK_SEARCH_MESSAGES') return { messages: { matches: [], total: 0 } };
-    return { results: [], next_cursor: null };
+    return { messages: { matches: [], total: 0 } };
   } });
   assert.equal(report.complete, false);
-  assert.equal(report.sources.filter(s => s.complete).length, 4);
+  assert.equal(report.sources.filter(s => s.complete).length, 3);
   assert.match(report.sources[0].error, /503/);
 });
 
@@ -51,8 +51,7 @@ test('offloaded results, repeated cursors and page limits cannot look like an em
   assert.throws(() => unwrap({ result: { structuredContent: { data: { remote_file_info: {} } } } }), /offloaded/);
   const report = await runScan({ accounts, maxPages: 2, read: async tool => tool === 'GMAIL_FETCH_EMAILS'
     ? { messages: [{ id: 'm1' }], nextPageToken: 'again' }
-    : tool === 'SLACK_SEARCH_MESSAGES' ? { messages: { matches: [], paging: { page: 1, pages: 9 } } }
-      : { results: [], next_cursor: 'again' } });
+    : { messages: { matches: [], paging: { page: 1, pages: 9 } } } });
   assert.equal(report.complete, false);
   assert.ok(report.sources.every(s => !s.complete));
 });
@@ -67,7 +66,7 @@ test('HTTP tool has no arbitrary tool, account, query, shell or write inputs and
   const url = 'http://127.0.0.1:' + server.address().port;
   try {
     assert.equal((await fetch(url + '/scan', { method: 'POST', body: '{"tool":"send"}' })).status, 400);
-    assert.equal((await fetch(url + '/write', { method: 'POST' })).status, 404);
+    for (const route of ['/write', '/tasks', '/operations', '/review']) assert.equal((await fetch(url + route, { method: 'POST' })).status, 404);
     assert.equal(calls, 0);
     const first = fetch(url + '/scan', { method: 'POST' });
     const second = fetch(url + '/scan', { method: 'POST' });

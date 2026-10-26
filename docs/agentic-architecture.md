@@ -177,7 +177,7 @@ This example does not resume previously stopped production or authorize publicat
 
 An orchestrator retains all accepted business objectives across turns. A finished
 assignment, a blocked campaign or one completed outcome does not suspend the
-remaining objectives. Todoist tasks map to business objectives; they do not
+remaining objectives. Positron Tasks records map to business objectives; they do not
 automatically define them. The lead reconciles priorities and chooses contributions
 within the user’s authority. Deterministic continuation retains objective identity,
 source coverage, actual request settlement and explicit dependencies. It shares

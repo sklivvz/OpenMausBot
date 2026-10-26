@@ -2,13 +2,15 @@
 
 The deterministic controller retains each lead's complete portfolio of accepted
 business objectives across provider turns. It is not a campaign runner and does
-not define business objectives from Todoist rows. Leads recover the objectives
+not define business objectives from task records. Leads recover the objectives
 and authority from current user conversations and artifacts, then associate the
 source tasks with those outcomes.
 
 Each portfolio has its own durable configuration, request identities, checkpoints
-and events. A complete Todoist inventory is collected without agent calls every
-five minutes. Missing or partial reads are errors, not an empty backlog. New
+and events. A complete open Positron Tasks inventory is collected without agent
+calls every five minutes, using the `positron-tasks-bill-lumbergh` credential in
+`OMB_TASKS_CONFIG_FILE`. Portfolio `projectIds` are Positron Tasks department
+IDs. Missing or partial reads are errors, not an empty backlog. New
 source evidence wakes a waiting portfolio. Due dependency checks and settled
 requests also continue mechanically. Two portfolio requests may run at once;
 least recently started portfolios receive admission first. Existing bot activity

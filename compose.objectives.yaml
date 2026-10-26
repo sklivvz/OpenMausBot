@@ -24,5 +24,6 @@ services:
     environment:
       OMB_OBJECTIVE_URL: http://127.0.0.1:8799
       OMB_OBJECTIVE_STATE: /state
+      OMB_TASKS_CONFIG_FILE: /data/.openmausbot/config.json
 volumes:
   objective-state:

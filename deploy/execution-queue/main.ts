@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import readline from 'node:readline';
+import { configuredAuthorization, createTaskSnapshotReader } from '../positron-tasks/snapshot.ts';
 import { createQueueReader, queueToolDefinitions } from './reader.ts';
 
-const call = createQueueReader({ queueUrl: process.env.EXECUTION_QUEUE_URL, appUrl: process.env.EXECUTION_QUEUE_APP_URL, directory: process.env.EXECUTION_QUEUE_EVIDENCE_DIR });
+const readTasks = createTaskSnapshotReader({ authorization: () => configuredAuthorization() });
+const call = createQueueReader({ readTasks, appUrl: process.env.EXECUTION_QUEUE_APP_URL, directory: process.env.EXECUTION_QUEUE_EVIDENCE_DIR });
 async function main() {
 for await (const line of readline.createInterface({ input: process.stdin, crlfDelay: Infinity })) {
   let message: any;

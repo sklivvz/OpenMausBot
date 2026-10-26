@@ -16,7 +16,7 @@ async function main() {
       else if (message.method === 'ping') result = {};
       else if (message.method === 'tools/call') {
         try { result = { content: [{ type: 'text', text: JSON.stringify(await call(message.params.name, message.params.arguments)) }] }; }
-        catch (error) { result = { isError: true, content: [{ type: 'text', text: error instanceof Error && /^(Invalid|Snapshot|Task is|Incomplete|Read source)/.test(error.message) ? error.message : 'Work review unavailable; use direct Todoist evidence. No data changed.' }] }; }
+        catch (error) { result = { isError: true, content: [{ type: 'text', text: error instanceof Error && /^(Invalid|Snapshot|Task is|Incomplete|Read source)/.test(error.message) ? error.message : 'Work review unavailable; use direct Positron Tasks evidence. No data changed.' }] }; }
       } else throw Error('Unknown method');
       process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\n');
     } catch {

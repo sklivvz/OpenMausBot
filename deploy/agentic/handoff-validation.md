@@ -14,9 +14,9 @@ access and content are not. Reference files are never opened by this validator.
 ```json
 {
   "task": {
-    "id": "todoist-task-id",
+    "id": "positron-task-id",
     "objectiveId": "existing-business-objective-id",
-    "reference": "record:todoist/todoist-task-id",
+    "reference": "record:positron-tasks/positron-task-id",
     "revision": "brief-v3"
   },
   "assignment": {

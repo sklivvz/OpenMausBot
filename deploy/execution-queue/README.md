@@ -1,9 +1,10 @@
 # Execution source retrieval
 
 This read-only MCP implements the retrieval part of `execute-next-step` without
-model calls. It reuses the existing attention service's `/review` snapshot,
-whose provider adapter already follows every Todoist page. It does not add
-another Todoist credential, classify work, rank priorities or infer permission.
+model calls. It reads open work from Positron Tasks
+(`deploy/positron-tasks/snapshot.ts`), which follows every list page and reads
+each open task's full record. It does not classify work, rank priorities or infer
+permission.
 
 `read_execution_queue` collects that snapshot once. An optional `projectId`
 selects returned tasks while retaining the entire retrieved source. The tool
@@ -50,11 +51,12 @@ scratch output). Register the resulting absolute command, or import
 Root integration owns shared build/registration files; this change does not
 modify them or deploy to live bots.
 
-Configuration uses `EXECUTION_QUEUE_URL` (default loopback `8798/review`),
-`EXECUTION_QUEUE_APP_URL` (default loopback `8799`) and
-`EXECUTION_QUEUE_EVIDENCE_DIR` (default `~/.openmausbot/execution-queue`). These
-are administrator configuration, never tool arguments. Only an existing source
-snapshot POST and app GETs are performed. MCP inputs expose no URL, command,
+Configuration uses `EXECUTION_QUEUE_APP_URL` (default loopback `8799`) and
+`EXECUTION_QUEUE_EVIDENCE_DIR` (default `~/.openmausbot/execution-queue`). The
+task source is `http://positron-mcp:8080` with the bearer credential of the
+`positron-tasks-bill-lumbergh` entry in `~/.openmausbot/config.json`. These are
+administrator configuration, never tool arguments. Only Positron Tasks and app
+GETs are performed. MCP inputs expose no URL, command,
 model choice, task write, delegation or send operation. No observed token-saving
 claim is made before real adoption.
 

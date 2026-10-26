@@ -17,7 +17,6 @@ services:
       SCAN_GMAIL_WORK: test
       SCAN_GMAIL_PERSONAL: personal
       SCAN_SLACK: work
-      SCAN_TODOIST: work
       SCAN_SLACK_USER: U0AMR0U80KH
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8798/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]

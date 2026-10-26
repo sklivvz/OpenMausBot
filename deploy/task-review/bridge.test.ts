@@ -8,8 +8,9 @@ const snapshot = (tasks: any[]) => ({ complete: true, checkedAt: new Date(timest
 function fixture(tasks: any[], options: any = {}) {
   let sourceCalls = 0, jevCalls = 0, now = timestamp;
   const requests: any[] = [];
-  const call = createBridge({ now: () => now, config: () => ({ decider: { enabled: true, key: 'fixture-secret', ...options.config } }), fetchImpl: async (url: any, init: any) => {
-    if (String(url).endsWith('/review')) { sourceCalls++; return Response.json(options.snapshot ?? snapshot(tasks)); }
+  const call = createBridge({ now: () => now, config: () => ({ decider: { enabled: true, key: 'fixture-secret', ...options.config } }),
+    readTasks: async () => { sourceCalls++; return structuredClone(options.snapshot ?? snapshot(tasks)); },
+    fetchImpl: async (url: any, init: any) => {
     if (String(url).includes('/api/bots')) return Response.json({ bots: options.bots ?? [] });
     if (String(url).includes('/messages?')) return Response.json({ messages: options.messages ?? [{ id: 'source-message', at: timestamp, role: 'user', kind: 'text', text: 'Please prepare the invoices and bring me the payment choice.' }] });
     jevCalls++; const body = JSON.parse(init.body); requests.push(body);
@@ -98,8 +99,8 @@ test('activity excludes missing telemetry and reports actual running state separ
   assert.equal(report.rows[2].sharePercent, null); assert.equal(report.rows[2].missingCachedInput, 1); assert.equal(report.rows[2].missingUsage, 1);
 });
 test('briefing rendering requires full coverage and enforces limits, unique links and remainder arithmetic', async () => {
-  const tasks = Array.from({ length: 6 }, (_, n) => ({ ...row('task-' + n), projectId: '6hjrmJ99PmfVmfwJ' }));
-  const f = fixture(tasks, { snapshot: { ...snapshot(tasks), projects: { '6hjrmJ99PmfVmfwJ': { open: 6 } } }, bots: [{ id: 'accountant', name: 'Accountant', section: 'Accounting', tasks: [{ threadId: 'source-thread' }] }] });
+  const tasks = Array.from({ length: 6 }, (_, n) => ({ ...row('task-' + n), projectId: 'dept_e89d8f9cc151db21' }));
+  const f = fixture(tasks, { snapshot: { ...snapshot(tasks), projects: { 'dept_e89d8f9cc151db21': { open: 6 } } }, bots: [{ id: 'accountant', name: 'Accountant', section: 'Accounting', tasks: [{ threadId: 'source-thread' }] }] });
   const receipts: string[] = [];
   const item = (n: number) => ({ taskIds: ['task-' + n], label: 'Invoice decision', bucket: 'on_you', summary: 'Review the prepared invoice recommendation.', sourceRef: 'thread fixture, current user decision and prepared invoice inspected', verifiedNextAction: true, evidenceIds: [receipts[n]], actionTarget: { receiptId: receipts[n] } });
   await assert.rejects(f.call('get_briefing', { items: [item(0)] }), /Incomplete/);
@@ -115,9 +116,9 @@ test('briefing rendering requires full coverage and enforces limits, unique link
   const rendered: any = await f.call('get_briefing', { items: [{ ...item(0), taskIds: ['task-0', 'task-1'], evidenceIds: receipts.slice(0, 2) }, item(2)] });
   assert.ok(rendered.markdown.includes('## Accounting — 6 open'));
   assert.ok(rendered.markdown.includes('[Invoice decision](openmausbot://thread/source-thread?bot=accountant)'));
-  assert.ok(rendered.markdown.includes('[Todoist 1](https://app.todoist.com/app/task/task-0)'));
+  assert.ok(rendered.markdown.includes('[Task 1](http://localhost:8080/tasks/task-0)'));
   assert.ok(rendered.markdown.includes('*and 3 more open.*'));
-  assert.equal((rendered.markdown.match(/https:\/\/app.todoist.com\/app\/task\//g) ?? []).length, 3);
+  assert.equal((rendered.markdown.match(/http:\/\/localhost:8080\/tasks\//g) ?? []).length, 3);
   assert.ok(rendered.markdown.includes('An idle process does not establish spare capacity'));
 });
 test('source retrieval is scoped and excludes Bill summaries and routine prompts', async () => {
@@ -130,10 +131,10 @@ test('source retrieval is scoped and excludes Bill summaries and routine prompts
   await assert.rejects(f.call('read_work_context', { taskId: 'a', threadId: 'bill' }), /no context/);
 });
 
-test('personal actions require a retrieved destination, with Todoist only as supporting context', async () => {
-  const tasks = ['task-alpha', 'task-beta'].map(id => ({ ...row(id), projectId: '6hjrcrRM8XH9hVJQ' }));
+test('personal actions require a retrieved destination, with the task link only as supporting context', async () => {
+  const tasks = ['task-alpha', 'task-beta'].map(id => ({ ...row(id), projectId: 'dept_b3f25b3be28aed00' }));
   const f = fixture(tasks, { bots: [{ id: 'legal', name: 'Counsel', section: 'Legal', tasks: [{ threadId: 'proposal' }] }], messages: [
-    { id: 'proposal-message', role: 'bot', kind: 'text', text: 'Review [Proposal](https://docs.example.test/proposal?v=2) for signature. Context https://app.todoist.com/app/task/task-alpha' },
+    { id: 'proposal-message', role: 'bot', kind: 'text', text: 'Review [Proposal](https://docs.example.test/proposal?v=2) for signature. Context http://localhost:8080/tasks/task-alpha' },
     { id: 'later', role: 'bot', kind: 'text', text: 'x'.repeat(7500) + ' https://docs.example.test/unread' },
   ] });
   await f.call('read_work_queue');
@@ -146,20 +147,37 @@ test('personal actions require a retrieved destination, with Todoist only as sup
   await assert.rejects(f.call('get_briefing', { items: [item] }), /actionTarget/);
   await assert.rejects(f.call('get_briefing', { items: [{ ...item, actionTarget: { receiptId: 'invented' } }] }), /actionTarget/);
   await assert.rejects(f.call('get_briefing', { items: [{ ...item, evidenceIds: [source.receiptId, other.receiptId], actionTarget: { receiptId: other.receiptId } }] }), /this task group/);
-  for (const artifactUrl of ['https://app.todoist.com/app/task/task-alpha', 'https://docs.example.test/unread', 'https://invented.example.test', 'javascript:alert(1)']) {
-    await assert.rejects(f.call('get_briefing', { items: [{ ...item, actionTarget: { receiptId: source.receiptId, artifactUrl } }] }), /exact non-Todoist URL/);
+  for (const artifactUrl of ['http://localhost:8080/tasks/task-alpha', 'https://docs.example.test/unread', 'https://invented.example.test', 'javascript:alert(1)']) {
+    await assert.rejects(f.call('get_briefing', { items: [{ ...item, actionTarget: { receiptId: source.receiptId, artifactUrl } }] }), /exact non-task URL/);
   }
   const rendered: any = await f.call('get_briefing', { items: [{ ...item, actionTarget: { receiptId: source.receiptId, artifactUrl: source.artifactCandidates[0] } }] });
   assert.ok(rendered.markdown.includes('[Review proposal](https://docs.example.test/proposal?v=2)'));
   assert.ok(rendered.markdown.includes('[Conversation](openmausbot://thread/proposal?bot=legal)'));
-  assert.ok(rendered.markdown.includes('[Todoist](https://app.todoist.com/app/task/task-alpha)'));
+  assert.ok(rendered.markdown.includes('[Task](http://localhost:8080/tasks/task-alpha)'));
   const waiting: any = await f.call('get_briefing', { items: [{ ...item, bucket: 'waiting_others' }] });
-  assert.ok(waiting.markdown.includes('[Review proposal](https://app.todoist.com/app/task/task-alpha)'));
+  assert.ok(waiting.markdown.includes('[Review proposal](http://localhost:8080/tasks/task-alpha)'));
 });
 
 test('missing conversation returns current scoped candidates without issuing a source receipt', async () => {
-  const task={...row('task'),projectId:'6hjrccFccMCw7QFf'};
+  const task={...row('task'),projectId:'dept_ae3fffd71e795bbb'};
   const f=fixture([task],{bots:[{id:'lead',name:'Fixture lead',section:'Marketing',tasks:[{threadId:'current',title:'Current proposal',updatedAt:timestamp}]},{id:'private',name:'Other',section:'Private',tasks:[{threadId:'hidden',title:'Private',updatedAt:timestamp}]}]});
   await f.call('read_work_queue');
   await assert.rejects(f.call('read_work_context',{taskId:'task',threadId:'obsolete'}),(error:Error)=>{assert.match(error.message,/Do not repeat this ID/);assert.match(error.message,/current/);assert.doesNotMatch(error.message,/hidden/);return true;});
+});
+
+test('default source reads Positron Tasks with the configured Bill credential and never the attention scanner', async () => {
+  const requests: { url: string; authorization?: string }[] = [];
+  const task = { id: 't_1', title: 'Prepare filing', status: 'unestimated', department: { id: 'dept_b3f25b3be28aed00', name: 'Legal' }, due_on: null, archived_at: null };
+  const call = createBridge({ now: () => timestamp,
+    config: () => ({ mcpServers: { 'positron-tasks-bill-lumbergh': { type: 'http', url: 'http://positron-mcp:8080/mcp', headers: { Authorization: 'Bearer fixture-bill-token-0123' }, enabled: true } } }),
+    fetchImpl: (async (url: any, init: any) => {
+      requests.push({ url: String(url), authorization: init?.headers?.authorization });
+      if (String(url).startsWith('http://positron-mcp:8080/api/v1/tasks?')) return Response.json({ items: [task], total: 1, limit: 200, offset: 0 });
+      if (String(url) === 'http://positron-mcp:8080/api/v1/tasks/t_1') return Response.json({ ...task, description: 'Owner: Luis Litt', criteria: [], progress: null, version: 1, updated_at: '2026-10-25T10:00:00Z' });
+      throw Error('Unexpected request ' + url);
+    }) as typeof fetch });
+  const page: any = await call('read_work_queue');
+  assert.deepEqual(page.tasks.map((t: any) => t.id), ['t_1']);
+  assert.deepEqual(page.projects, { dept_b3f25b3be28aed00: { open: 1, overdue: 0, dueToday: 0, undated: 1 } });
+  assert.ok(requests.every(r => r.url.startsWith('http://positron-mcp:8080/api/v1/') && r.authorization === 'Bearer fixture-bill-token-0123'));
 });

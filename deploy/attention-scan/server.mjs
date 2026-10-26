@@ -1,10 +1,8 @@
 import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { createReader, runScan } from './scan.mjs';
-import { OPERATIONS_PROJECT, readTasks, taskReport } from './tasks.mjs';
 
-export function createServer(scan, tasks) {
-  let tasksInFlight;
+export function createServer(scan) {
   let inFlight;
   let report;
   let remaining = [];
@@ -27,7 +25,7 @@ export function createServer(scan, tasks) {
     res.setHeader('content-type', 'application/json');
     res.setHeader('cache-control', 'no-store');
     if (req.method === 'GET' && req.url === '/health') return res.end('{"ok":true}');
-    if (req.method !== 'POST' || !['/scan', '/next', ...(tasks ? ['/tasks', '/operations', '/review'] : [])].includes(req.url)) {
+    if (req.method !== 'POST' || !['/scan', '/next'].includes(req.url)) {
       res.writeHead(404); return res.end('{"error":"Unknown scan operation"}');
     }
     if (req.headers.origin) { res.writeHead(403); return res.end('{"error":"Browser origins are not accepted"}'); }
@@ -38,11 +36,6 @@ export function createServer(scan, tasks) {
     }
     if (body !== '' && body !== '{}') { res.writeHead(400); return res.end('{"error":"Scan accepts no arguments"}'); }
     try {
-      if (['/tasks', '/operations', '/review'].includes(req.url)) {
-        tasksInFlight ??= tasks().finally(() => { tasksInFlight = undefined; });
-        const snapshot = await tasksInFlight;
-        return res.end(JSON.stringify(taskReport(snapshot, req.url === '/operations' ? OPERATIONS_PROJECT : undefined, req.url === '/review')));
-      }
       if (req.url === '/next') {
         if (!report || inFlight) { res.writeHead(409); return res.end('{"error":"Finish attention-scan before reading its next page"}'); }
         return res.end(JSON.stringify(nextPage()));
@@ -66,7 +59,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   if (!token || !origin) throw new Error('Attention scan requires the configured connector service');
   const read = createReader({ url: origin.replace(/\/$/, '') + '/v1/mcp', token });
   const accounts = { gmailWork: process.env.SCAN_GMAIL_WORK, gmailPersonal: process.env.SCAN_GMAIL_PERSONAL,
-    slack: process.env.SCAN_SLACK, todoist: process.env.SCAN_TODOIST, slackUser: process.env.SCAN_SLACK_USER };
+    slack: process.env.SCAN_SLACK, slackUser: process.env.SCAN_SLACK_USER };
   if (Object.values(accounts).some(value => !value)) throw new Error('All scan accounts must be configured');
-  createServer(() => runScan({ read, accounts }), () => readTasks({ read, account: accounts.todoist })).listen(8798, '127.0.0.1', () => console.log('Read-only attention scanner ready'));
+  createServer(() => runScan({ read, accounts })).listen(8798, '127.0.0.1', () => console.log('Read-only attention scanner ready'));
 }
