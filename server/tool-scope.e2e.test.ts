@@ -167,6 +167,7 @@ it("refuses selection changes during direct and room turns and requires a truste
 
 it("carries the latest original tool selection into fresh direct and room MCP connections", async () => {
   await withFixture("happy", async ({ api, control, dump }) => {
+    expect((await api("PATCH", "/api/config", { features: { claudeUserMcp: true } })).status).toBe(200);
     const server = { name: "notes", command: process.execPath, args: ["--experimental-strip-types", fileURLToPath(new URL("./testing/fake-mcp-server.ts", import.meta.url))], enabled: true };
     expect((await api("POST", "/api/mcp/servers", server)).status).toBe(201);
     expect((await api("PATCH", "/api/mcp/servers/notes", { enabled: true })).status).toBe(200);
@@ -175,6 +176,7 @@ it("carries the latest original tool selection into fresh direct and room MCP co
     expect((await api("PATCH", `/api/bots/${bot.id}`, { toolScope: direct })).status).toBe(200);
     await control(["send", "--bot", bot.id, "--text", "Reply once."]);
     const first = await dump();
+    expect(first.argv).toContain("--strict-mcp-config");
     expect(JSON.parse(first.mcpConfig.mcpServers.notes.env.OMB_GATE_TOOL_SCOPE)).toEqual(direct);
     await control(["wait", "--bot", bot.id, "--timeout", "30"]);
     const roomScope = { deny: ["mcp:notes:write_notes"] };
@@ -182,6 +184,7 @@ it("carries the latest original tool selection into fresh direct and room MCP co
     const { channel } = await control(["new-channel", "--name", "Scope dispatch room", "--members", bot.id]);
     await control(["send-channel", "--channel", channel.id, "--text", "Reply once in this room."]);
     const second = await dump();
+    expect(second.argv).toContain("--strict-mcp-config");
     expect(second.pid).not.toBe(first.pid);
     expect(JSON.parse(second.mcpConfig.mcpServers.notes.env.OMB_GATE_TOOL_SCOPE)).toEqual(roomScope);
     await control(["wait", "--channel", channel.id, "--timeout", "30"]);

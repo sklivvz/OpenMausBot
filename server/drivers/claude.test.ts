@@ -468,11 +468,12 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(JSON.parse(readFileSync(dump, "utf8")).argv).toContain("--add-dir");
   });
 
-  it("refuses native MCP inheritance when a bot has an explicit selection", async () => {
+  it("isolates MCP inheritance when a bot has an explicit selection", async () => {
     const dump = join(scratch, "scope-inherited-mcp.json"); process.env.FAKE_CLAUDE_DUMP = dump;
     await create();
-    await expect(instance.adapter.sendTurn({ threadId: "scope-inherited-mcp", text: "Must not run", mcpFromUserConfig: true, toolScope: { allow: ["native:*"] } })).rejects.toThrow(/restricted MCP configuration/);
-    expect(existsSync(dump)).toBe(false);
+    await instance.adapter.sendTurn({ threadId: "scope-inherited-mcp", text: "Fixture", mcpFromUserConfig: true, toolScope: { allow: ["native:*"] } });
+    await recorder.until((event) => event.type === "turn.completed");
+    expect(JSON.parse(readFileSync(dump, "utf8")).argv).toContain("--strict-mcp-config");
   });
 
   afterEach(async () => {
