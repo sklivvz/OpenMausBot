@@ -4,8 +4,6 @@
 !install-pplx.sh
 !attention-scan
 !attention-scan-next
-!task-queue
-!operations-queue
 !design-export
 !claude-design-mcp.cjs
 !claude-with-artifacts

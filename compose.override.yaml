@@ -18,10 +18,6 @@ services:
     extends:
       file: compose.objectives.yaml
       service: objectives
-  legal-queue:
-    extends:
-      file: compose.legal-queue.yaml
-      service: legal-queue
   attention-scan:
     extends:
       file: compose.attention.yaml
@@ -43,4 +39,3 @@ services:
       OMB_COMPOSIO_BROKER_TOKEN: ${OMB_COMPOSIO_BROKER_TOKEN:-}
 volumes:
   objective-state:
-  legal-queue-state:

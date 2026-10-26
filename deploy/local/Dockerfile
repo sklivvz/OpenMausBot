@@ -43,8 +43,6 @@ RUN if [ -n "$PPLX_TAG" ]; then sh /tmp/install-pplx.sh "$PPLX_TAG"; fi \
     && rm -f /tmp/install-pplx.sh
 COPY --chmod=0555 attention-scan /usr/local/bin/attention-scan
 COPY --chmod=0555 attention-scan-next /usr/local/bin/attention-scan-next
-COPY --chmod=0555 task-queue /usr/local/bin/task-queue
-COPY --chmod=0555 operations-queue /usr/local/bin/operations-queue
 RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils python3 python-is-python3 ripgrep \
     && rm -rf /var/lib/apt/lists/*
 COPY --chmod=0555 design-export /usr/local/bin/design-export
