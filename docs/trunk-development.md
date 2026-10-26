@@ -42,8 +42,8 @@ not automatically unfinished local work and must not all be merged or deleted.
 ## Local deployment tools
 
 After installing dependencies, run `pnpm build:local-tools` before building the
-local Docker images or starting the observer. The generated detector, review,
-calendar-audit and observer bundles are ignored; their sources and build scripts
+local Docker images. The generated detector, review and
+calendar-audit bundles are ignored; their sources and build scripts
 are versioned. `deploy/local/Dockerfile.runtime-tools` includes the restored
 runtime utilities. Deployment remains an explicit, separately verified action.
 

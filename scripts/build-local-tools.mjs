@@ -14,7 +14,6 @@ const bundles = [
   ["../deploy/task-review/build.mjs", "../deploy/local/work-review-mcp.cjs"],
   ["../deploy/marketing-calendar/build.mjs", "../deploy/local/marketing-calendar-audit"],
   ["../deploy/marketing-calendar/build-template.mjs", "../deploy/local/newsletter-template-preflight", "../deploy/local/newsletter-template-prepare"],
-  ["../deploy/observability/build.mjs", "../deploy/observability/observer.cjs"],
 ];
 
 for (const [builder, ...outputs] of bundles) {
