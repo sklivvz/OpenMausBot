@@ -23,12 +23,6 @@ These are review questions, not a requirement that agents produce trustworthy te
 
 ## Current implementation scope
 
-The [independent observer](../../deploy/observability/README.md) reads existing runtime events, delegation trees, transcript records and configuration snapshots. It retains source references, changed snapshots, collection errors and restart-safe cursors in a separate database. Its reports distinguish claims and execution evidence, and leave business success unverified.
-
-Collection runs mechanically without agent calls, approval prompts or network access. The collector's application data mount is read-only. Its own state persists independently of bot sessions. Verification uses an isolated application fixture.
-
-The observer cannot establish voluntary ownership, evaluate arbitrary business acceptance criteria, or enforce the six-layer hierarchy. Those gaps remain visible in reports. It does not select a live business objective or perform the team's work.
-
 The existing Coordination room now contains only the six business leads, with Donna as default coordinator. Its [working agreement](../../deploy/agentic/leadership-room.md) calls for contribution offers before dispatch: relevant leads propose outcomes, the coordinator reconciles them, and the offered work is dispatched with acceptance criteria. The existing runtime records those requests and their ownership, deduplicates identical requests and routes results. Semantic agreement and good decomposition remain reasoning responsibilities; a prompt is not a mechanical guarantee of either.
 
 Room leads can address their specialists outside the room through direct work threads. Direct assignments have separate histories. A recognized computer/browser-control blocker becomes a persisted dependency; admission checks it before starting another provider turn. A child's pending input card wakes its lead once with the existing card and thread references. The child retains its assignment and the lead remains responsible. These repairs cover known runtime conditions, not every business blocker.

@@ -163,8 +163,6 @@ The application and deterministic observation code collect execution evidence au
 
 The reasoning cycle under discussion is objective → revisable steps → execution → step verification → objective verification → achieved, blocked or failed → help from the layer above when necessary. Preserve unknown and waiting states; verification requires evidence appropriate to the objective. An escalation carries attempted work, failed checks and the help needed. These are intended behaviours to develop through actual runs, not claims that the current runtime implements them.
 
-The [independent observer](../deploy/observability/README.md) collects existing runtime events and sampled transcript revisions. It exposes current evidence and gaps without relying on agents to maintain a parallel reporting protocol. It does not decide business success or perform the team's work.
-
 ## Example: Liz learns social publishing
 
 Marco identified a current learning case: Liz needs to learn social posting because the required MCP capability is missing. This statement records the user's assessment; it is not a verified inventory of every connected platform.

@@ -11,8 +11,7 @@ One stdio MCP host joins the deterministic execution modules:
   and evidence-backed progress metadata with write/readback reconciliation.
 
 There are no model calls. Tool availability does not prove that bots call the
-right tool or that their business objectives are achieved. The existing independent
-observer must continue; these tools do not replace it.
+right tool or that their business objectives are achieved.
 
 ## Configuration
 
