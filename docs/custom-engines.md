@@ -43,11 +43,16 @@ instance at it:
   hint instead of failing at first message.
 - **Sign in first.** The driver has no auth flow of its own — run the CLI once
   in a terminal and log in there; OpenMausBot spawns it with your login intact.
-- **Models and reasoning.** At startup the driver opens one session. If that
-  session advertises a model select, those choices are the picker (the id is
-  the CLI's own value, including a provider and model pair). A thought-level
-  select on the same session is the reasoning control. A CLI that advertises
-  neither keeps a single "Agent default" entry, and its own model runs.
+- **Choose models per bot.** Open the bot's model picker and use **Re-detect**
+  to load the models advertised by the agent. Select a model and, when offered,
+  its thinking level. Bot defaults and individual conversation overrides are
+  saved independently. **Agent default** leaves the native session's model
+  unchanged. An agent that does not advertise models still has this option.
+- **Choices come from the agent.** Discovery starts a temporary ACP session
+  without sending a prompt. The model id is the CLI's own select value, which
+  may be a provider and model pair. Only confirmed, model-specific thinking
+  options are shown; a failed refresh keeps the last successful catalog. ZCode,
+  CodeBuddy, Qoder, DeepSeek and other custom ACP engines use the same mechanism.
 - **`environment`** is passed to the CLI child. Foreign provider keys
   (XAI_API_KEY, OPENAI_COMPAT_API_KEY, …) are deliberately stripped so a
   custom CLI can never bill against another engine's login.

@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { writeFileAtomic } from "./atomic.ts";
 import { HOST_WHILE_UPDATING, LOCAL_VM_UPDATING, LOCAL_VM_UPDATING_PROBLEM, VPS_OUTDATED_HINT } from "./desktop-updates.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
@@ -47,7 +48,7 @@ describe.skipIf(process.platform === "win32")("a bot's old desktop after an app 
   let child: ChildProcess | null = null;
   let base = "";
 
-  const vm = (state: Record<string, unknown>) => writeFileSync(stateFile, JSON.stringify(state));
+  const vm = (state: Record<string, unknown>) => writeFileAtomic(stateFile, JSON.stringify(state));
   const readVm = () => JSON.parse(readFileSync(stateFile, "utf8"));
   const api = async (method: string, path: string, body?: unknown) => {
     const response = await fetch(base + path, {
@@ -115,6 +116,11 @@ describe.skipIf(process.platform === "win32")("a bot's old desktop after an app 
       if (proc.exitCode !== null) throw new Error(`server exited during boot:\n${output}`);
       try { return (await fetch(base + "/api/health")).ok; } catch { return false; }
     }, Boolean, "the server starting");
+    // Chief first makes the seeded bot its team's Chief, which answers a teammate's failed run with a Team incidents turn
+    // of its own that quotes the failed request, on this computer: dumpFor would take it for the turn under test. Stepped
+    // down, each dump is the test's own. Only the first boot finds it a Chief.
+    const seeded = (await apiOk("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.chiefOfStaff);
+    if (seeded) await apiOk("PATCH", `/api/bots/${seeded.id}`, { chiefOfStaff: false });
   }
   async function stop() {
     if (!child) return;

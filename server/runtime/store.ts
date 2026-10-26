@@ -86,6 +86,7 @@ const assignmentSchema = z.object({
     z.object({ kind: z.literal("browser_control"), session: z.string().min(1) }),
   ]).optional(), count: z.number().int().nonnegative() }).optional(),
   guard: z.object({ stale: z.number().int().nonnegative(), errors: z.array(z.string()) }).optional(),
+  carrying: z.array(z.string()).optional(),
   approved: z.boolean().optional(),
   batchKey: z.string().optional(),
   version: z.literal(1),

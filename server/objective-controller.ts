@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { validatePortfolio, portfolioContinuation, type PortfolioObjective } from "./objective-portfolio.ts";
 import { reconcileObjectiveConversation } from "./objective-reconciliation.ts";
 import type { WireMessage } from "../shared/wire.ts";
+import { failedTurnCause } from "../shared/failed-turn.ts";
 
 export interface ObjectiveConfig {
   id: string;
@@ -148,10 +149,10 @@ export class ObjectiveController {
     if (!this.state.request?.accepted || snapshot.phase !== "untracked" || snapshot.activeTurnId !== null ||
       snapshot.messages?.some((m: any) => m.requestCancelled)) return false;
     const failed = snapshot.messages?.findLast((m: any) => m.turnSucceeded !== undefined);
-    const error = snapshot.messages?.findLast((m: any) => m.kind === "activity" && m.tool?.name?.startsWith("error: "))?.tool?.name ?? "";
-    const unavailable = error === "error: Selected model is at capacity. Please try a different model." ||
-      /^error: This Claude account has reached its (?:weekly|5-hour|usage) limit(?:[.,]| \()/.test(error) ||
-      error.startsWith("error: Your ChatGPT account (used by Codex) reached its Codex usage limit.");
+    const error = failedTurnCause(snapshot.messages?.findLast((m: any) => m.kind === "activity" && failedTurnCause(m.tool?.name ?? "") !== null)?.tool?.name ?? "") ?? "";
+    const unavailable = error === "Selected model is at capacity. Please try a different model." ||
+      /^This Claude account has reached its (?:weekly|5-hour|usage) limit(?:[.,]| \()/.test(error) ||
+      error.startsWith("Your ChatGPT account (used by Codex) reached its Codex usage limit.");
     const fallback = this.config.recoveryModels?.[this.state.recoveries ?? 0];
     if (!fallback || failed?.turnSucceeded !== false || !unavailable) return false;
     await this.api("PATCH", `/api/bots/${this.config.botId}/tasks/${this.config.threadId}`, { modelSelection: fallback });
