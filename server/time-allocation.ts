@@ -134,6 +134,14 @@ export function canStartEffect(
   return true;
 }
 
+/** Only a missed completion deadline makes a settled turn a missed delivery; a missed start stays a start report. */
+export function completionDeadlineMissed(
+  allocation: Pick<TimeAllocation, "deadlineAt" | "allocatedMs" | "sourceText">,
+  now: number,
+): boolean {
+  return !isStartDeadline(allocation) && timeAllocationState(allocation, now) === "missed";
+}
+
 export function isExtension(text: string): boolean {
   const clean = text.replace(/\s+/g, " ").trim();
   return EXTENSION.test(clean) && !NEGATED_EXTENSION.test(clean);

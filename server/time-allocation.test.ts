@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyTimeExtension,
   canStartEffect,
+  completionDeadlineMissed,
   inheritedTimeAllocation,
   isExplicitNewObjective,
   parseExplicitTimeAllocation,
@@ -29,6 +30,16 @@ describe("explicit time allocations", () => {
     expect(line).toContain("TIME ALLOCATION (missed)");
     expect(line).toContain("continue the authorized work");
     expect(line).toContain("not a stop instruction");
+  });
+
+  it("separates a missed start commitment from a missed completion", () => {
+    const start = parseExplicitTimeAllocation("YOU HAVE 5 SECONDS TO START GROCERY SHOPPING", { now: NOW })!;
+    expect(completionDeadlineMissed(start, NOW + 6_000)).toBe(false);
+    expect(completionDeadlineMissed(inheritedTimeAllocation(start), NOW + 6_000)).toBe(false);
+
+    const completion = parseExplicitTimeAllocation("You have 5 seconds to start and stop", { now: NOW })!;
+    expect(completionDeadlineMissed(completion, NOW + 4_000)).toBe(false);
+    expect(completionDeadlineMissed(completion, NOW + 6_000)).toBe(true);
   });
 
   it("records a person's duration and its source", () => {

@@ -127,7 +127,7 @@ import { hostTimeZone, takesTurnClock, turnClockLine, withTurnClock } from "./tu
 import { createMemoryUpkeep, upkeepEnabled } from "./memory-upkeep.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createSkillReview, turnToolSteps } from "./skill-review.ts";
-import { parseExplicitTimeAllocation, timeAllocationLine, timeAllocationState, updateTimeAllocation } from "./time-allocation.ts";
+import { completionDeadlineMissed, parseExplicitTimeAllocation, timeAllocationLine, updateTimeAllocation } from "./time-allocation.ts";
 import { receiptRecorded, type ReceiptVerificationConfig } from "./receipt-evidence.ts";
 import { AdmissionBounceGuard, PublicationAttempts, admissionBrief, effectWithinAdmission, validateMarketingAdmission } from "./marketing-admission.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
@@ -4419,7 +4419,7 @@ const coordinator: Coordinator = createCoordinator({
     },
     timeExpired: node => {
       const allocation = timeAllocationForNode(node);
-      return Boolean(allocation && timeAllocationState(allocation, Date.now()) === "missed");
+      return Boolean(allocation && completionDeadlineMissed(allocation, Date.now()));
     },
   },
 });
