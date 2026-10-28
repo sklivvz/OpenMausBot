@@ -498,6 +498,16 @@ describe("configuration boundaries", () => {
     expect(parseConfigPatch({ browserEngine: { attachCdpUrl: "9333", idleTimeoutMinutes: 5 } })).toEqual({ browserEngine: { attachCdpUrl: "9333", idleTimeoutMinutes: 5 } });
   });
 
+  it("persists browserEngine.connectorOnlyDomainsByBot with validated, normalized domains", () => {
+    const browserEngine = { connectorOnlyDomainsByBot: { liz: ["Docs.Google.com."], scout: ["tinyurl.com"] } };
+    expect(parseConfigPatch({ browserEngine })).toEqual({ browserEngine: { connectorOnlyDomainsByBot: { liz: ["docs.google.com"], scout: ["tinyurl.com"] } } });
+    expect(parseStoredConfig({ browserEngine })).toEqual({ browserEngine: { connectorOnlyDomainsByBot: { liz: ["docs.google.com"], scout: ["tinyurl.com"] } } });
+    for (const value of ["https://docs.google.com", "docs.google.com:443", "docs.google.com/document", "localhost", "*.google.com"]) {
+      expect(() => parseConfigPatch({ browserEngine: { connectorOnlyDomainsByBot: { liz: [value] } } }), value).toThrow("browserEngine.connectorOnlyDomainsByBot");
+    }
+    expect(() => parseConfigPatch({ browserEngine: { connectorOnlyDomainsByBot: { "bad/id": ["docs.google.com"] } } })).toThrow("browserEngine.connectorOnlyDomainsByBot");
+  });
+
   it("keeps a browser profile's My Chrome choice through saving, loading and migration, and nothing else", () => {
     const mine = { id: "profile-mine", name: "Mine", browser: "chrome" };
     expect(parseConfigPatch({ browserProfiles: [mine, { id: "profile-work", name: "Work" }] })).toEqual({ browserProfiles: [mine, { id: "profile-work", name: "Work" }] });

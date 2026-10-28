@@ -259,7 +259,7 @@ describe.skipIf(!chrome)("S6: a hostile page in a bot's browser", () => {
     await expect.poll(() => links.route("cloud-home") !== null, { timeout: 5_000 }).toBe(true);
     const refusals: Array<{ host: string; port: number; reason: string }> = [];
     const gate = await openGate({
-      refuseName: (target) => egress.nameRefusal(target.host),
+      refuseName: (target) => egress.nameRefusal("cloud-home", target.host),
       decide: (target, addresses) => refusalFor(target, addresses, egress.rules()),
       onRefusal: (target, reason) => refusals.push({ ...target, reason }),
       upstream: () => links.route("cloud-home"),

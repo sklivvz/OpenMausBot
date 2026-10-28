@@ -137,8 +137,8 @@ describe("the egress gate on MausBot Cloud", () => {
       try {
         for (const name of ["www.reddit.com", "i.redd.it"]) expect(await ask(port, name), `${host} ${name}`).toBe(4);
         expect(looked, host).toEqual(["www.reddit.com", "i.redd.it"]);
-        expect(egress.nameRefusal("www.reddit.com"), host).toBeNull();
-        expect(egress.callRefusal({ name: "agent_browser_open", arguments: { url: "https://www.reddit.com/" } }), host).toBeNull();
+        expect(egress.nameRefusal("bot-1", "www.reddit.com"), host).toBeNull();
+        expect(egress.callRefusal("bot-1", { name: "agent_browser_open", arguments: { url: "https://www.reddit.com/" } }), host).toBeNull();
         expect(egress.takeNotice("bot-1"), host).toBeNull();
       } finally {
         await egress.close();
@@ -148,8 +148,8 @@ describe("the egress gate on MausBot Cloud", () => {
 
   it("refuses a tool call that would open Reddit with the same words", () => {
     const { egress } = egressOn("cloud");
-    expect(egress.callRefusal({ name: "agent_browser_open", arguments: { url: "https://www.reddit.com/r/test/" } })).toBe(REDDIT_REFUSAL);
-    expect(egress.callRefusal({ name: "agent_browser_open", arguments: { url: "https://example.com/" } })).toBeNull();
-    expect(new BrowserEgress().callRefusal({ name: "agent_browser_open", arguments: { url: "https://www.reddit.com/" } })).toBeNull();
+    expect(egress.callRefusal("bot-1", { name: "agent_browser_open", arguments: { url: "https://www.reddit.com/r/test/" } })).toBe(REDDIT_REFUSAL);
+    expect(egress.callRefusal("bot-1", { name: "agent_browser_open", arguments: { url: "https://example.com/" } })).toBeNull();
+    expect(new BrowserEgress().callRefusal("bot-1", { name: "agent_browser_open", arguments: { url: "https://www.reddit.com/" } })).toBeNull();
   });
 });

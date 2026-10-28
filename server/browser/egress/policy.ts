@@ -11,7 +11,7 @@ export { addressClass, ownAddresses, type AddressClass };
 export type EgressHost = "desktop" | "server" | "cloud";
 
 /** `home-network` and `port` come from the person's own computer when My Cloud's browsing goes out through it. */
-export type Refusal = "omb" | "this-computer" | "local-network" | "link-local" | "metadata" | "reserved" | "rebinding" | "reddit" | "home-network" | "port";
+export type Refusal = "omb" | "this-computer" | "local-network" | "link-local" | "metadata" | "reserved" | "rebinding" | "reddit" | "connector" | "home-network" | "port";
 
 /** How a refusal reads in the page-health line. */
 export const REFUSAL_TEXT: Record<Refusal, string> = {
@@ -23,6 +23,7 @@ export const REFUSAL_TEXT: Record<Refusal, string> = {
   reserved: "a reserved address",
   rebinding: "a web address that points at this computer",
   reddit: "Reddit",
+  connector: "a connector-only site; use its MCP connector instead",
   "home-network": "the person's own computer or home network",
   port: "a port other than 80 and 443, which the person's computer does not open for bots",
 };

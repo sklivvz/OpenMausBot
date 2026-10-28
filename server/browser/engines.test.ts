@@ -107,7 +107,7 @@ describe("the runtime router", () => {
   const onHost = (host: EgressHost) => {
     const egress = new BrowserEgress();
     egress.configure({ host, config: () => ({}), ownership: { botOwned: async () => false } as unknown as ListenerOwnership, listeners: new OwnListeners(host, { env: {}, streamPorts: () => [], devToolsPorts: () => [] }) });
-    return engines({ refusal: (spec, params) => (attachesToChrome(spec.env) ? null : egress.callRefusal(params)) });
+    return engines({ refusal: (session, spec, params) => (attachesToChrome(spec.env) ? null : egress.callRefusal(session, params)) });
   };
   const OPENS_REDDIT = [
     { name: "agent_browser_open", arguments: { url: "https://www.reddit.com/r/test/" } },

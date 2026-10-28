@@ -207,4 +207,40 @@ describe("one gate per browser session", () => {
       } finally { await other.close(); }
     }
   });
+
+  it("refuses a configured bot's connector-only hosts before DNS or the person's computer, now and in later sessions", async () => {
+    const looked: string[] = [];
+    const asked: string[] = [];
+    const domains = ["docs.google.com", "drive.google.com", "sheets.google.com", "slides.google.com"];
+    const cloud = new BrowserEgress();
+    cloud.configure({ host: "cloud", config: () => ({}), listeners: new OwnListeners("cloud", { env: {}, ...noScans }), ownership,
+      connectorOnlyDomains: (session) => session.startsWith("bot-liz") ? domains : [],
+      resolve: async (host) => { looked.push(host); return []; },
+      device: () => ({ open: async (target) => { asked.push(`${target.host}:${target.port}`); return { refused: "port" }; } }) });
+    const now = await cloud.open("bot-liz");
+    const later = await cloud.open("bot-liz--member-0123456789abcdef");
+    const otherBot = await cloud.open("bot-scout");
+    try {
+      for (const host of ["docs.google.com", "DOCS.GOOGLE.COM.", "drive.google.com", "v2.sheets.google.com", "slides.google.com."]) {
+        expect(await socksCode(now, host, 443), host).toBe(2);
+      }
+      expect(await socksCode(later, "drive.google.com", 443), "a later audience's session of the same bot").toBe(2);
+      expect(looked, "a refused name is never looked up").toEqual([]);
+      expect(asked, "a refused name never reaches the person's computer").toEqual([]);
+      expect(cloud.callRefusal("bot-liz", { name: "agent_browser_open", arguments: { url: "https://docs.google.com/document/d/abc/edit" } })).toMatch(/MCP connector/);
+      expect(cloud.callRefusal("bot-liz--member-0123456789abcdef", { name: "agent_browser_navigate", arguments: { url: "sheets.google.com/spreadsheets/d/abc" } })).toMatch(/MCP connector/);
+      expect(cloud.callRefusal("bot-scout", { name: "agent_browser_open", arguments: { url: "https://docs.google.com/document/d/abc/edit" } }), "another bot is untouched").toBeNull();
+      expect(cloud.callRefusal("bot-liz", { name: "agent_browser_open", arguments: { url: "https://tinyurl.com/abc" } }), "TinyURL stays reachable").toBeNull();
+      expect(cloud.callRefusal("bot-liz", { name: "agent_browser_open", arguments: { url: "https://accounts.google.com/o/oauth2/v2/auth" } }), "Google sign-in stays reachable").toBeNull();
+      expect(await socksCode(otherBot, "tinyurl.com", 443), "another bot resolves and opens its own way").toBe(4);
+      expect(looked).toEqual(["tinyurl.com"]);
+      expect(asked).toEqual([]);
+      expect(cloud.takeNotice("bot-liz")).toContain("connector-only site");
+      expect(cloud.takeNotice("bot-liz")).toBeNull();
+      expect(await socksCode(now, "DOCS.GOOGLE.COM.", 443)).toBe(2);
+      expect(looked).toEqual(["tinyurl.com"]);
+    } finally {
+      await cloud.close();
+    }
+  });
 });
