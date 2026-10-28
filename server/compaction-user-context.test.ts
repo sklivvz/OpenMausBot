@@ -108,6 +108,21 @@ it("keeps the recorded-size conversation and the early keep decision within the 
   expect(result.text).not.toContain("SWISS ROUTINE PROMPT");
 });
 
+it("retains a mid-history keep decision when the conversation exceeds the old budget", () => {
+  const rows = Array.from({ length: 47 }, (_, index) => message(index === 5
+    ? `Keep the existing appointment. ${"y".repeat(65)}`
+    : `request ${index}: ${"x".repeat(70)}`));
+  const previous = compactedUserContext(rows, { maxBytes: 4_000 });
+  expect(previous.omitted).toBeGreaterThan(0);
+  expect(previous.text).not.toContain("Keep the existing appointment.");
+  expect(previous.text).toContain("messages are not shown here");
+  const current = compactedUserContext(rows);
+  expect(current.omitted).toBe(0);
+  expect(current.count).toBe(47);
+  expect(current.text).toContain("Keep the existing appointment.");
+  expect(Buffer.byteLength(current.text, "utf8")).toBeLessThanOrEqual(6_000);
+});
+
 it("reports when no authenticated message fits", () => {
   const result = compactedUserContext([message("x".repeat(5_000))], { maxBytes: 512 });
   expect(result.count).toBe(0);

@@ -2,7 +2,7 @@ import { contextText } from "./delta-context.ts";
 import { workOrigin } from "./peer-provenance.ts";
 import type { Message } from "./store.ts";
 
-export const COMPACTED_USER_CONTEXT_MAX_BYTES = 4_000;
+export const COMPACTED_USER_CONTEXT_MAX_BYTES = 6_000;
 const FIRST_MESSAGE_RESERVE_BYTES = 1_000;
 const OMITTED_NOTE_MAX_BYTES = 160;
 const HEADER =
