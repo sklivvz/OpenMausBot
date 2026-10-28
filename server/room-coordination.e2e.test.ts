@@ -369,6 +369,25 @@ it("stops awaiting on Stop in the source room: the running downstream turn is ca
   expect((await f.messages(f.source.activeTaskId)).some((m: any) => m.text === "Reviewed downstream outcome")).toBe(false);
 }), 45_000);
 
+it("a later Stop in the old source does not interrupt the same bot's replacement room turn", () => withRooms(async f => {
+  const firstGate = join(f.session.info.dataDir, "first-room-turn");
+  const replacementGate = join(f.session.info.dataDir, "replacement-room-turn");
+  f.plan[f.target.id] = { gateFile: firstGate, reply: "Old response" };
+  await f.start();
+  await expect.poll(async () => (await f.api("/api/bots?messages=0")).bots.find((b: any) => b.id === f.target.id)?.busy, { timeout: 15_000 }).toBe(true);
+  await f.cli("interrupt", "--channel", f.source.id);
+  await expect.poll(async () => (await f.api("/api/bots?messages=0")).bots.find((b: any) => b.id === f.target.id)?.busy, { timeout: 15_000 }).toBe(false);
+
+  f.plan[f.target.id] = { gateFile: replacementGate, reply: "Replacement completed" };
+  f.savePlan();
+  await f.cli("send-channel", "--channel", f.destination.id, "--text", "@Engineer Independent replacement");
+  await expect.poll(async () => (await f.api("/api/bots?messages=0")).bots.find((b: any) => b.id === f.target.id)?.busy, { timeout: 15_000 }).toBe(true);
+  await f.cli("interrupt", "--channel", f.source.id);
+  expect((await f.api("/api/bots?messages=0")).bots.find((b: any) => b.id === f.target.id)?.busy).toBe(true);
+  writeFileSync(replacementGate, "finish replacement");
+  await expect.poll(async () => (await f.messages(f.destination.activeTaskId)).some((m: any) => m.text === "Replacement completed"), { timeout: 15_000 }).toBe(true);
+}), 60_000);
+
 it.each(["allow", "deny"])("honors %s on the sender's peer-approval card", behavior => withRooms(async f => {
   await f.api(`/api/bots/${f.sender.id}`, { approvePeerComms: true, approvalMode: "ask" }, "PATCH");
   f.plan[f.sender.id].steps[0].expectError = behavior === "deny";
