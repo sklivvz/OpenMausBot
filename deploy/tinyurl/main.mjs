@@ -36,9 +36,18 @@ async function call(name, args) {
     tinyurl_update: 'update',
     tinyurl_change_destination: 'changeDestination',
     tinyurl_delete: 'remove',
+    tinyurl_archive: 'archive',
+    tinyurl_set_expiration: 'setExpiration',
+    tinyurl_analytics_report: 'analyticsReport',
+    tinyurl_analytics_raw_logs: 'rawLogs',
+    tinyurl_analytics_status: 'analyticsStatus',
+    tinyurl_analytics_sharing: 'analyticsSharing',
+    tinyurl_bulk_create: 'bulkCreate',
+    tinyurl_bulk_status: 'bulkStatus',
+    tinyurl_bulk_report: 'bulkReport',
   };
   const operation = operations[name];
-  if (!operation) return blocked('unknown_tool', 'Use tinyurl_create, tinyurl_read, tinyurl_update, tinyurl_change_destination, tinyurl_delete or tinyurl_status.');
+  if (!operation) return blocked('unknown_tool', 'Use a listed tinyurl_* tool; use tools/list for the supported fixed endpoints.');
   try {
     bridge ??= createBridge(loadConfig());
     return await bridge[operation](args);

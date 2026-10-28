@@ -13,6 +13,11 @@ shell/curl request, delegation or arbitrary endpoint.
   It never changes the destination.
 - `tinyurl_change_destination` with `alias` and the exact `url` changes where the
   link points. Preserve the URL and query byte-for-byte.
+- `tinyurl_archive` with `alias` and `action: "toggle"`, `"archive"` or
+  `"unarchive"` changes archive state. The vendor endpoint toggles; archive and
+  unarchive read first and skip the write when already in the requested state.
+- `tinyurl_set_expiration` with `alias` and `new_expires_at` sets or clears
+  expiration (`null` clears it). `tinyurl_update` also accepts `new_expires_at`.
 - `tinyurl_delete` with `alias` permanently deletes the exact link.
 
 Do not retry `write_outcome_unknown`, and do not create a replacement alias to

@@ -40,10 +40,19 @@ const createOk = data => json({ code: 0, data });
 
 test('exposes the documented CRUD tools and preserves create/status', () => {
   assert.deepEqual(toolDefinitions.map(tool => tool.name).sort(), [
+    'tinyurl_analytics_raw_logs',
+    'tinyurl_analytics_report',
+    'tinyurl_analytics_sharing',
+    'tinyurl_analytics_status',
+    'tinyurl_archive',
+    'tinyurl_bulk_create',
+    'tinyurl_bulk_report',
+    'tinyurl_bulk_status',
     'tinyurl_change_destination',
     'tinyurl_create',
     'tinyurl_delete',
     'tinyurl_read',
+    'tinyurl_set_expiration',
     'tinyurl_status',
     'tinyurl_update',
   ]);

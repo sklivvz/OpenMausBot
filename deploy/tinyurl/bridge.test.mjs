@@ -187,10 +187,19 @@ test('validates URL, alias and fixed domain before any request', async () => {
 
 test('exposes create, status and the bounded CRUD tools', () => {
   assert.deepEqual(toolDefinitions.map(tool => tool.name).sort(), [
+    'tinyurl_analytics_raw_logs',
+    'tinyurl_analytics_report',
+    'tinyurl_analytics_sharing',
+    'tinyurl_analytics_status',
+    'tinyurl_archive',
+    'tinyurl_bulk_create',
+    'tinyurl_bulk_report',
+    'tinyurl_bulk_status',
     'tinyurl_change_destination',
     'tinyurl_create',
     'tinyurl_delete',
     'tinyurl_read',
+    'tinyurl_set_expiration',
     'tinyurl_status',
     'tinyurl_update',
   ]);
