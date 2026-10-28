@@ -37,13 +37,13 @@ afterEach(async () => { await Promise.all(hosts.splice(0).map((host) => host.bro
 
 const turn = { threadId: "thread-1", generation: "gen-1" };
 
-function setup(engine: "chrome" | "agent-browser" | undefined, { cloudHome = false, device, mayLend, holder, audienceOf, bots: botIds = ["scout"], browserBox }: {
+function setup(engine: "chrome" | "agent-browser" | undefined, { cloudHome = false, device, mayLend, holder, audienceOf, bots: botIds = ["scout"], browserBox, connectorOnlyDomainsByBot }: {
   cloudHome?: boolean; device?: BrowserHostDeps["device"]; mayLend?: BrowserHostDeps["mayLend"]; holder?: (resource: string) => TurnOwner | undefined;
-  audienceOf?: BrowserHostDeps["audienceOf"]; bots?: string[]; browserBox?: BrowserHostDeps["browserBox"];
+  audienceOf?: BrowserHostDeps["audienceOf"]; bots?: string[]; browserBox?: BrowserHostDeps["browserBox"]; connectorOnlyDomainsByBot?: Record<string, string[]>;
 } = {}) {
   const cfg = {
     features: { browser: true },
-    ...(engine ? { browserEngine: { engine } } : {}),
+    browserEngine: { ...(engine ? { engine } : {}), ...(connectorOnlyDomainsByBot ? { connectorOnlyDomainsByBot } : {}) },
     browserProfiles: [
       { id: "work", name: "Work", partitionId: "p-work" },
       { id: "mine", name: "Mine", browser: "chrome", partitionId: "p-mine" },
@@ -103,6 +103,22 @@ describe("the bots' browser host with browserEngine.engine set to chrome", () =>
     expect((await host.browserIntegration("scout", "work"))?.spec.args).toEqual(["shared:p-work"]);
     const guest = await host.browserIntegration("scout", "guest");
     expect(guest?.spec.args).toEqual([`temp:${guest?.session}`]);
+  });
+
+  it("keeps a configured bot's connector-only hosts on its own sessions, now and later", async () => {
+    const { host } = setup("chrome", { bots: ["liz", "scout"], connectorOnlyDomainsByBot: { liz: ["docs.google.com"] } });
+    const liz = await host.browserIntegration("liz", undefined, turn);
+    const later = await host.browserIntegration("liz", undefined, turn);
+    const scout = await host.browserIntegration("scout", undefined, turn);
+    const openDocs = { name: "agent_browser_open", arguments: { url: "https://docs.google.com/document/d/abc/edit" } };
+    expect(later?.session).toBe(liz?.session);
+    expect(browserEgress.callRefusal(liz!.session, openDocs)).toMatch(/MCP connector/);
+    expect(browserEgress.callRefusal(scout!.session, openDocs), "another bot is untouched").toBeNull();
+  });
+
+  it("fails closed for a restricted bot's browser on My Chrome, outside the egress gate", async () => {
+    const { host } = setup("agent-browser", { bots: ["liz"], connectorOnlyDomainsByBot: { liz: ["docs.google.com"] } });
+    expect(await host.browserIntegration("liz", "mine")).toBeNull();
   });
 
   it("lists the new browser's tools without starting Chrome", async () => {

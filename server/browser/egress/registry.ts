@@ -6,6 +6,7 @@ import { agentBrowserDevToolsPorts, agentBrowserStreamPorts } from "../../browse
 import { sanitizePageText } from "../../browser-page-health.ts";
 import { FLEET_FIRST_PORT, FLEET_PORT_STRIDE } from "../../fleet.ts";
 import { botEngineSessions } from "../../procs.ts";
+import { connectorOnlyRefusal, connectorOnlyUrlHost, isConnectorOnlyHost } from "./connector-only.ts";
 import { openGate, resolveTarget, type EgressGate, type GateTarget, type GateUpstream, type ResolvedAddress } from "./gate.ts";
 import { opensFromHome } from "./home-sites.ts";
 import { ListenerOwnership } from "./ownership.ts";
@@ -91,6 +92,8 @@ export interface EgressSetup {
   ownership?: ListenerOwnership;
   /** How a gate looks names up: the system's resolver unless a test passes one. */
   resolve?(host: string): Promise<ResolvedAddress[]>;
+  /** The hostnames `session`'s browser must never connect to, from the bot the session belongs to. */
+  connectorOnlyDomains?(session: string): readonly string[];
   /** MausBot Cloud: the person's own computer while it lends its internet connection, or which device is away. Only
    * the sites that turn away data centres (home-sites.ts) go through it. */
   device?(session: string): GateUpstream | { away: string } | null;
@@ -117,17 +120,24 @@ export class BrowserEgress {
       listeners: setup.listeners ?? new OwnListeners(setup.host),
       ownership: setup.ownership ?? new ListenerOwnership({ sessions: botEngineSessions }),
       resolve: setup.resolve ?? resolveTarget,
+      connectorOnlyDomains: setup.connectorOnlyDomains ?? (() => []),
     };
   }
 
-  /** Why a destination is refused by its name alone on this host: Reddit, from MausBot Cloud. */
-  nameRefusal(name: string): Refusal | null {
-    return this.setup && refusesReddit(this.setup.host, name) ? "reddit" : null;
+  /** Why a destination is refused by its name alone for `session`: Reddit on MausBot Cloud, or a connector-only host. */
+  nameRefusal(session: string, name: string): Refusal | null {
+    if (!this.setup) return null;
+    if (refusesReddit(this.setup.host, name)) return "reddit";
+    return isConnectorOnlyHost(name, this.setup.connectorOnlyDomains(session)) ? "connector" : null;
   }
 
-  /** What a browser tool call that would open Reddit from MausBot Cloud is told instead of running, or null. */
-  callRefusal(params: unknown): string | null {
-    return this.setup && opensReddit(this.setup.host, params) ? REDDIT_REFUSAL : null;
+  /** What a browser tool call that would open a refused destination is told instead of running, or null. */
+  callRefusal(session: string, params: unknown): string | null {
+    const setup = this.setup;
+    if (!setup) return null;
+    if (opensReddit(setup.host, params)) return REDDIT_REFUSAL;
+    const host = connectorOnlyUrlHost(params, setup.connectorOnlyDomains(session));
+    return host ? connectorOnlyRefusal(host) : null;
   }
 
   rules(): EgressRules {
@@ -160,7 +170,7 @@ export class BrowserEgress {
     let gate = this.gates.get(session);
     if (!gate) {
       gate = openGate({
-        refuseName: (target) => this.nameRefusal(target.host),
+        refuseName: (target) => this.nameRefusal(session, target.host),
         decide: (target, addresses) => refusalFor(target, addresses, this.rules()),
         onRefusal: (target, reason) => this.note(session, target, reason as Refusal),
         resolve: this.setup.resolve,

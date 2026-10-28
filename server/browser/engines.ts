@@ -200,7 +200,7 @@ export class ChromeEngine {
 export interface RuntimeRouterOptions {
   dataDir?: string;
   /** What a tool call is told instead of reaching either engine, or null to run it. */
-  refusal?(spec: BrowserSpawnSpec, params: unknown): string | null;
+  refusal?(session: string, spec: BrowserSpawnSpec, params: unknown): string | null;
   /** A tool call's answer as the bot gets it, from either engine. */
   annotate?(spec: BrowserSpawnSpec, result: unknown): unknown;
 }
@@ -222,7 +222,7 @@ export class RuntimeRouter {
   }
 
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext, boltAuthority?: BoltPaymentAuthority): Promise<unknown> {
-    const refusal = method === "tools/call" ? this.#refusal?.(spec, params) : null;
+    const refusal = method === "tools/call" ? this.#refusal?.(session, spec, params) : null;
     if (refusal) return { isError: true, content: [{ type: "text", text: refusal }] };
     const target = chromeTarget(session, spec);
     if (method === "tools/list") {

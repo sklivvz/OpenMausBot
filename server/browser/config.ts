@@ -1,6 +1,7 @@
 // `browserEngine` in config.json.
 import { z } from "zod";
 
+import { connectorOnlyDomainsByBotSchema, type ConnectorOnlyDomainsByBot } from "./egress/connector-only.ts";
 import { browserEgressConfigSchema, type BrowserEgressConfig } from "./egress/policy.ts";
 
 const CDP_PORT = /^[0-9]{1,5}$/;
@@ -24,6 +25,8 @@ export const browserEngineConfigSchema = z.object({
     { message: "browserEngine.attachCdpUrl must be a CDP port (1-65535) or an http(s)/ws(s) URL" }).optional(),
   idleTimeoutMinutes: z.number().int().min(1).max(60).optional(), // an unused browser closes after this; 10 when unset, 3 on MausBot Cloud
   egress: browserEgressConfigSchema.optional(),
+  /** Per bot id: hostnames the browser never connects to, subdomains included. The matching MCP connector is the route. */
+  connectorOnlyDomainsByBot: connectorOnlyDomainsByBotSchema.optional(),
   /** "chrome" runs the bots' browsers on OpenMausBot's own Chrome driver, an early test; agent-browser is the default. */
   engine: z.enum(["agent-browser", "chrome"]).optional(),
 });
@@ -32,6 +35,7 @@ export interface BrowserEngineConfig {
   attachCdpUrl?: string;
   idleTimeoutMinutes?: number;
   egress?: BrowserEgressConfig;
+  connectorOnlyDomainsByBot?: ConnectorOnlyDomainsByBot;
   engine?: BrowserEngineKind;
 }
 

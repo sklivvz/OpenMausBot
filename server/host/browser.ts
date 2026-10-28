@@ -13,6 +13,7 @@ import { RelayTimeout, relay, relayCommand, relayInput } from "../browser-relay.
 import { browserSteps } from "../browser-steps.ts";
 import { BrowserLive } from "../browser-live.ts";
 import { browserEgress, type EgressSetup } from "../browser/egress/registry.ts";
+import { CONNECTOR_ONLY_MY_CHROME_REFUSAL } from "../browser/egress/connector-only.ts";
 import {
   agentBrowserIntegration,
   BUILT_IN_BROWSER_SYSTEM_PROMPT,
@@ -122,15 +123,20 @@ export function createBrowserHost(deps: BrowserHostDeps) {
   // person's own, outside the egress gate too.
   const browserRuntime = new RuntimeRouter(agentBrowserRuntime, chromeEngine, {
     dataDir: DATA_DIR,
-    refusal: (spec, params) => (attachesToChrome(spec.env) ? null : browserEgress.callRefusal(params)),
+    refusal: (session, spec, params) => (attachesToChrome(spec.env)
+      ? (connectorOnlyDomainsForSession(session).length ? CONNECTOR_ONLY_MY_CHROME_REFUSAL : null)
+      : browserEgress.callRefusal(session, params)),
     annotate: passkeyAnnotation(CLOUD_HOME ? "cloud" : DESKTOP_MANAGED ? "desktop" : "server"),
   });
   const browserLive = new LiveRouter(agentBrowserLive, chromeEngine);
   const usedBrowserSessions = new Map<string, Spec>();
+  /** Bot ids each browser session has served, so one bot's connector-only hosts follow every audience and later turn. */
+  const botsBySession = new Map<string, Set<string>>();
   const audiences = new AudienceBrowsers(join(DATA_DIR, "browser", "audiences.json"));
   const browserAudience = (threadId: string | undefined): Audience => (threadId && deps.audienceOf ? deps.audienceOf(threadId) : "team");
   const device = deps.device && lentDevice(deps.device, (session) => turnResources.holder(`browser:${session}`), deps.mayLend ?? (() => false));
-  browserEgress.configure({ host: DESKTOP_MANAGED ? "desktop" : CLOUD_HOME ? "cloud" : "server", config: () => cfg.browserEngine?.egress, ...(device ? { device } : {}) });
+  browserEgress.configure({ host: DESKTOP_MANAGED ? "desktop" : CLOUD_HOME ? "cloud" : "server", config: () => cfg.browserEngine?.egress,
+    connectorOnlyDomains: connectorOnlyDomainsForSession, ...(device ? { device } : {}) });
   /** A live bot's, profile's or temporary browser of this data dir, for any audience. */
   const belongs = (session: string) => isTemporaryBrowserSession(session) || audiences.variants().some((suffix) =>
     store.bots.some((bot) => browserSessionId(bot.id + suffix, "") === session)
@@ -161,17 +167,30 @@ export function createBrowserHost(deps: BrowserHostDeps) {
     return suffix;
   }
   function sessionFor(botId: string, profile: string | undefined, suffix: string): string {
+    let session: string;
     if (profile === "guest") {
       const key = botId + suffix;
-      let session = temporaryBrowserSessions.get(key);
-      if (!session) {
-        session = browserSessionId(key, "guest");
-        temporaryBrowserSessions.set(key, session);
-      }
-      return session;
+      const existing = temporaryBrowserSessions.get(key);
+      if (existing) return existing;
+      session = browserSessionId(key, "guest");
+      temporaryBrowserSessions.set(key, session);
+    } else {
+      const target = profile ? browserProfilePartitionTarget(cfg, profile) : null;
+      session = browserSessionId(botId + suffix, target ? target.partitionId + suffix : "");
     }
-    const target = profile ? browserProfilePartitionTarget(cfg, profile) : null;
-    return browserSessionId(botId + suffix, target ? target.partitionId + suffix : "");
+    const bots = botsBySession.get(session) ?? new Set<string>();
+    bots.add(botId);
+    botsBySession.set(session, bots);
+    return session;
+  }
+  function connectorOnlyDomains(botId: string): readonly string[] {
+    return cfg.browserEngine?.connectorOnlyDomainsByBot?.[botId] ?? [];
+  }
+  /** A session can serve several bots through a shared profile; every configured bot's hosts apply. */
+  function connectorOnlyDomainsForSession(session: string): readonly string[] {
+    const domains = new Set<string>();
+    for (const botId of botsBySession.get(session) ?? []) for (const domain of connectorOnlyDomains(botId)) domains.add(domain);
+    return [...domains];
   }
   function currentBrowserSession(botId: string, profile: string | undefined, audience: Audience = "team"): string {
     return sessionFor(botId, profile, noted(audience));
@@ -252,6 +271,7 @@ export function createBrowserHost(deps: BrowserHostDeps) {
     const profileTarget = profile && profile !== "guest" ? browserProfilePartitionTarget(cfg, profile) : null;
     const partitionId = profile === "guest" ? "guest" : (profileTarget?.partitionId ?? "");
     const browserProfileId = profileTarget?.profileId ?? profile;
+    if (usesMyChrome(browserProfileId) && connectorOnlyDomains(botId).length) return null;
     if (onChrome(profile)) {
       const { session, spec } = chromeSpec(botId, profile, audience);
       usedBrowserSessions.set(session, spec);
