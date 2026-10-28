@@ -126,10 +126,12 @@ function isStartDeadline(allocation: Pick<TimeAllocation, "sourceText">): boolea
     && !/\b(?:stop|finish|complete|end|until)\b/i.test(allocation.sourceText);
 }
 
-/** Missing a start commitment does not revoke execution authority; completion allocations remain bounded. */
-export function canStartEffect(allocation: (Pick<TimeAllocation, "deadlineAt" | "allocatedMs"> & Partial<Pick<TimeAllocation, "sourceText">>) | undefined, now: number): boolean {
-  return !allocation || Boolean(allocation.sourceText && isStartDeadline({ sourceText: allocation.sourceText }))
-    || timeAllocationState(allocation, now) !== "missed";
+/** Time allocations are delivery commitments; missing one never stops authorized work or revokes authority. */
+export function canStartEffect(
+  _allocation: (Pick<TimeAllocation, "deadlineAt" | "allocatedMs"> & Partial<Pick<TimeAllocation, "sourceText">>) | undefined,
+  _now: number,
+): boolean {
+  return true;
 }
 
 export function isExtension(text: string): boolean {
@@ -186,10 +188,14 @@ export function inheritedTimeAllocation(parent: TimeAllocation): TimeAllocation 
 
 export function timeAllocationLine(allocation: TimeAllocation, now: number, reserveMs = 0): string {
   const state = timeAllocationState(allocation, now, reserveMs);
+  const deadline = new Date(allocation.deadlineAt).toISOString();
   if (isStartDeadline(allocation)) {
-    return `START COMMITMENT (${state}): ${allocation.sourceText} Start deadline ${new Date(allocation.deadlineAt).toISOString()}. Preserve this commitment and report a missed start honestly. This is not a completion deadline or a stop instruction: start the next authorized operation without asking for a new time allocation. Purchase approvals and explicit stops remain in force.`;
+    return `START COMMITMENT (${state}): ${allocation.sourceText} Start deadline ${deadline}. Preserve this commitment and report a missed start honestly. This is not a completion deadline, a stop instruction or a limit on authority: continue the next authorized operation without asking for a new time allocation. Purchase approvals and explicit stops remain in force.`;
+  }
+  if (state === "missed") {
+    return `TIME ALLOCATION (missed): ${allocation.sourceText} Deadline ${deadline} has passed. This is a missed delivery commitment, not a stop instruction or a revocation of authority: continue the authorized work, preserve completed work and report the missed deadline honestly. Reconcile any uncertain external effect before retrying. Only a new explicit person allocation changes the deadline. Purchase approvals and explicit stops remain in force.`;
   }
   const remaining = remainingMs(allocation, now);
   const minutes = Math.max(0, Math.ceil(remaining / 60_000));
-  return `TIME ALLOCATION (${state}): ${allocation.sourceText} Deadline ${new Date(allocation.deadlineAt).toISOString()}; about ${minutes} minute(s) left. Queueing, delegation, retries, failover and verification do not reset it. Do not start an operation that cannot finish inside the remaining window; reserve time for integration and verification. Only a new explicit person allocation can extend it.`;
+  return `TIME ALLOCATION (${state}): ${allocation.sourceText} Deadline ${deadline}; about ${minutes} minute(s) left. This is a delivery commitment, not a stop instruction or a limit on authority. Queueing, delegation, retries, failover and verification do not reset it. Continue authorized work, reserve time for integration and verification, and report a missed deadline honestly. Only a new explicit person allocation changes the deadline. Purchase approvals and explicit stops remain in force.`;
 }

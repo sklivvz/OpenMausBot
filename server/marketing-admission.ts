@@ -99,7 +99,7 @@ export type AdmissionOutcome =
   | {
       ok: true;
       admission: MarketingAdmission;
-      timing: { remainingMs: number | null; estimate: "known" | "unknown"; reserveMs: number };
+      timing: { remainingMs: number | null; estimate: "known" | "unknown"; reserveMs: number; missed?: boolean };
       note: string;
     }
   | {
@@ -214,6 +214,18 @@ export function validateMarketingAdmission(raw: unknown, context: AdmissionConte
     const defaultReserve = Math.min(60_000, Math.max(0, Math.floor(remainingBeforeReserve * 0.2)));
     const reserveMs = Math.max(context.reserveMs ?? 0, admission.verificationReserveMs ?? 0, defaultReserve);
     const remaining = remainingBeforeReserve - reserveMs;
+    if (remainingBeforeReserve <= 0) {
+      return {
+        ok: true, admission,
+        timing: {
+          remainingMs: remaining,
+          estimate: admission.estimatedDurationMs === undefined ? "unknown" : "known",
+          reserveMs,
+          missed: true,
+        },
+        note: "The explicit allocation has ended. The work remains authorized: continue it and report the missed deadline honestly; only a new explicit person allocation changes the deadline.",
+      };
+    }
     if (remaining <= 0) {
       return failure("time_budget_insufficient", "time_expired",
         `The current allocation has no remaining time after the ${Math.round(reserveMs / 1000)}s verification reserve. Do not start an executor turn. Record the unmet commitment and preserve completed work.`,
@@ -245,7 +257,7 @@ export function validateMarketingAdmission(raw: unknown, context: AdmissionConte
   };
 }
 
-export function admissionBrief(admission: MarketingAdmission, timing: { remainingMs: number | null; estimate: "known" | "unknown"; reserveMs: number }): string {
+export function admissionBrief(admission: MarketingAdmission, timing: { remainingMs: number | null; estimate: "known" | "unknown"; reserveMs: number; missed?: boolean }): string {
   const deliverables = admission.deliverables.map(item =>
     `- ${item.id}${item.channel ? ` (${item.channel}${item.account ? `, ${item.account}` : ""})` : ""}: ${item.acceptance}`).join("\n");
   return [
@@ -256,7 +268,9 @@ export function admissionBrief(admission: MarketingAdmission, timing: { remainin
     `Operations: ${admission.operations.join(", ")}`,
     timing.remainingMs === null
       ? "Time allocation: none recorded for this parent; do not invent one."
-      : `Time remaining: ${Math.max(0, Math.round(timing.remainingMs / 1000))}s; verification reserve: ${Math.round(timing.reserveMs / 1000)}s; estimate: ${timing.estimate}.`,
+      : timing.missed
+        ? "Time allocation: missed. The work remains authorized; continue it and report the missed deadline honestly. Only a new explicit person allocation changes the deadline."
+        : `Time remaining: ${Math.max(0, Math.round(timing.remainingMs / 1000))}s; verification reserve: ${Math.round(timing.reserveMs / 1000)}s; estimate: ${timing.estimate}.`,
     "Extra work, another channel or another operation requires a separate admitted assignment. Do not silently combine them. A missing connector is one exact blocker to return to the lead; do not substitute a browser or local design/copy.",
   ].join("\n");
 }

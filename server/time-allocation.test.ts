@@ -15,14 +15,20 @@ import {
 const NOW = Date.parse("2026-10-24T19:00:00Z");
 
 describe("explicit time allocations", () => {
-  it("records a missed start without forbidding the requested work", () => {
-    const allocation = parseExplicitTimeAllocation("YOU HAVE 5 SECONDS TO START GROCERY SHOPPING", { now: NOW })!;
-    expect(timeAllocationState(allocation, NOW + 6_000)).toBe("missed");
-    expect(canStartEffect(allocation, NOW + 6_000)).toBe(true);
-    expect(canStartEffect(inheritedTimeAllocation(allocation), NOW + 6_000)).toBe(true);
-    expect(timeAllocationLine(allocation, NOW + 6_000)).toContain("START COMMITMENT (missed)");
-    const bounded = parseExplicitTimeAllocation("You have 5 seconds to start and stop", { now: NOW })!;
-    expect(canStartEffect(bounded, NOW + 6_000)).toBe(false);
+  it("records a missed commitment without stopping the requested work", () => {
+    const start = parseExplicitTimeAllocation("YOU HAVE 5 SECONDS TO START GROCERY SHOPPING", { now: NOW })!;
+    expect(timeAllocationState(start, NOW + 6_000)).toBe("missed");
+    expect(canStartEffect(start, NOW + 6_000)).toBe(true);
+    expect(canStartEffect(inheritedTimeAllocation(start), NOW + 6_000)).toBe(true);
+    expect(timeAllocationLine(start, NOW + 6_000)).toContain("START COMMITMENT (missed)");
+
+    const completion = parseExplicitTimeAllocation("You have 5 seconds to start and stop", { now: NOW })!;
+    expect(timeAllocationState(completion, NOW + 6_000)).toBe("missed");
+    expect(canStartEffect(completion, NOW + 6_000)).toBe(true);
+    const line = timeAllocationLine(completion, NOW + 6_000);
+    expect(line).toContain("TIME ALLOCATION (missed)");
+    expect(line).toContain("continue the authorized work");
+    expect(line).toContain("not a stop instruction");
   });
 
   it("records a person's duration and its source", () => {
@@ -74,7 +80,7 @@ describe("explicit time allocations", () => {
     expect(timeAllocationState(child, NOW + 9 * 60_000)).toBe("at_risk");
     expect(timeAllocationState(child, NOW + 10 * 60_000)).toBe("missed");
     expect(canStartEffect(child, NOW + 9 * 60_000)).toBe(true);
-    expect(canStartEffect(child, NOW + 10 * 60_000)).toBe(false);
+    expect(canStartEffect(child, NOW + 10 * 60_000)).toBe(true);
   });
 
   it("does not let a status question, continue, or an unrelated clarification extend or clear the clock", () => {
@@ -118,8 +124,10 @@ describe("explicit time allocations", () => {
     expect(timeAllocationState(allocation, NOW + 7 * 60_000, 60_000)).toBe("within");
     const line = timeAllocationLine(allocation, NOW + 8 * 60_000, 2 * 60_000);
     expect(line).toContain("TIME ALLOCATION (at_risk)");
-    expect(line).toContain("Do not start an operation that cannot finish");
-    expect(line).toContain("Only a new explicit person allocation can extend it");
+    expect(line).toContain("not a stop instruction");
+    expect(line).toContain("Continue authorized work");
+    expect(line).toContain("report a missed deadline honestly");
+    expect(line).toContain("Only a new explicit person allocation changes the deadline");
   });
 
   it("rejects an unbounded or malformed allocation", () => {

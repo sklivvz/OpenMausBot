@@ -127,7 +127,7 @@ import { hostTimeZone, takesTurnClock, turnClockLine, withTurnClock } from "./tu
 import { createMemoryUpkeep, upkeepEnabled } from "./memory-upkeep.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createSkillReview, turnToolSteps } from "./skill-review.ts";
-import { canStartEffect, parseExplicitTimeAllocation, timeAllocationLine, updateTimeAllocation } from "./time-allocation.ts";
+import { parseExplicitTimeAllocation, timeAllocationLine, timeAllocationState, updateTimeAllocation } from "./time-allocation.ts";
 import { receiptRecorded, type ReceiptVerificationConfig } from "./receipt-evidence.ts";
 import { AdmissionBounceGuard, PublicationAttempts, admissionBrief, effectWithinAdmission, validateMarketingAdmission } from "./marketing-admission.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
@@ -4196,14 +4196,6 @@ const coordinator: Coordinator = createCoordinator({
   host: {
     validate: (node, parent) => {
       if (node.mode === "notify" && node.status !== "queued") return undefined;
-      // A queued child is not allowed to start after the allocation has ended.
-      // A running turn is left to report/reconcile; it is never killed at expiry.
-      if ((node.parentId || node.groupId) && (node.status === "queued" || node.status === "resume")) {
-        const allocation = timeAllocationForNode(node);
-        if (!canStartEffect(allocation, Date.now())) {
-          return "TIME ALLOCATION EXPIRED: this assignment may not start a new turn; preserve completed work and record the unmet commitment.";
-        }
-      }
       if (!node.parentId && node.groupId) return roomRootProblem(node);
       return roomHandoffProblem(node, parent) ??
         (parent && store.bot(parent.botId)?.approvePeerComms && !fullAccessForSource(parent.botId, parent.threadId) && !node.approvalGranted ? "Sender now requires peer approval; submit a new approved request" : undefined);
@@ -4427,7 +4419,7 @@ const coordinator: Coordinator = createCoordinator({
     },
     timeExpired: node => {
       const allocation = timeAllocationForNode(node);
-      return !canStartEffect(allocation, Date.now());
+      return Boolean(allocation && timeAllocationState(allocation, Date.now()) === "missed");
     },
   },
 });
@@ -4441,10 +4433,6 @@ function assignmentForCapability(capability: InternalCapability): HandoffView | 
 
 /** One deterministic gate for connector, direct-MCP, browser and computer effects. */
 function effectRefusalFor(capability: InternalCapability, tool: string, args: unknown): string | undefined {
-  const allocation = timeAllocationForNode({ botId: capability.botId, threadId: capability.threadId, groupId: store.groupByThread(capability.threadId)?.id });
-  if (!canStartEffect(allocation, Date.now())) {
-    return "TIME ALLOCATION EXPIRED: this conversation's explicit allocation has ended, so no new outward action may start. Preserve completed work and reconcile any uncertain provider effect before retrying; only a new explicit person allocation extends the deadline.";
-  }
   const assignment = assignmentForCapability(capability);
   if (!assignment?.admission) return undefined;
   const decision = effectWithinAdmission(assignment.admission, tool, args);
@@ -14810,14 +14798,6 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           }
         }
         const workMode = call.consult ? "consult" : call.reply === "none" ? "notify" : "work";
-        const sourceTaskForTime = store.taskByThread(internalSender.id, address.threadId)
-          ?? (source ? store.groupTaskByThread(source.id, address.threadId) : undefined);
-        if (workMode === "work" && !canStartEffect(sourceTaskForTime?.timeAllocation, Date.now())) {
-          return refuse(409, "TIME ALLOCATION EXPIRED: this conversation's explicit allocation has ended, so no new work may start. Preserve completed work and record the unmet commitment; only a new explicit person allocation extends the deadline.", {
-            code: "time_budget_insufficient", status: "time_budget_insufficient", ownership: internalSender.name,
-            nextAction: "Record the missed commitment and continue only independent work that already completed; do not infer an extension.",
-          });
-        }
         const receiptTargets = workMode === "work" ? targets.filter(target => internalSender.receiptsFor?.includes(target.botId)) : [];
         const admissionTargets = workMode === "work" ? targets.filter(target =>
           internalSender.receiptsFor?.includes(target.botId) || store.bot(target.botId)?.admissionRequired === true) : [];
