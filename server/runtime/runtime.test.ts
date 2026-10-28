@@ -1010,6 +1010,42 @@ describe("Runtime: marketing acceptance and time gates", () => {
     expect(w.store.events(child.id).map(event => event.kind)).not.toContain("continued");
   });
 
+  it("keeps a missing-capability report as unverified evidence instead of replacing it", async () => {
+    const report = "BLOCKED: this role has no TinyURL connector and browser=false, so no shortlink can be created or verified.";
+    const w = world(() => ({ kind: "completed", text: report }));
+    const root = w.runtime.begin(beginReq());
+    w.runner.receiptSatisfied = () => false;
+    const child = ok(w.runtime.enqueue(toBot("liz", root.id, "Create the shortlink", { admission, evidenceRequired: true })));
+    w.runtime.tick();
+    await flush();
+    const settled = w.store.get(child.id);
+    expect(settled).toMatchObject({ status: "failed", outcome: "stalled" });
+    expect(settled?.result).toContain("EVIDENCE REQUIRED");
+    expect(settled?.result).toContain("UNVERIFIED REPORT");
+    expect(settled?.result).toContain("no TinyURL connector");
+    expect(settled?.result).toContain("browser=false");
+    expect(settled!.result.indexOf("EVIDENCE REQUIRED")).toBeLessThan(settled!.result.indexOf("UNVERIFIED REPORT"));
+  });
+
+  it("keeps the receipt guard and evidence when a long completion claims success", async () => {
+    const report = `Published successfully at https://example.test/post. ${"detail ".repeat(4_000)}`;
+    const w = world(() => ({ kind: "completed", text: report, evidence: { outward: ["LINKEDIN_CREATE_LINKED_IN_POST"] } }));
+    const root = w.runtime.begin(beginReq());
+    w.runner.receiptSatisfied = () => false;
+    const child = ok(w.runtime.enqueue(toBot("liz", root.id, "Publish the post", { admission, evidenceRequired: true })));
+    w.runtime.tick();
+    await flush();
+    const settled = w.store.get(child.id);
+    expect(settled).toMatchObject({ status: "failed", outcome: "stalled" });
+    expect(settled?.evidence?.outward).toEqual(["LINKEDIN_CREATE_LINKED_IN_POST"]);
+    expect(settled!.result.startsWith("EVIDENCE REQUIRED")).toBe(true);
+    expect(settled!.result).toContain("UNVERIFIED REPORT");
+    expect(settled!.result).toContain("Published successfully");
+    expect(settled!.result).toContain("[report truncated]");
+    expect(settled!.result.length).toBeLessThanOrEqual(12_000);
+    expect(w.store.events(child.id).map(event => event.kind)).not.toContain("continued");
+  });
+
   it("accepts the same completion when the signed receipt is present", async () => {
     const w = world(() => ({ kind: "completed", text: "Published" }));
     const root = w.runtime.begin(beginReq());
@@ -1071,6 +1107,8 @@ describe("Runtime: marketing acceptance and time gates", () => {
     await flush();
     expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "stalled" });
     expect(w.store.get(child.id)?.result).toContain("OUT OF SCOPE");
+    expect(w.store.get(child.id)?.result).toContain("UNVERIFIED REPORT");
+    expect(w.store.get(child.id)?.result).toContain("Did something else");
   });
 
   it("keeps the parent objective owned after a denied publication and accepts independent preparation", async () => {
@@ -1124,6 +1162,8 @@ describe("Runtime: marketing acceptance and time gates", () => {
     await flush();
     expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "stalled" });
     expect(w.store.get(child.id)?.result).toContain("TIME ALLOCATION EXPIRED");
+    expect(w.store.get(child.id)?.result).toContain("UNVERIFIED REPORT");
+    expect(w.store.get(child.id)?.result).toContain("Done late");
   });
 });
 
