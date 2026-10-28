@@ -346,7 +346,7 @@ it("keeps a busy recipient queued and rejects revoked peer access before dispatc
   await f.cli("wait", "--bot", f.target.id, "--timeout", "15");
 }), 45_000);
 
-it("stops awaiting on Stop in the source room: the running downstream turn is left to finish, said once, and nothing resumes the room", () => withRooms(async f => {
+it("stops awaiting on Stop in the source room: the running downstream turn is cancelled too, nothing is said, and nothing resumes the room", () => withRooms(async f => {
   f.plan[f.target.id].delayMs = 10_000;
   await f.start();
   await expect.poll(() => f.nodes().find((n: any) => n.parentId)?.status, { timeout: 10_000 }).toBe("running");
@@ -355,15 +355,17 @@ it("stops awaiting on Stop in the source room: the running downstream turn is le
     const task = groups.find((g: any) => g.id === f.source.id)?.tasks?.find((t: any) => t.threadId === f.source.activeTaskId);
     return { senderBusy: bots.find((b: any) => b.id === f.sender.id)?.busy, taskWorking: task?.working };
   }, { timeout: 10_000 }).toEqual({ senderBusy: false, taskWorking: true });
+  await expect.poll(async () => {
+    const { bots } = await f.api("/api/bots"); return bots.find((b: any) => b.id === f.target.id)?.busy;
+  }, { timeout: 10_000 }).toBe(true);
   await f.cli("interrupt", "--channel", f.source.id);
-  await expect.poll(() => f.nodes().map((n: any) => [Boolean(n.parentId), n.status]), { timeout: 5_000 }).toEqual([[false, "cancelled"], [true, "running"]]);
-  expect((await f.messages(f.source.activeTaskId)).filter((m: any) => m.tool?.name === "Stopped here — Engineer is still working; open to stop it too")).toHaveLength(1);
-  await expect.poll(() => f.nodes().find((n: any) => n.parentId)?.status, { timeout: 20_000 }).toBe("completed");
+  await expect.poll(() => f.nodes().map((n: any) => [Boolean(n.parentId), n.status]), { timeout: 5_000 }).toEqual([[false, "cancelled"], [true, "cancelled"]]);
+  expect((await f.messages(f.source.activeTaskId)).some((m: any) => m.tool?.name?.startsWith("Stopped here"))).toBe(false);
   await expect.poll(async () => {
     const { bots } = await f.api("/api/bots"); return bots.find((b: any) => b.id === f.target.id)?.busy;
   }, { timeout: 10_000 }).toBeFalsy();
-  expect((await f.messages(f.destination.activeTaskId)).some((m: any) => m.text === "Built CSV")).toBe(true);
-  expect(f.provider().map((turn: any) => turn.botId)).toEqual([f.sender.id, f.target.id]);
+  expect((await f.messages(f.destination.activeTaskId)).some((m: any) => m.text === "Built CSV")).toBe(false);
+  expect(f.provider().map((turn: any) => turn.botId)).toEqual([f.sender.id]);
   expect((await f.messages(f.source.activeTaskId)).some((m: any) => m.text === "Reviewed downstream outcome")).toBe(false);
 }), 45_000);
 

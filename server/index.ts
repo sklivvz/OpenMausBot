@@ -4105,12 +4105,20 @@ function runRoomNode(node: HandoffView, group: GroupRecord, bot: BotRecord, sign
   const operation = beginGroupTurnOperation(group.id, node.threadId, [bot.id]);
   return new Promise<HostTurnResult>(resolve => {
     let done = false;
+    let started = false;
     const finish = (outcome: HostTurnResult) => {
       if (done) return;
       done = true; resolve(outcome);
     };
     const result: GroupTurnOrchestration["result"] = {};
-    const abort = () => { operation.cancelled = true; operation.cancellation.abort(); };
+    const abort = () => {
+      operation.cancelled = true;
+      operation.cancellation.abort();
+      if (started && groupSpeakers.get(node.threadId)?.botId === bot.id) {
+        revokeInternalCapabilitiesForThread(node.threadId);
+        void runningTurnInstance(bot, node.threadId)?.adapter.interruptTurn(node.threadId).catch(() => {});
+      }
+    };
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort();
     const run = (groupQueues.get(node.threadId) ?? Promise.resolve()).catch(() => {}).then(async () => {
@@ -4119,6 +4127,7 @@ function runRoomNode(node: HandoffView, group: GroupRecord, bot: BotRecord, sign
       if (problem) throw new Error(problem);
       const available = await waitForChatRoomMember(operation, node.threadId, bot);
       if (available !== "run") { result.outcome = "cancelled"; return; }
+      started = true;
       await turn(operation, result, { id: node.id, settle: finish });
     });
     const tracked = run.finally(() => {
@@ -7814,9 +7823,11 @@ async function acceptDirectSend(
 
       if (guardedStart) return guardedStart(currentAtStart);
 
-      if (currentAtStart.busy) {
+      if (currentAtStart.busy || coordinator.awaitingTeammateThreads().has(threadId)) {
         const typedStop = await stopOnTypedCommand({ botId, threadId, text, trigger, personPresent, fromApp: Boolean(app), row: { replyToId: replyTo?.id, sendId, sender, ...spokenLineFields(via, callId) } });
         if (typedStop) return typedStop;
+      }
+      if (currentAtStart.busy) {
         const instance = runningTurnInstance(currentAtStart, threadId);
         let steered: SteerOutcome = "refused";
         const steerInput = extractTurnImages(text);

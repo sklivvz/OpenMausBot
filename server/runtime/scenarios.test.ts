@@ -831,38 +831,37 @@ describe("§2 cancel and stop awaiting", () => {
     invariants(w);
   });
 
-  it("S17 stopRequester: queued children cancelled, the running child keeps going and reports, the requester never resumes", async () => {
+  it("S17 stopRequester: running descendants are interrupted, queued descendants cancelled, the requester never resumes", async () => {
     const w = world();
     const root = beginChief(w);
     const a = ok(enqueueFrom(w, root, workFor("dev", "Build")));
     const b = ok(enqueueFrom(w, root, workFor("qa", "Test")));
-    w.runner.script("dev", hang());
+    w.runner.script("dev", handOut([workFor("ops", "Deploy")], hang()));
+    w.runner.script("ops", hang());
     w.runner.setCanStart("qa", false);
     w.rt.end(root.id, { ok: true, text: "" });
     await drain(w);
+    const grand = w.store.children(a.id)[0]!;
     expect(get(w, a.id).status).toBe("running");
+    expect(get(w, grand.id).status).toBe("running");
     expect(get(w, b.id).status).toBe("queued");
+    expect(w.store.inbox(chiefOwner, false)).toEqual([]);
 
     const left = w.rt.stopRequester(chiefOwner, "person stopped the chat");
-    expect(left.map((x) => x.id)).toEqual([a.id]);
-    expect(get(w, b.id)).toMatchObject({ status: "cancelled", outcome: "stopped" });
-    expect(get(w, root.id)).toMatchObject({ status: "cancelled", outcome: "stopped" });
-    expect(get(w, a.id).status).toBe("running");
-    expect(w.runner.runs(a.id)[0].signal!.aborted).toBe(false);
-    expect(w.runner.running.has(a.id)).toBe(true);
+    expect(left).toEqual([]);
+    for (const id of [root.id, a.id, grand.id, b.id]) expect(get(w, id)).toMatchObject({ status: "cancelled", outcome: "stopped" });
+    expect(get(w, b.id).outcomeDetail).toBe("Stopped before it started");
+    expect(w.runner.runs(a.id)[0].signal!.aborted).toBe(true);
+    expect(w.runner.runs(grand.id)[0].signal!.aborted).toBe(true);
     await drain(w);
-    expect(get(w, a.id).status).toBe("running");
-    invariants(w);
-
-    w.runner.release(a.id, complete("late but done"));
-    await drain(w);
-    expect(get(w, a.id)).toMatchObject({ status: "completed", outcome: "done", result: "late but done" });
+    expect(w.runner.running.size).toBe(0);
     expect(w.runner.reports(a.id)).toHaveLength(1);
-    expect(w.runner.reports(a.id)[0].parent?.id).toBe(root.id);
+    expect(w.runner.reports(grand.id)).toHaveLength(1);
     expect(w.runner.reports(b.id)).toHaveLength(1);
+    expect(w.runner.reports(a.id)[0].parent?.id).toBe(root.id);
     expect(w.runner.runs(root.id)).toHaveLength(0);
-    expect(get(w, root.id).status).toBe("cancelled");
     expect(w.store.all({ nonTerminal: true })).toEqual([]);
+    expect(w.store.inbox(chiefOwner, false)).toEqual([]);
     expect(w.rt.outstanding(chiefOwner)).toEqual([]);
     invariants(w);
   });

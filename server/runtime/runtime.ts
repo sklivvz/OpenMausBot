@@ -565,25 +565,16 @@ export class Runtime {
     this.withBatch(() => outcome === "failed" ? this.cancelTree(n, reason, "failed", "interrupted") : this.cancelTree(n, reason, "cancelled", "stopped"));
   }
 
-  /** The person stopped the requester's conversation: work that never started is dropped, a teammate
-   * mid-turn still reports, and nothing resumes the stopped conversation. */
   stopRequester(owner: Owner, reason = "Stopped by user"): Assignment[] {
-    const left: Assignment[] = [];
     this.withBatch(() => {
       for (const snapshot of this.store.all({ nonTerminal: true })) {
         if (!ownsConversation(snapshot, owner)) continue;
         const n = this.store.get(snapshot.id);
         if (!n || isTerminal(n)) continue;
-        for (const child of this.store.children(n.id)) {
-          if (isTerminal(child)) continue;
-          if (child.status === "queued" && (child.executions === 0 || child.restart === "rerun")) {
-            this.cancelTree(child, child.restart === "rerun" ? "Stopped before it resumed" : "Stopped before it started", "cancelled", "stopped");
-          } else left.push(child);
-        }
-        this.settle(n, "cancelled", "stopped", reason);
+        this.stopTree(n, reason);
       }
     });
-    return left;
+    return [];
   }
 
   status(id: string): StatusView | undefined {
@@ -636,6 +627,16 @@ export class Runtime {
     this.closing = true;
   }
 
+  private stopTree(n: Assignment, reason: string): void {
+    const fresh = this.store.get(n.id);
+    if (!fresh || isTerminal(fresh)) return;
+    const detail = fresh.status !== "queued" ? reason
+      : fresh.restart === "rerun" ? "Stopped before it resumed"
+      : fresh.executions === 0 ? "Stopped before it started" : reason;
+    this.settle(fresh, "cancelled", "stopped", detail);
+    for (const child of this.store.children(n.id)) this.stopTree(child, reason);
+  }
+
   private cancelTree(n: Assignment, reason: string, status: "failed" | "cancelled", outcome: Outcome): void {
     for (const child of this.store.children(n.id)) {
       if (isTerminal(child)) continue;
@@ -685,6 +686,10 @@ export class Runtime {
 
   private wake(n: Assignment, kind: InboxKind): boolean {
     if (n.reply === "none") return false;
+    if (n.parentId) {
+      const parent = this.store.get(n.parentId);
+      if (parent && isTerminal(parent)) return false;
+    }
     const now = this.clock.now();
     const owner = wakeOwner(n);
     const item: InboxItem = { id: randomUUID(), assignmentId: n.id, kind, createdAt: now };

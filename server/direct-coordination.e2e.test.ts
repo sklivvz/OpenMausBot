@@ -285,13 +285,13 @@ it.each(["resume", "stop", "failed resume", "failed root"] as const)("keeps a gu
       await api("POST", `${route}/interrupt`, { ...target, expectedExecutionId: null }, 409);
       expect(await api("POST", `${route}/interrupt`, target)).toEqual({ ok: true, outcome: "stopped" });
       await api("POST", `${route}/interrupt`, target, 409);
-      expect(f.nodes().find((node: any) => node.botId === f.lead.id).status).toBe("running");
+      expect(f.nodes().find((node: any) => node.botId === f.lead.id).status).toBe("cancelled");
     }
     writeFileSync(gate, "finish only the isolated teammate");
     const childWait = await f.cli("wait", "--bot", f.lead.id, "--task", child.threadId, "--timeout", "20");
     evidence.push({ command: ["wait", "--bot", f.lead.id, "--task", child.threadId, "--timeout", "20"], result: childWait });
     expect(childWait.status).toBe("settled");
-    await expect.poll(() => f.nodes().find((node: any) => node.botId === f.lead.id).status).toBe("completed");
+    await expect.poll(() => f.nodes().find((node: any) => node.botId === f.lead.id).status).toBe(action === "stop" ? "cancelled" : "completed");
     const finalWait = await f.wait();
     evidence.push({ command: ["wait", "--bot", f.chief.id, "--task", threadId, "--timeout", "30"], result: finalWait });
     expect(action === "failed resume" ? ["settled", "failed"] : ["settled"]).toContain(finalWait.status);
@@ -1038,24 +1038,24 @@ it("runs a teammate's hand-off to the Chief in the Chief's work thread for that 
   await expect.poll(() => f.nodes().every((node: any) => node.status === "completed"), { timeout: 10_000 }).toBe(true);
 }), 60_000);
 
-it("stops a waiting source without reaching into the teammate already working", () => fixture(async f => {
-  f.plan[f.lead.id] = { delayMs: 4000, reply: "Finished after the source was stopped" };
+it.each(["button", "typed"])("%s stop cancels the waiting source and its running teammate", stop => fixture(async f => {
+  const childGate = join(f.session.info.dataDir, "stopped-child-ready");
+  f.plan[f.lead.id] = { gateFile: childGate, reply: "Finished after the source was stopped" };
   await f.start();
   await expect.poll(() => f.nodes().find((node: any) => node.parentId)?.status, { timeout: 15_000 }).toBe("running");
-  await f.api(`/api/bots/${f.chief.id}/interrupt`, { threadId: f.chief.activeTaskId });
+  await expect.poll(async () => {
+    const chief = (await f.api("/api/bots?messages=0")).bots.find((bot: any) => bot.id === f.chief.id);
+    return !chief.busy && chief.tasks.find((task: any) => task.threadId === f.chief.activeTaskId)?.waitingForTeammates;
+  }, { timeout: 15_000 }).toBe(true);
+  if (stop === "button") await f.api(`/api/bots/${f.chief.id}/interrupt`, { threadId: f.chief.activeTaskId });
+  else await f.api(`/api/bots/${f.chief.id}/messages`, { threadId: f.chief.activeTaskId, text: "STOP" });
 
-  await expect.poll(() => f.nodes().find((node: any) => !node.parentId)?.status).toBe("cancelled");
-  expect(f.nodes().find((node: any) => node.parentId).status).toBe("running");
+  await expect.poll(() => f.nodes().every((node: any) => node.status === "cancelled")).toBe(true);
   expect((await f.wait()).status).toBe("settled");
-  const chip = (await f.messages(f.chief.activeTaskId)).find((message: any) => message.tool?.name?.startsWith("Stopped here"));
-  expect(chip.tool.name).toContain("Engineering lead");
-  expect(chip.threadRef).toMatchObject({ botId: f.lead.id, threadId: f.nodes().find((node: any) => node.parentId).threadId });
-
-  await expect.poll(() => f.nodes().find((node: any) => node.parentId)?.status, { timeout: 20_000 }).toBe("completed");
-  expect(f.nodes().find((node: any) => node.parentId).result).toContain("Finished after the source was stopped");
-  await expect.poll(async () => (await f.messages(f.chief.activeTaskId)).some((message: any) => message.tool?.name === "Engineering lead replied")).toBe(true);
-  const replied = (await f.messages(f.chief.activeTaskId)).find((message: any) => message.tool?.name === "Engineering lead replied");
-  expect(replied.tool.output).toContain("Finished after the source was stopped");
+  writeFileSync(childGate, "finish after stop");
+  await expect.poll(async () => (await f.api("/api/bots?messages=0")).bots.find((bot: any) => bot.id === f.lead.id).busy, { timeout: 15_000 }).toBe(false);
+  expect(f.nodes().every((node: any) => node.status === "cancelled")).toBe(true);
+  expect((await f.messages(f.chief.activeTaskId)).some((message: any) => message.tool?.name?.startsWith("Stopped here"))).toBe(false);
   expect(f.evidence().filter((turn: any) => turn.botId === f.chief.id)).toHaveLength(1);
   expect((await f.messages(f.chief.activeTaskId)).some((message: any) => message.text === "The requested CSV export is implemented and verified")).toBe(false);
 }), 60_000);
