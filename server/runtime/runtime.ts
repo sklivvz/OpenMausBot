@@ -38,6 +38,20 @@ export interface BeginRequest {
 const BRIEF_MAX = 12_000;
 const RESULT_MAX = 12_000;
 const DETAIL_MAX = 400;
+const UNVERIFIED_REPORT = "UNVERIFIED REPORT (the child's own account, not acceptance evidence):";
+const REPORT_TRUNCATED = "\n[report truncated]";
+
+/** The deterministic rejection stays first: a long report may lose its tail, never the guard. */
+function withUnverifiedReport(notice: string, report: string): string {
+  const text = report.trim();
+  if (!text) return clip(notice, RESULT_MAX);
+  const header = `\n\n${UNVERIFIED_REPORT}\n`;
+  const room = RESULT_MAX - notice.length - header.length;
+  if (room <= REPORT_TRUNCATED.length) return clip(notice, RESULT_MAX);
+  const truncated = text.length > room;
+  const body = clip(text, room - (truncated ? REPORT_TRUNCATED.length : 0));
+  return notice + header + body + (truncated ? REPORT_TRUNCATED : "");
+}
 
 const defaultClock: Clock = { now: () => Date.now(), monotonic: () => performance.now() };
 
@@ -496,20 +510,20 @@ export class Runtime {
     }
     const ownTurn = !n.parentId;
     if (result.kind === "completed" && this.runner.timeExpired?.(n) === true) {
-      n.result = clip("TIME ALLOCATION EXPIRED: the assignment settled after its explicit deadline. Completed work and receipts are preserved, but this is a missed commitment, not a success claim. Reconcile any uncertain external effect before retrying; only a new explicit person allocation changes the deadline.", RESULT_MAX);
+      n.result = withUnverifiedReport("TIME ALLOCATION EXPIRED: the assignment settled after its explicit deadline. Completed work and receipts are preserved, but this is a missed commitment, not a success claim. The child's report below is unverified; inspect it for completed work and exact reconciliation evidence. Reconcile any uncertain external effect before retrying; only a new explicit person allocation changes the deadline.", result.text);
       this.settle(n, "failed", "stalled", "time allocation expired before settlement; commitment missed", ownTurn);
       return;
     }
     if (result.kind === "completed" && n.admission && n.evidence?.outward) {
       const scope = outwardWithinAdmission(n.admission, n.evidence.outward);
       if (scope !== "within") {
-        n.result = clip(`${scope === "outside" ? "OUT OF SCOPE" : "SCOPE UNVERIFIED"}: this turn performed an outward action outside the admitted operations or channel. The result is not accepted; reconcile the provider state and return the exact scope conflict.`, RESULT_MAX);
+        n.result = withUnverifiedReport(`${scope === "outside" ? "OUT OF SCOPE" : "SCOPE UNVERIFIED"}: this turn performed an outward action outside the admitted operations or channel. The result is not accepted; reconcile the provider state and return the exact scope conflict. The child's report below is its own account, not acceptance; use it to identify that conflict.`, result.text);
         this.settle(n, "failed", "stalled", "outward action outside or unverifiable against admitted scope; result unverified", ownTurn);
         return;
       }
     }
     if (result.kind === "completed" && n.evidenceRequired && this.runner.receiptSatisfied?.(n) !== true) {
-      n.result = clip("EVIDENCE REQUIRED: no signed execution receipt was recorded after this assignment started. The result is unverified and is not accepted. Do not repeat an outward action; reconcile provider state, attach the exact receipt, and continue this same thread with rework=true and its thread_id.", RESULT_MAX);
+      n.result = withUnverifiedReport("EVIDENCE REQUIRED: no signed execution receipt was recorded after this assignment started. The result is unverified and is not accepted. The child's report below is its own account, not evidence; use it to see the exact blocker or readback. Do not repeat an outward action; reconcile provider state, attach the exact receipt, and continue this same thread with rework=true and its thread_id.", result.text);
       this.settle(n, "failed", "stalled", "required execution receipt absent; result unverified", ownTurn);
       return;
     }

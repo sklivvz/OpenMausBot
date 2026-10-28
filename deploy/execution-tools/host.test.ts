@@ -50,6 +50,30 @@ test('joined artifact baseline and change produce an authenticated receipt witho
     await assert.rejects(call(f.host, 'record_execution_receipt', { ...f.receipt('other'), projectId: 'other-project' }), /outside this execution host scope/);
   } finally { await f.close(); }
 });
+test('missing unrelated artifact roots are tolerated and the public schema exposes project scope', async () => {
+  const f = await fixture(); try {
+    const artifacts = path.dirname(f.artifact), missing = path.join(f.directory, 'missing-workspace');
+    const host = createExecutionTools({ ...f.config, artifactRoots: [missing, artifacts] });
+    const definition = host.tools.find(tool => tool.name === 'record_execution_receipt') as any;
+    assert.ok(definition.inputSchema.required.includes('projectId'));
+    assert.deepEqual(definition.inputSchema.properties.projectId.enum, ['p1']);
+    assert.equal((await call(host, 'record_execution_receipt', f.receipt('missing-root-ok'))).outcome, 'unverified');
+    await assert.rejects(call(host, 'record_execution_receipt', { ...f.receipt('no-project'), projectId: undefined }), (error: any) => {
+      assert.equal(error.code, 'invalid_request');
+      assert.match(JSON.stringify(error.details), /projectId/);
+      return true;
+    });
+    await assert.rejects(call(host, 'record_execution_receipt', { ...f.receipt('bad-project'), projectId: 'other-project' }), (error: any) => {
+      assert.equal(error.code, 'project_out_of_scope');
+      assert.deepEqual(error.details.allowedProjects, ['p1']);
+      return true;
+    });
+    const onlyMissing = createExecutionTools({ ...f.config, artifactRoots: [missing] });
+    const failed = await call(onlyMissing, 'record_execution_receipt', f.receipt('missing-root-only'));
+    assert.equal(failed.sourceComplete, false);
+    assert.match(failed.gaps[0], /artifact_root_unavailable/);
+  } finally { await f.close(); }
+});
 test('stopped assignment and caller success fields cannot support a receipt', async () => {
   const f = await fixture(); try {
     f.stop(); const input = { ...f.receipt('stopped'), evidence: [{ kind: 'assignment', id: 'root1', threadId: 'thread1', rootId: 'root1' }] };
@@ -87,7 +111,37 @@ test('real bundled stdio MCP exposes five tools and executes the same read path'
   try {
     const init = await rpc('initialize'); assert.equal(init.result.serverInfo.name, 'execution-tools');
     const listed = await rpc('tools/list'); assert.deepEqual(listed.result.tools.map((t: any) => t.name), ['read_execution_queue', 'read_execution_context', 'validate_handoff', 'track_existing_assignments', 'record_execution_receipt']); assert.deepEqual(listed.result.tools.map((t: any) => t.name), executionToolDefinitions.map(t => t.name));
+    const receiptDefinition = listed.result.tools.find((t: any) => t.name === 'record_execution_receipt');
+    assert.ok(receiptDefinition.inputSchema.required.includes('projectId'));
+    assert.deepEqual(receiptDefinition.inputSchema.properties.projectId.enum, ['p1']);
     const queue = await rpc('tools/call', { name: 'read_execution_queue', arguments: {} }); assert.equal(queue.result.isError, undefined); assert.equal(JSON.parse(queue.result.content[0].text).rows[0].title, 'Keep user wording');
+    const noProject = await rpc('tools/call', { name: 'record_execution_receipt', arguments: { ...f.receipt('rpc-no-project'), projectId: undefined } });
+    assert.equal(noProject.result.isError, true);
+    const noProjectError = JSON.parse(noProject.result.content[0].text).error;
+    assert.equal(noProjectError.code, 'invalid_request');
+    assert.match(JSON.stringify(noProjectError.details), /projectId/);
+    assert(!JSON.stringify(noProject).includes('fixture-token'));
+    const wrongProject = await rpc('tools/call', { name: 'record_execution_receipt', arguments: { ...f.receipt('rpc-wrong-project'), projectId: 'other-project' } });
+    assert.equal(wrongProject.result.isError, true);
+    const wrongProjectError = JSON.parse(wrongProject.result.content[0].text).error;
+    assert.equal(wrongProjectError.code, 'project_out_of_scope');
+    assert.deepEqual(wrongProjectError.details.allowedProjects, ['p1']);
     for (const name of ['inspect_todoist_progress', 'update_todoist_progress']) { const removed = await rpc('tools/call', { name, arguments: { taskId: 't1', projectId: 'p1' } }); assert.equal(removed.result.isError, true); assert(!JSON.stringify(removed).includes('fixture-token')); }
+  } finally { child.stdin.end(); await new Promise<void>(resolve => child.once('exit', () => resolve())); lines.close(); await f.close(); }
+});
+test('real bundled stdio MCP reports missing configuration as a typed tool error', async () => {
+  const f = await fixture(); const bundle = path.join(f.directory, 'host.cjs');
+  await build({ entryPoints: [path.resolve('deploy/execution-tools/main.ts')], outfile: bundle, bundle: true, platform: 'node', format: 'cjs', target: 'node24', logLevel: 'silent' });
+  const child = spawn(process.execPath, [bundle], { env: { ...process.env, EXECUTION_TOOLS_CONFIG_FILE: path.join(f.directory, 'absent-config.json') }, stdio: ['pipe', 'pipe', 'pipe'] });
+  let stderr = ''; child.stderr.on('data', chunk => { stderr += chunk; }); let next = 0;
+  const pending = new Map<number, (value: any) => void>(); const lines = readline.createInterface({ input: child.stdout }); lines.on('line', line => { const value = JSON.parse(line); pending.get(value.id)?.(value); pending.delete(value.id); });
+  const rpc = (method: string, params: unknown = {}) => new Promise<any>((resolve, reject) => { const id = ++next; const timer = setTimeout(() => reject(Error('Fixture MCP timeout: ' + stderr)), 10000); pending.set(id, value => { clearTimeout(timer); resolve(value); }); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
+  try {
+    const listed = await rpc('tools/list'); assert.equal(listed.result.tools.length, 5);
+    const failed = await rpc('tools/call', { name: 'read_execution_queue', arguments: {} });
+    assert.equal(failed.result.isError, true);
+    const error = JSON.parse(failed.result.content[0].text).error;
+    assert.equal(error.code, 'invalid_config');
+    assert.match(error.message, /missing or unreadable/);
   } finally { child.stdin.end(); await new Promise<void>(resolve => child.once('exit', () => resolve())); lines.close(); await f.close(); }
 });

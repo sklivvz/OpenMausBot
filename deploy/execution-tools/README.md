@@ -39,10 +39,13 @@ evidence/receipt directories beneath any allowed artifact root.
 ```
 
 The app URL and the three task-source settings default to the values shown.
-Other paths and project scope are required. Root paths must exist. Evidence and
-execution receipts must be separate directories. The key remains outside caller
-artifact access, but this is not a security boundary against an actor that can
-read host files or replace the host program.
+Other paths and project scope are required. A configured artifact root may be
+absent at startup; existing roots are resolved at observation and a selected
+artifact with no available root reports `artifact_root_unavailable` instead of
+failing host creation. Evidence and execution receipts must be separate
+directories, and private storage must not overlap any configured root. The key
+remains outside caller artifact access, but this is not a security boundary
+against an actor that can read host files or replace the host program.
 
 The queue reads `GET /api/v1/tasks` and `GET /api/v1/tasks/{id}` from Positron
 Tasks with the bearer credential of the named `mcpServers` entry in
@@ -52,11 +55,19 @@ makes the queue a source failure; handoff validation, tracking and receipt
 recording still work. A wrong or missing signing key prevents evidence-backed
 execution rather than inventing a successful receipt.
 
-Configured project scope (Positron Tasks department IDs) is checked before
-recording an execution receipt. These IDs constrain the host's capability;
-they do not prove which bot made the call. Caller-supplied `botId`, task/objective
-association and source version remain context, not independently authenticated
-caller identity or semantic relevance.
+Configured project scope (Positron Tasks department IDs) is required by the
+public `record_execution_receipt` schema and checked before recording. On a valid
+host `tools/list` enumerates the accepted `projectId` values. These IDs constrain
+the host's capability; they do not prove which bot made the call. Caller-supplied
+`botId`, task/objective association and source version remain context, not
+independently authenticated caller identity or semantic relevance.
+
+A failed `tools/call` returns `isError` with JSON
+`{"error":{"code","message","details"?}}`. The code distinguishes invalid
+arguments, invalid host configuration, unavailable sources, unavailable artifact
+roots, rejected artifact paths, project scope and rejected receipts. Messages and
+details are constructed by the host; raw configuration values, credentials and
+signing keys are never included.
 
 ## Evidence sequence
 
@@ -90,9 +101,10 @@ The default build output is `deploy/local/execution-tools-mcp.cjs`.
 The fixture tests run real loopback HTTP Positron Tasks, job and conversation
 sources with temporary artifacts, credentials and receipts. They cover baseline
 and changed artifacts, authenticated receipts, stopped assignments, invalid keys,
-forbidden caller flags, project bounds, rejected Todoist-era settings and the
-credential sent to the task source. A bundled stdio process exposes the five
-tools and runs a queue read through the same fixture.
+missing artifact roots, required and configured project scope, forbidden caller
+flags, rejected Todoist-era settings and the credential sent to the task source.
+Bundled stdio processes expose the five tools, run a queue read through the same
+fixture and report typed missing-configuration and invalid-argument errors.
 
 These tests establish the composed module and actual MCP framing, not live app
 selection, source deployment, bot adoption or business outcomes.

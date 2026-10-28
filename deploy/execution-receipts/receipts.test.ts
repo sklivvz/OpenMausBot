@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { createEvidenceObserver, createExecutionRecorder } from './receipts.ts';
+import { ExecutionFailure } from './errors.ts';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'execution-receipts-'));
@@ -136,5 +137,49 @@ test('assignment must belong to a declared root through a consistent complete an
       { ...job, nodes: [{ ...root, parentId: 'child' }, child] },
     ]) { f.source(invalid); await assert.rejects(f.observe(ref)); }
     f.source(job); assert.equal((await f.observe(ref)).state, 'assignment_active');
+  } finally { f.cleanup(); }
+});
+
+test('missing configured roots are resolved lazily; an unavailable root is explicit', async () => {
+  const f = fixture(); try {
+    const missing = path.join(f.root, 'missing-workspace');
+    const observe = createEvidenceObserver({ artifactRoots: [missing, f.artifacts], readJob: async () => f.job });
+    assert.equal((await observe({ kind: 'artifact', id: 'proposal', path: f.file })).state, 'artifact_present');
+    const onlyMissing = createEvidenceObserver({ artifactRoots: [missing], readJob: async () => f.job });
+    await assert.rejects(onlyMissing({ kind: 'artifact', id: 'proposal', path: f.file }), (error: any) => {
+      assert.equal(error.code, 'artifact_root_unavailable');
+      return true;
+    });
+    await assert.rejects(f.observe({ kind: 'artifact', id: 'relative', path: 'proposal.txt' }), (error: any) => {
+      assert.equal(error.code, 'invalid_request');
+      return true;
+    });
+    await assert.rejects(f.observe({ kind: 'artifact', id: 'outside', path: path.join(f.root, 'missing', 'proposal.txt') }), (error: any) => {
+      assert.equal(error.code, 'artifact_path_rejected');
+      return true;
+    });
+  } finally { f.cleanup(); }
+});
+
+test('a root resolving into protected storage is unavailable', async () => {
+  const f = fixture(); try {
+    const protectedDir = path.join(f.root, 'protected'); fs.mkdirSync(protectedDir);
+    const secret = path.join(protectedDir, 'secret.txt'); fs.writeFileSync(secret, 'private');
+    const link = path.join(f.artifacts, 'protected-link'); fs.symlinkSync(protectedDir, link);
+    const observe = createEvidenceObserver({ artifactRoots: [link], protectedPaths: [protectedDir], readJob: async () => f.job });
+    await assert.rejects(observe({ kind: 'artifact', id: 'secret', path: secret }), (error: any) => {
+      assert.equal(error.code, 'artifact_root_unavailable');
+      return true;
+    });
+  } finally { f.cleanup(); }
+});
+
+test('source failures keep a safe typed reason in the receipt gap', async () => {
+  const f = fixture(); try {
+    const recorder = createExecutionRecorder({ directory: f.directory, signingKey: f.signingKey, observe: async () => { throw new ExecutionFailure('source_unavailable', 'Assignment source returned HTTP 503'); } });
+    const receipt = await recorder.record({ ...f.input, evidence: [{ kind: 'assignment', id: 'assignment-1', threadId: 'thread-1', rootId: 'assignment-1' }] });
+    assert.equal(receipt.sourceComplete, false);
+    assert.equal(receipt.outcome, 'source_failed');
+    assert.match(receipt.gaps[0], /source_unavailable: Assignment source returned HTTP 503/);
   } finally { f.cleanup(); }
 });

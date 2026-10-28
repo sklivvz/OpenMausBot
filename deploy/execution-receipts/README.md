@@ -35,11 +35,13 @@ observation checkpoints, while SHA-256 identifies evidence. This is not a securi
 boundary against an actor that can read the signing key or replace the host code.
 Do not give untrusted agents key/storage administration access.
 
-Inputs contain `operationId`, `botId`, `taskId`, `objectiveId`, optional
+Inputs contain `operationId`, `botId`, `taskId`, `objectiveId`, required public
 `projectId`, `sourceVersion`, `nextStep`, and up to eight evidence selectors.
 Artifact selectors are `{kind:'artifact', id, path}`. Assignment selectors are
 `{kind:'assignment', id, threadId, rootId}`. Project ID is the Positron Tasks
-department ID; `verifyEvidence` requires it to match the target project.
+department ID; the public schema requires it and `verifyEvidence` requires it to
+match the target project. Older stored receipts that omit `projectId` remain
+readable for replay and authentication.
 Selectors/association and brief version are caller-supplied context, not semantic
 proof that an artifact satisfies that objective. No caller-provided success flag,
 result, outcome, timestamp or approval is accepted.
@@ -84,7 +86,10 @@ Reconcile the process and receipts before removing it; locks never expire into
 an overlapping writer automatically.
 
 Partial source failure leaves the previous successful observation checkpoint
-unchanged. An authenticated pending-observation journal is persisted before the receipt.
+unchanged. Its gap names a bounded code and safe message, such as
+`artifact:proposal: artifact_path_rejected: Artifact outside configured roots`;
+raw host configuration and credentials are never included. An authenticated
+pending-observation journal is persisted before the receipt.
 After a crash, the next capture reconciles a saved receipt into the checkpoint
 before accepting another operation ID. A pending marker without a receipt has
 no source mutation to replay; it is cleared. Corrupt or incomplete records stop
@@ -94,11 +99,13 @@ business action (this module has no such action).
 ## Verification
 
 Run `node --experimental-strip-types --test deploy/execution-receipts/receipts.test.ts`.
-Fifteen isolated tests use temporary files and injected native job sources. They
+Eighteen isolated tests use temporary files and injected native job sources. They
 cover baseline/change observation, source-failure checkpoint preservation,
-immutable replay/conflicts, stopped ancestry, incomplete/changing job trees,
-fresh target-bound verification, forbidden caller success fields, authenticated
-tampering refusal, filesystem bounds, concurrent capture locks and interrupted checkpoint recovery. Strict
+missing and protected artifact roots, typed source gaps, immutable
+replay/conflicts, stopped ancestry, incomplete/changing job trees, fresh
+target-bound verification, forbidden caller success fields, authenticated
+tampering refusal, filesystem bounds, concurrent capture locks and interrupted
+checkpoint recovery. Strict
 TypeScript and targeted lint pass. No live task or bot was changed.
 
 The module has no server route changes. Root must register the exported tool and
