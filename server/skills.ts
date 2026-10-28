@@ -46,8 +46,8 @@ export {
 } from "../shared/skill-md.ts";
 export { STAGED_SKILL_FILE_MAX_BYTES } from "./skill-storage.ts";
 
-export const INDEX_MAX_SKILLS = 30;
-export const INDEX_MAX_BYTES = 4_000;
+export const INDEX_MAX_SKILLS = 60;
+export const INDEX_MAX_BYTES = 12_000;
 const loggedIndexOmissions = new Map<string, string>();
 export const MAX_STAGED_SKILLS = 20;
 export const STAGED_GIST_MAX = 240;

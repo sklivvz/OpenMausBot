@@ -435,6 +435,7 @@ import { addHeldSecretScrubber, redactSecretsInText } from "./redact.ts";
 import * as vps from "./vps-computer.ts";
 import { vpsConfigForBot, vpsSshAliasForBot } from "./vps-hosts.ts";
 import { ROUTINE_RESTARTED, RoutineManager, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines.ts";
+import { routineSourceOwner as resolveRoutineSourceOwner, joinRoutineConversation } from "./routine-source.ts";
 import { CalendarCallManager, type CalendarCall } from "./calendar-calls.ts";
 import { BROWSER_CONTROL_REFUSAL, BROWSER_UPLOAD_TOOL, browserRuntimeEnv } from "./browser-runtime.ts";
 import { uploadableFiles } from "./browser-upload.ts";
@@ -9148,26 +9149,7 @@ async function startTurn(
 }
 
 function routineSourceOwner(run: Pick<RoutineRun, "botId" | "sourceThreadId" | "resultsThreadId">) {
-  if (run.resultsThreadId) {
-    const bot = store.bot(run.botId);
-    const task = bot && store.taskByThread(bot.id, run.resultsThreadId);
-    return bot && !bot.hidden && task && !task.routineRunId
-      ? { bot, group: undefined, threadId: task.threadId }
-      : null;
-  }
-  const threadId = run.sourceThreadId?.trim();
-  if (!threadId) return null;
-  // Validate before messagesFor(): Store lazily opens transcript storage, so an orphan id would recreate a deleted conversation.
-  const bot = store.bot(run.botId);
-  if (!bot) return null;
-  // Stamped from the confirmed request, never calendar input; recheck sections, since either bot may have moved since.
-  const sourceBot = store.botByThread(threadId);
-  if (sourceBot && !sourceBot.hidden && !store.taskByThread(sourceBot.id, threadId)?.routineRunId &&
-    (sourceBot.id === bot.id || canReachPeer(sourceBot, bot))) {
-    return { bot: sourceBot, group: undefined, threadId };
-  }
-  const group = store.groupByThread(threadId);
-  return group?.memberIds.includes(bot.id) ? { bot, group, threadId } : null;
+  return resolveRoutineSourceOwner(run, store);
 }
 
 function botMainThread(botId: string): string | undefined {
@@ -9324,10 +9306,7 @@ routines = new RoutineManager({
   },
   joinConversation: (run) => {
     const continues = routines?.listRoutines().some((routine) => routine.id === run.routineId && routine.schedule.type === "limit_reset");
-    if (!continues || run.target !== "bot") return null;
-    const source = routineSourceOwner(run);
-    if (!source || source.group || source.bot.id !== run.botId) return null;
-    return source.threadId;
+    return continues ? joinRoutineConversation(run, store) : null;
   },
   createGoalTask: (groupId, title) => store.createGroupTask(groupId, title, false),
   isResultsThread: (botId, threadId) => {
