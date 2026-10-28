@@ -140,6 +140,33 @@ it("the stopped turn's Continue sets up a run that continues the conversation on
   });
 }, 120_000);
 
+it("continues in the source conversation when the results conversation is different", async () => {
+  await withLimitFixture({}, async ({ api, control, limit, lift, evidence }) => {
+    const resetsAt = Math.floor(Date.now() / 1000) + 10;
+    limit(resetsAt);
+    const { bot } = await control("new-bot", "--name", "Source owner");
+    const { task: resultsTask } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Results" });
+    const resultsThreadId = resultsTask.threadId;
+    const { task } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Original request" });
+    const sourceThreadId = task.threadId;
+    expect(sourceThreadId).not.toBe(resultsThreadId);
+    await control("send", "--bot", bot.id, "--task", sourceThreadId, "--text", "Continue the source request");
+    expect((await control("wait", "--bot", bot.id, "--task", sourceThreadId, "--timeout", "30")).status).toBe("failed");
+    const { routine } = await api("POST", "/api/limit-resets/continue", { botId: bot.id, threadId: sourceThreadId }, 201);
+    await api("PATCH", `/api/routines/${routine.id}`, { resultsThreadId });
+    lift();
+    await expect.poll(async () => (await api("GET", "/api/routines")).runs.find((run: any) => run.routineId === routine.id)?.status, { timeout: 40_000 }).toBe("completed");
+    const { runs } = await api("GET", "/api/routines");
+    const run = runs.find((candidate: any) => candidate.routineId === routine.id);
+    expect(run).toMatchObject({ sourceThreadId, resultsThreadId, threadId: sourceThreadId });
+    const sourceMessages = await messagesOf(api, sourceThreadId);
+    const resultsMessages = await messagesOf(api, resultsThreadId);
+    expect(sourceMessages.findLast((message) => message.role === "bot" && message.kind === "text")).toMatchObject({ text: "hello from fake claude" });
+    expect(resultsMessages.some((message) => message.automation?.runId === run.id)).toBe(true);
+    evidence.push({ routine, run, sourceMessages, resultsMessages });
+  });
+}, 120_000);
+
 it("continues on the backup engine with one line, and goes back to its own engine after the reset", async () => {
   await withLimitFixture({ recovery: { enabled: true, backup: codex } }, async ({ api, control, limit, lift, claudePrompts, evidence }) => {
     const resetsAt = Math.floor(Date.now() / 1000) + 25;

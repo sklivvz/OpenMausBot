@@ -23,6 +23,7 @@ import {
   applySkillWriteWithReceipt,
   installSkill,
   INDEX_MAX_BYTES,
+  INDEX_MAX_SKILLS,
   listSkills,
   listStagedSkillWrites,
   parseSkillMd,
@@ -102,8 +103,18 @@ describe("skills prompt index budget", () => {
     } finally { warn.mockRestore(); }
   });
 
+  it("keeps a sales skill discoverable among 34 enabled skills", () => {
+    const descriptions = Object.fromEntries(Array.from({ length: 33 }, (_, i) =>
+      [`operational-skill-${String(i).padStart(2, "0")}`, "Reference instructions for operational work."]));
+    manifestSkills({ ...descriptions, "sales-research-and-delegation": "Verify prospect qualification with sources." });
+    const prompt = skillsSystemPrompt(bot);
+    expect(prompt).toContain("- sales-research-and-delegation:");
+    expect(prompt).not.toContain("enabled skills omitted");
+    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(INDEX_MAX_BYTES);
+  });
+
   it("reports byte omissions in the prompt and logs omitted names once per skill set", () => {
-    manifestSkills({ alpha: "a".repeat(2500), bravo: "b".repeat(2500), charlie: "c".repeat(2500) });
+    manifestSkills({ alpha: "a".repeat(7500), bravo: "b".repeat(7500), charlie: "c".repeat(7500) });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const prompt = skillsSystemPrompt(bot);
@@ -116,29 +127,29 @@ describe("skills prompt index budget", () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("bravo, charlie"));
       skillsSystemPrompt(bot);
       expect(warn).toHaveBeenCalledTimes(1);
-      manifestSkills({ aardvark: "a".repeat(2500), bravo: "b".repeat(2500), charlie: "c".repeat(2500) });
+      manifestSkills({ aardvark: "a".repeat(7500), bravo: "b".repeat(7500), charlie: "c".repeat(7500) });
       skillsSystemPrompt(bot);
       expect(warn).toHaveBeenCalledTimes(1);
-      manifestSkills({ alpha: "a".repeat(2500), bravo: "b".repeat(2500), charlie: "c".repeat(2500), delta: "d" });
+      manifestSkills({ alpha: "a".repeat(7500), bravo: "b".repeat(7500), charlie: "c".repeat(7500), delta: "d" });
       expect(skillsSystemPrompt(bot)).toContain("3 enabled skills omitted");
       expect(warn).toHaveBeenCalledTimes(2);
     } finally { warn.mockRestore(); }
   });
 
   it("reports the applicable entry or byte limit and excludes disabled skills", () => {
-    const descriptions = Object.fromEntries(Array.from({ length: 32 }, (_, i) => [`skill-${String(i).padStart(2, "0")}`, "x"]));
-    manifestSkills(descriptions, ["skill-31"]);
+    const descriptions = Object.fromEntries(Array.from({ length: INDEX_MAX_SKILLS + 2 }, (_, i) => [`skill-${String(i).padStart(2, "0")}`, "x"]));
+    manifestSkills(descriptions, [`skill-${INDEX_MAX_SKILLS + 1}`]);
     const prompt = skillsSystemPrompt(bot);
     const indexed = prompt.match(/^- skill-\d{2}:/gm) ?? [];
-    const omitted = 31 - indexed.length;
+    const omitted = INDEX_MAX_SKILLS + 1 - indexed.length;
     expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(INDEX_MAX_BYTES);
     expect(prompt).toContain(`${omitted} enabled skill${omitted === 1 ? "" : "s"} omitted`);
-    expect(prompt).toContain(indexed.length === 30 ? "30-skill cap" : "4000-byte cap");
-    expect(prompt).not.toContain("skill-31");
+    expect(prompt).toContain(indexed.length === INDEX_MAX_SKILLS ? `${INDEX_MAX_SKILLS}-skill cap` : `${INDEX_MAX_BYTES}-byte cap`);
+    expect(prompt).not.toContain(`skill-${INDEX_MAX_SKILLS + 1}`);
   });
 
   it("explains when even the first entry cannot fit", () => {
-    manifestSkills({ alpha: "🐈".repeat(1200) });
+    manifestSkills({ alpha: "🐈".repeat(INDEX_MAX_BYTES) });
     const prompt = skillsSystemPrompt(bot);
     expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(INDEX_MAX_BYTES);
     expect(prompt).toContain("1 enabled skill omitted");

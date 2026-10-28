@@ -19,7 +19,10 @@ import { isSkillName } from "../shared/skill-md.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
 import { directoryEntryState, entryExistsWithoutFollowing } from "./skill-storage.ts";
-import { INDEX_MAX_BYTES, INDEX_MAX_SKILLS, type SkillListing } from "./skills.ts";
+import type { SkillListing } from "./skills.ts";
+
+const INDEX_MAX_SKILLS = 30;
+const INDEX_MAX_BYTES = 4_000;
 
 export const IMPORTED_SKILLS_DIR = join(DATA_DIR, "imported-skills");
 /** Beside each bot's own skill state, outside every folder a bot works in. */
