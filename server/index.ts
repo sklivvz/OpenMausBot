@@ -4114,8 +4114,9 @@ function runRoomNode(node: HandoffView, group: GroupRecord, bot: BotRecord, sign
     const abort = () => {
       operation.cancelled = true;
       operation.cancellation.abort();
-      if (started && groupSpeakers.get(node.threadId)?.botId === bot.id) {
-        revokeInternalCapabilitiesForThread(node.threadId);
+      const owner = turnResourceOwners.get(node.threadId);
+      if (started && owner && directCoordinationSettlers.get(owner.generation)?.nodeId === node.id && groupSpeakers.get(node.threadId)?.botId === bot.id) {
+        revokeInternalCapabilityGeneration(node.threadId, owner.generation);
         void runningTurnInstance(bot, node.threadId)?.adapter.interruptTurn(node.threadId).catch(() => {});
       }
     };
