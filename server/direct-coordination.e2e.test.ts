@@ -853,6 +853,37 @@ it("keeps an expired allocation across status and continue, then records only an
   expect(await alloc()).toBeUndefined();
 }), 90_000);
 
+it("continues delegated work after the allocation expires and reports the miss", () => fixture(async f => {
+  await f.api(`/api/bots/${f.lead.id}`, { admissionRequired: true }, "PATCH");
+  f.plan[f.chief.id] = { turns: [
+    { reply: "Acknowledged" },
+    { steps: [{ arguments: {
+      bot_ids: [f.lead.id], message: "Continue the LinkedIn post after the deadline",
+      admission: {
+        objective_id: "launch", brief_revision: "brief-v1", workflow: "single-channel",
+        deliverables: [{ id: "post", channel: "linkedin", account: "fixture-linkedin-account", acceptance: "provider URN" }],
+        operations: ["prepare", "publish", "verify"],
+      },
+    } }], reply: "Delegated after the deadline" },
+    { reply: "Reviewed the late result" },
+  ] };
+  f.plan[f.lead.id] = { reply: "Work completed after the deadline" };
+  f.save();
+  const send = async (text: string) => {
+    await f.cli("send", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--text", text);
+    return f.cli("wait", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--timeout", "30");
+  };
+  await send("YOU HAVE 1 SECOND. Acknowledge this allocation.");
+  await new Promise(resolve => setTimeout(resolve, 1_200));
+  expect((await send("Continue the same work; the deadline is missed.")).status).toBe("settled");
+  const child = f.nodes().find((node: any) => node.parentId);
+  expect(child).toBeTruthy();
+  expect(child.result).toContain("TIME ALLOCATION EXPIRED");
+  const delegated = f.evidence().filter((turn: any) => turn.botId === f.chief.id)[1].evidence.find((entry: any) => entry.step);
+  expect(delegated.response.result.isError).toBeFalsy();
+  expect((await f.messages(child.threadId)).some((message: any) => message.text === "Work completed after the deadline")).toBe(true);
+}), 90_000);
+
 it("requires admission on an executor marked admissionRequired even from a sender without receiptsFor", () => fixture(async f => {
   await f.api(`/api/bots/${f.lead.id}`, { admissionRequired: true }, "PATCH");
   f.plan[f.chief.id] = { steps: [{ arguments: { bot_ids: [f.lead.id], message: "Publish six channels" }, expectError: true }], reply: "Refused" };

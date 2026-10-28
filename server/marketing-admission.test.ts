@@ -105,6 +105,21 @@ describe("marketing admission", () => {
     }
   });
 
+  it("keeps work authorized after the allocation ends and reports the miss", () => {
+    const result = validateMarketingAdmission({ ...single(), estimatedDurationMs: 5 * 60_000 }, {
+      now: NOW + 11 * 60_000, deadlineAt: NOW + 10 * 60_000, owner: "Blake",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.timing).toMatchObject({ estimate: "known", missed: true });
+      expect(result.note).toContain("remains authorized");
+      expect(result.note).toContain("report the missed deadline");
+      const brief = admissionBrief(result.admission, result.timing);
+      expect(brief).toContain("Time allocation: missed");
+      expect(brief).toContain("continue it");
+    }
+  });
+
   it("does not pretend an unknown duration is feasible", () => {
     const result = validateMarketingAdmission(single(), { now: NOW, deadlineAt: NOW + 10 * 60_000 });
     expect(result.ok).toBe(true);
