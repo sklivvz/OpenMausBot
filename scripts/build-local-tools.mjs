@@ -5,6 +5,7 @@ const bundles = [
   ["../deploy/perk/build.mjs", "../deploy/local/perk-mcp.cjs"],
   ["../deploy/threads/build.mjs", "../deploy/local/threads-mcp.cjs"],
   ["../deploy/bluesky/build.mjs", "../deploy/local/bluesky-mcp.cjs"],
+  ["../deploy/tinyurl/build.mjs", "../deploy/local/tinyurl-mcp.cjs"],
   ["../deploy/execution-tools/build.mjs", "../deploy/local/execution-tools-mcp.cjs"],
   ["../deploy/review-packet/build.mjs", "../deploy/local/review-packet-mcp.cjs"],
   ["../deploy/assembled-output/build.mjs", "../deploy/local/assembled-output-verify"],
