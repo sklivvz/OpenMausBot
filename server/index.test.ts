@@ -11170,6 +11170,101 @@ describe("harness HTTP API", () => {
     }
   });
 
+  it("lets an authenticated admin update an exact learned revision with an undoable user receipt", async () => {
+    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    try {
+      const token = await mintTestCapability(BASE, bot.id, bot.threadId, { skillAuthoring: true });
+      const original = "---\nname: owner-fixture\ndescription: Fixture instructions.\n---\nOriginal instructions.\n";
+      const replacement = original.replace("Original", "Reviewed");
+      const digest = (text: string) => createHash("sha256").update(text).digest("hex");
+      const created = await fetch(`${BASE}/api/internal/skills/stage`, {
+        method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ fromBotId: bot.id, fromThreadId: bot.threadId, action: "create", source: "conversation",
+          skill_md: original, references: [{ path: "references/details.md", content: "Fixture reference.\n" }] }),
+      });
+      expect(created.status).toBe(201);
+      const admin = await asPairedPerson("Owner skill fixture");
+      const pair = await api("POST", "/api/auth/pairing", { scopes: ["client"] });
+      const memberResponse = await fetch(`${BASE}/api/auth/pair`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: pair.body.code }) });
+      const member = await memberResponse.json() as { token: string };
+      const path = `/api/bots/${bot.id}/skills/owner-fixture`;
+      const input = { text: replacement, expectedSha256: digest(original), expectedNewSha256: digest(replacement) };
+      expect((await api("PUT", path, input)).status).toBe(403);
+      const invalid = await fetch(`${BASE}${path}`, { method: "PUT", headers: { authorization: "Bearer invalid", "content-type": "application/json" }, body: JSON.stringify(input) });
+      expect([401, 403]).toContain(invalid.status);
+      const denied = await fetch(`${BASE}${path}`, { method: "PUT", headers: { authorization: `Bearer ${member.token}`, "content-type": "application/json" }, body: JSON.stringify(input) });
+      expect(denied.status).toBe(403);
+      expect((await admin.call("PUT", path, { ...input, expectedSha256: "0".repeat(64) })).status).toBe(409);
+      expect((await admin.call("PUT", path, { ...input, expectedNewSha256: "0".repeat(64) })).status).toBe(409);
+      const secretText = `${replacement}Bearer ${"a".repeat(24)}\n`;
+      const redacted = await admin.call("PUT", path, { text: secretText, expectedSha256: digest(original), expectedNewSha256: digest(secretText) });
+      expect(redacted.status).toBe(409);
+      expect(JSON.stringify(redacted.body)).not.toContain(secretText);
+      expect((await api("GET", path)).body.text).toBe(original);
+      expect((await api("GET", `/api/bots/${bot.id}/skills`)).body.staged).toEqual([]);
+      expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "Hold a fixture turn." })).status).toBe(202);
+      await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).body.bots.find((row: { id: string }) => row.id === bot.id)?.busy, { timeout: 10_000 }).toBe(true);
+      expect((await admin.call("PUT", path, input)).status).toBe(409);
+      expect((await api("GET", `/api/bots/${bot.id}/skills`)).status).toBe(200);
+      expect((await api("POST", `/api/bots/${bot.id}/interrupt`, { threadId: bot.threadId })).status).toBe(200);
+      await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).body.bots.find((row: { id: string }) => row.id === bot.id)?.busy, { timeout: 10_000 }).toBe(false);
+      const beforeRows = (await api("GET", `/api/threads/${bot.threadId}/messages?limit=200`)).body.messages;
+      const applied = await admin.call("PUT", path, input);
+      expect(applied.status).toBe(200);
+      expect(applied.body.skill).toMatchObject({ sha256: digest(replacement), enabled: true, editable: true, source: "learn:conversation" });
+      expect((await api("GET", path)).body.text).toBe(replacement);
+      const reference = join(home, ".openmausbot", "workspaces", bot.id, ".agents", "skills", "owner-fixture", "references", "details.md");
+      expect(readFileSync(reference, "utf8")).toBe("Fixture reference.\n");
+      const receiptId = applied.body.receipt.requestId;
+      const afterRows = (await api("GET", `/api/threads/${bot.threadId}/messages?limit=200`)).body.messages;
+      const added = afterRows.filter((row: { id: string }) => !beforeRows.some((previous: { id: string }) => previous.id === row.id));
+      expect(added).toHaveLength(1);
+      expect(added[0].card).toMatchObject({ requestId: receiptId, answered: "allow", skillRequest: { action: "update" } });
+      expect((await api("GET", "/api/decisions")).body.decisions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ requestId: receiptId, decision: "user-approved", source: "user", tool: "stage_skill" }),
+      ]));
+      expect((await api("POST", `/api/threads/${bot.threadId}/undo`, { requestId: receiptId })).body).toMatchObject({ undone: true });
+      expect((await api("GET", path)).body.text).toBe(original);
+      expect(readFileSync(reference, "utf8")).toBe("Fixture reference.\n");
+      expect((await api("GET", `/api/bots/${bot.id}/skills`)).body.skills).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "owner-fixture", enabled: true, editable: true, sha256: digest(original) }),
+      ]));
+      expect((await api("PATCH", path, { enabled: false })).status).toBe(200);
+      expect((await admin.call("PUT", path, input)).body.skill).toMatchObject({ enabled: false, editable: true, sha256: digest(replacement) });
+      expect((await api("PATCH", path, { enabled: true })).status).toBe(200);
+      writeFileSync(join(home, ".openmausbot", "workspaces", bot.id, ".agents", "skills", "owner-fixture", "SKILL.md"), "tampered");
+      const tampered = await admin.call("PUT", path, { text: original, expectedSha256: digest(replacement), expectedNewSha256: digest(original) });
+      expect(tampered.status).toBe(409);
+      expect((await api("GET", `/api/bots/${bot.id}/skills`)).body.staged).toEqual([]);
+    } finally {
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  });
+
+  it("runs the configured auto-sharing hook for an owner skill update", async () => {
+    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    const old = "---\nname: share-owner-fixture\ndescription: Fixture instructions.\n---\nOriginal.\n";
+    const next = old.replace("Original", "Updated");
+    const digest = (text: string) => createHash("sha256").update(text).digest("hex");
+    try {
+      const token = await mintTestCapability(BASE, bot.id, bot.threadId, { skillAuthoring: true });
+      const created = await fetch(`${BASE}/api/internal/skills/stage`, { method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ fromBotId: bot.id, fromThreadId: bot.threadId, action: "create", source: "conversation", skill_md: old }) });
+      expect(created.status).toBe(201);
+      expect((await api("PATCH", "/api/config", { features: { skillsLibrary: true, shareLearnedSkills: "auto" } })).status).toBe(200);
+      const admin = await asPairedPerson("Owner sharing fixture");
+      const result = await admin.call("PUT", `/api/bots/${bot.id}/skills/share-owner-fixture`,
+        { text: next, expectedSha256: digest(old), expectedNewSha256: digest(next) });
+      expect(result.status).toBe(200);
+      expect(result.body.shared).toBeTruthy();
+      expect((await api("GET", "/api/skills-library/share-owner-fixture")).body.text).toBe(next);
+    } finally {
+      await api("PATCH", "/api/config", { features: { skillsLibrary: false, shareLearnedSkills: "off" } });
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  });
+
   it("stages learned skill references on the card and explains the SKILL.md size cap", async () => {
     const bot = (await api("POST", "/api/bots", {})).body.bot;
     try {

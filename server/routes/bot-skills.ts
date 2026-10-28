@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SkillsLibrarySkillWire } from "../../shared/wire.ts";
@@ -7,10 +8,11 @@ import { botSkillTemplateSchema } from "../new-bot-defaults.ts";
 import { fetchSkillFromSource } from "../skill-fetch.ts";
 import { installLibrarySkill, listLibrarySkills, readLibrarySkillFile, readSkillLibraryIndex, setLibrarySkillReviewState, skillsLibraryEnabled } from "../skill-library.ts";
 import {
-  installSkill, listBotSkillsWithOrigin, listStagedSkillWrites, parseSkillMd, removeSkill, scanSkillText, setSkillEnabled,
+  installSkill, listBotSkillsWithOrigin, listSkills, listStagedSkillWrites, parseSkillMd, rejectStagedSkillWrite, removeSkill, scanSkillText, setSkillEnabled, stageSkillWrite, STAGED_SKILL_FILE_MAX_BYTES,
   type SkillListing, type StagedSkillWrite,
 } from "../skills.ts";
 import type { BotRecord, Store } from "../store.ts";
+import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotSkillsRouteDeps {
@@ -19,11 +21,15 @@ export interface BotSkillsRouteDeps {
   listBotSkills(bot: BotRecord, threadId?: string): SkillListing[];
   readBotSkillFile(bot: BotRecord, name: string): string | null;
   stagedSkillListing(staged: StagedSkillWrite): Omit<StagedSkillWrite, "files" | "baseSha256" | "baseAppliedStageId">;
+  ownerMayUpdate(auth: RequestAuth): boolean;
+  ownerUpdateBusy(bot: BotRecord): boolean;
+  applyOwnerUpdate(bot: BotRecord, staged: StagedSkillWrite, auth: RequestAuth):
+    { result: SkillListing; settlementPending?: boolean; message?: string; receipt?: { requestId: string; summary: string }; shared?: string; shareError?: string } | { error: string };
 }
 
 export function createBotSkillsRoutes(deps: BotSkillsRouteDeps): RouteHandler {
   const { store, cfg, listBotSkills, readBotSkillFile, stagedSkillListing } = deps;
-  return async ({ req, res, url, path, method, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
     let m: RegExpMatchArray | null = null;
     // Imports land DISABLED: a person enables one after reading SKILL.md and its scan warnings.
     m = path.match(/^\/api\/bots\/([\w-]+)\/skill-template$/);
@@ -77,6 +83,47 @@ export function createBotSkillsRoutes(deps: BotSkillsRouteDeps): RouteHandler {
       return json(res, 201, { installed, errors });
     }
     m = path.match(/^\/api\/bots\/([\w-]+)\/skills\/([a-z0-9-]+)$/);
+    if (m && method === "PUT") {
+      if (!deps.ownerMayUpdate(auth)) return json(res, 403, { error: "An authenticated admin must update learned skills." });
+      const parsed = z.object({
+        text: z.string().min(1).refine((text) => Buffer.byteLength(text, "utf8") <= STAGED_SKILL_FILE_MAX_BYTES),
+        expectedSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        expectedNewSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      }).strict().safeParse(await readBody(req));
+      if (!parsed.success) return json(res, 400, { error: "Provide skill text and both exact SHA-256 hashes." });
+      if (!deps.ownerMayUpdate(auth)) return json(res, 403, { error: "The admin session is no longer active." });
+      const bot = store.bot(m[1]);
+      if (!bot) return json(res, 404, { error: "no such bot" });
+      if (deps.ownerUpdateBusy(bot)) return json(res, 409, { error: "Wait for the bot's active turns to finish before updating its skills." });
+      const current = listSkills(bot.id).find((skill) => skill.name === m![2]);
+      if (!current) return json(res, 404, { error: "no such learned skill" });
+      if (!current.editable) return json(res, 409, { error: "Only an editable learned skill can be updated." });
+      if (current.sha256 !== parsed.data.expectedSha256) return json(res, 409, { error: "The learned skill changed since it was read." });
+      if (createHash("sha256").update(parsed.data.text).digest("hex") !== parsed.data.expectedNewSha256) {
+        return json(res, 409, { error: "The replacement does not match its expected SHA-256." });
+      }
+      const staged = stageSkillWrite(bot.id, { action: "update", targetName: m[2], source: current.source,
+        files: [{ path: "SKILL.md", content: parsed.data.text }] });
+      if ("error" in staged) return json(res, 409, { error: staged.error });
+      if (staged.baseSha256 !== parsed.data.expectedSha256 || staged.sha256 !== parsed.data.expectedNewSha256) {
+        rejectStagedSkillWrite(bot.id, staged.id);
+        return json(res, 409, { error: "The reviewed skill changed before the update could be applied." });
+      }
+      let applied: ReturnType<BotSkillsRouteDeps["applyOwnerUpdate"]>;
+      try {
+        applied = deps.applyOwnerUpdate(bot, staged, auth);
+      } catch (error) {
+        rejectStagedSkillWrite(bot.id, staged.id);
+        throw error;
+      }
+      if ("error" in applied) {
+        rejectStagedSkillWrite(bot.id, staged.id);
+        return json(res, 409, { error: applied.error });
+      }
+      return json(res, 200, { skill: applied.result, receipt: applied.receipt ?? null,
+        ...(applied.settlementPending ? { settlementPending: true, message: applied.message } : {}),
+        ...(applied.shared ? { shared: applied.shared } : {}), ...(applied.shareError ? { shareError: applied.shareError } : {}) });
+    }
     if (m && method === "GET") {
       const bot = store.bot(m[1]);
       const text = bot ? readBotSkillFile(bot, m[2]!) : null;

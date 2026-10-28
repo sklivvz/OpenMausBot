@@ -12051,6 +12051,18 @@ function applyOwnStagedSkill(
   return "error" in applied ? applied : skillsHost.afterOwnApply(from.id, threadId, staged, applied);
 }
 
+function applyOwnerStagedSkill(from: BotRecord, staged: ReturnType<typeof listStagedSkillWrites>[number], auth: RequestAuth) {
+  const threadId = from.threadId;
+  const previous = previousSkillVersion(from.id, staged);
+  let receipt: { requestId: string; summary: string } | undefined;
+  const applied = withDecisionActor(decisionActorFor(auth), () => applySkillWriteWithReceipt(from.id, staged, () => {
+    receipt = appendSkillRequestCard({ botId: from.id, threadId, staged, applied: true, previous });
+    appendDecision(DATA_DIR, { threadId, requestId: receipt.requestId, botId: from.id, botName: from.name,
+      tool: "stage_skill", summary: receipt.summary, decision: "user-approved", source: "user" });
+  }));
+  return "error" in applied ? applied : { ...skillsHost.afterOwnApply(from.id, threadId, staged, applied), ...(receipt ? { receipt } : {}) };
+}
+
 function appendSkillRequestCard(args: {
   botId: string;
   threadId: string;
@@ -13164,7 +13176,11 @@ ROUTES.push(createBotLifecycleRoutes({
   store, routines: () => routines, interruptAllDirectThreads, cancelDirectTurnDispatch, revokeInternalCapabilitiesForThread,
   activeGroupTurnForBot, cancelGroupTurnOperations, runningTurnInstance, closeOpenApprovals, deleteBotWithLifecycle,
 }));
-ROUTES.push(createBotSkillsRoutes({ store, cfg, listBotSkills, readBotSkillFile, stagedSkillListing }));
+ROUTES.push(createBotSkillsRoutes({ store, cfg, listBotSkills, readBotSkillFile, stagedSkillListing,
+  ownerMayUpdate: (auth) => auth.kind === "session" && auth.scopes.includes("admin") && sessions.isLive(auth.session.id),
+  ownerUpdateBusy: (bot) => bot.busy || Boolean(activeGroupTurnForBot(bot.id)) || store.tasks(bot.id).some((task) => threadBusy(bot.id, task.threadId)),
+  applyOwnerUpdate: applyOwnerStagedSkill,
+}));
 ROUTES.push(createHighLevelRoutes({ service: highlevel }));
 ROUTES.push(phones.routes);
 ROUTES.push(createSkillShareRoutes({ enabled: () => skillsHost.mode() !== "off", botExists: (id) => Boolean(store.bot(id)),
