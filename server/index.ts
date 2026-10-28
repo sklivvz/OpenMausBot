@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { authorizeExternalRuntime, externalRuntimeIsActive, type ExternalRuntimeGrant } from "./external-runtime.ts";
 import { z } from "zod";
 import { selectReplay, replayToolCalls, DEFAULT_REBUILD_BYTES, MAX_SUMMARY_BYTES } from "./context-rebuild.ts";
+import { compactedUserContext } from "./compaction-user-context.ts";
 import { draftSummary, foldPoint } from "./compaction-summary.ts";
 import { compactBudget, compactionReading, contextWindowFor, shouldCompact } from "./context-budget.ts";
 import { autoCompactWindow } from "./drivers/claude.ts";
@@ -5912,11 +5913,18 @@ function ingestEngineHook(capability: InternalCapability, body: unknown): { ok: 
   if (name === "SessionStart") {
     if (payload.source !== "compact") return { ok: true, ignored: `SessionStart ${String(payload.source ?? "")}` };
     const bot = store.bot(capability.botId);
+    const userContext = compactedUserContext(store.activePath(threadId));
     const digests = store.activePath(threadId).filter((m) => m.kind === "digest" && m.digest).slice(-DIGESTS_AFTER_COMPACTION);
-    chip(`context compacted — re-sent the last ${digests.length} digest${digests.length === 1 ? "" : "s"}`);
-    if (!digests.length) return { ok: true };
-    const context = digests.map((m) => digestPromptLine(m.digest!, m.from?.name ?? store.bot(m.digest!.botId)?.name ?? bot?.name ?? "the bot")).join("\n");
-    return { ok: true, context };
+    const resent = [
+      userContext.count ? `${userContext.count} user message${userContext.count === 1 ? "" : "s"}` : "",
+      digests.length ? `the last ${digests.length} digest${digests.length === 1 ? "" : "s"}` : "",
+    ].filter(Boolean);
+    chip(`context compacted — ${resent.length ? `re-sent ${resent.join(" and ")}` : "nothing to re-send"}${userContext.omitted ? `; ${userContext.omitted} user message${userContext.omitted === 1 ? "" : "s"} omitted` : ""}`);
+    const digestContext = digests
+      .map((m) => digestPromptLine(m.digest!, m.from?.name ?? store.bot(m.digest!.botId)?.name ?? bot?.name ?? "the bot"))
+      .join("\n");
+    const context = [userContext.text, digestContext].filter(Boolean).join("\n\n");
+    return context ? { ok: true, context } : { ok: true };
   }
   if (name === "Stop") return { ok: true };
   if (name === "PostToolUseFailure") return shellTimeoutHookResult(payload);

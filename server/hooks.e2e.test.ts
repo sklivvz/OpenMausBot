@@ -90,10 +90,10 @@ function harness(label: string, serverEnv: Record<string, string>, instanceEnv: 
     getBot,
     waitFor,
     home: () => home,
-    runTurn: async () => {
+    runTurn: async (text = "read the big log", headers: Record<string, string> = {}, sendId?: string) => {
       const created = (await api("POST", "/api/bots")).body.bot;
       expect((await api("PATCH", `/api/bots/${created.id}`, { modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
-      expect((await api("POST", `/api/bots/${created.id}/messages`, { text: "read the big log" })).status).toBe(202);
+      expect((await api("POST", `/api/bots/${created.id}/messages`, { text, ...(sendId ? { sendId } : {}) }, headers)).status).toBe(202);
       await waitFor(async () => {
         const b = await getBot(created.id);
         return !!b && !b.busy && b.messages.some((m: Msg) => m.kind === "digest");
@@ -142,22 +142,35 @@ posixOnly("engine hooks e2e (fake Claude honouring the settings hooks)", () => {
 posixOnly("engine hooks e2e: compaction", () => {
   const h = harness("compact", {}, { FAKE_CLAUDE_COMPACT: "1" });
 
-  it("records the compaction in the transcript and hands the latest digests back to the engine as plain-text context", async () => {
-    const bot = await h.runTurn();
-    // The fake runs PreCompact then SessionStart(compact) at the start of its second turn, so run one more turn.
-    expect((await h.api("POST", `/api/bots/${bot.id}/messages`, { text: "and again, after compaction" })).status).toBe(202);
+  it("records the compaction and hands the person's own words plus the latest digests back to the engine", async () => {
+    const pairing = await h.api("POST", "/api/auth/pairing", { scopes: ["client"] });
+    const paired = await h.api("POST", "/api/auth/pair", { code: pairing.body.code, label: "Marco" });
+    expect(paired.status).toBe(200);
+    const auth = { authorization: `Bearer ${paired.body.token}` };
+    const decision = "Paul Murkin: keep him on the list.";
+    const bot = await h.runTurn(decision, auth, "person-decision-1");
+    expect((await h.api("POST", `/api/bots/${bot.id}/messages`, { text: "SWISS ROUTINE PROMPT" })).status).toBe(202);
     await h.waitFor(async () => {
       const b = await h.getBot(bot.id);
       return !b.busy && b.messages.filter((m: Msg) => m.kind === "digest").length >= 2;
     }, "the second turn to settle with its digest");
+    expect((await h.api("POST", `/api/bots/${bot.id}/messages`, { text: "later correction: keep Paul", sendId: "person-correction-2" }, auth)).status).toBe(202);
+    await h.waitFor(async () => {
+      const b = await h.getBot(bot.id);
+      return !b.busy && b.messages.filter((m: Msg) => m.kind === "digest").length >= 3;
+    }, "the third turn to settle with its digest");
     const after = await h.getBot(bot.id);
     const chips: Msg[] = after.messages.filter((m: Msg) => m.kind === "activity" && m.tool?.name.startsWith("context compact"));
     expect(chips.map((m) => m.tool!.name)).toEqual([
       "context compaction started (auto)",
-      "context compacted — re-sent the last 1 digest",
+      "context compacted — re-sent 1 user message and the last 1 digest",
+      "context compaction started (auto)",
+      "context compacted — re-sent 2 user messages and the last 2 digests",
     ]);
-    // The fake echoes what SessionStart's stdout gave it: the first turn's digest line.
     const replies: Msg[] = after.messages.filter((m: Msg) => m.role === "bot" && m.kind === "text" && m.text);
+    expect(replies.at(-1)!.text).toContain(JSON.stringify(decision));
+    expect(replies.at(-1)!.text).toContain("later correction: keep Paul");
+    expect(replies.at(-1)!.text).not.toContain("SWISS ROUTINE PROMPT");
     expect(replies.at(-1)!.text).toContain("[What ");
     expect(replies.at(-1)!.text).toContain("did in an earlier turn");
     expect(replies.at(-1)!.text).toContain("Bash ×1");

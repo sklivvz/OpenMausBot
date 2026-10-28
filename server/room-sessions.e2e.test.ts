@@ -416,7 +416,7 @@ it("sends the whole window again after Claude Code compacted the member's sessio
   expect(f.text(second)).toContain(NOTE);
   expect(count(f.text(second), "ALPHA_7")).toBe(0);
   const compactions = (await f.messages(bay.activeTaskId)).map((message) => message.tool?.name ?? "").filter((name) => name.startsWith("context compact"));
-  expect(compactions.slice(0, 2)).toEqual(["context compaction started (auto)", expect.stringMatching(/^context compacted — re-sent the last \d+ digests?$/)]);
+  expect(compactions.slice(0, 2)).toEqual(["context compaction started (auto)", expect.stringMatching(/^context compacted — re-sent (?:\d+ user messages?(?: and the last \d+ digests?)?|the last \d+ digests?)$/)]);
   // The session holds the CLI's summary now, not the room's lines: the next
   // turn carries the whole window, as every turn does with the setting off.
   expect(f.text(third)).not.toContain(NOTE);
