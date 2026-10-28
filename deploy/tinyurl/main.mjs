@@ -30,10 +30,18 @@ async function call(name, args) {
       return { status: 'ok', configured: false, domain: 'tinyurl.com', tokenPresent: false, stateDirectoryPresent: false, timeoutMs: 4000 };
     }
   }
-  if (name !== 'tinyurl_create') return blocked('unknown_tool', 'Use tinyurl_create or tinyurl_status.');
+  const operations = {
+    tinyurl_create: 'create',
+    tinyurl_read: 'read',
+    tinyurl_update: 'update',
+    tinyurl_change_destination: 'changeDestination',
+    tinyurl_delete: 'remove',
+  };
+  const operation = operations[name];
+  if (!operation) return blocked('unknown_tool', 'Use tinyurl_create, tinyurl_read, tinyurl_update, tinyurl_change_destination, tinyurl_delete or tinyurl_status.');
   try {
     bridge ??= createBridge(loadConfig());
-    return await bridge.create(args);
+    return await bridge[operation](args);
   } catch (error) {
     if (error?.code) return blocked(error.code, error.nextAction ?? 'Operator must review connector configuration.');
     return blocked('internal_error', 'Connector failed without an explicit outcome. Do not retry an ambiguous write.');

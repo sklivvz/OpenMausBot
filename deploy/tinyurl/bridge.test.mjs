@@ -185,6 +185,13 @@ test('validates URL, alias and fixed domain before any request', async () => {
   assert.equal(calls, 0);
 });
 
-test('exposes only the create and status tools', () => {
-  assert.deepEqual(toolDefinitions.map(tool => tool.name).sort(), ['tinyurl_create', 'tinyurl_status']);
+test('exposes create, status and the bounded CRUD tools', () => {
+  assert.deepEqual(toolDefinitions.map(tool => tool.name).sort(), [
+    'tinyurl_change_destination',
+    'tinyurl_create',
+    'tinyurl_delete',
+    'tinyurl_read',
+    'tinyurl_status',
+    'tinyurl_update',
+  ]);
 });
