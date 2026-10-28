@@ -422,26 +422,55 @@ describe("Runtime: one tree, one lane", () => {
     invariants(w);
   });
 
-  it("stops awaiting: queued work is dropped, a teammate mid-turn keeps its process and still reports", async () => {
+  it("stops a conversation's whole active subtree, aborts its running turn, and leaves another conversation alone", async () => {
     const w = world(() => "hold");
     const root = w.runtime.begin(beginReq());
     const running = ok(w.runtime.enqueue(toBot("running", root.id)));
+    w.runtime.tick();
+    const otherRoot = w.runtime.begin(beginReq({
+      id: "other-root",
+      assignee: { botId: "chief", destination: { kind: "standing_thread", threadId: "other-chat" } },
+      requester: { kind: "person", threadId: "other-chat", chief: true },
+    }));
+    const other = ok(w.runtime.enqueue(toBot("other", otherRoot.id, "Separate work",
+      { assignee: { botId: "other", destination: { kind: "work_thread", threadId: "other-work" } } })));
     w.runtime.tick();
     w.runner.canStartAnswer = false;
     const queued = ok(w.runtime.enqueue(toBot("queued", root.id)));
     w.runtime.tick();
     const left = w.runtime.stopRequester({ threadId: "chief-chat" });
-    expect(left.map(a => a.id)).toEqual([running.id]);
+    expect(left).toEqual([]);
     expect(w.store.get(queued.id)).toMatchObject({ status: "cancelled", outcomeDetail: "Stopped before it started" });
+    expect(w.store.get(running.id)).toMatchObject({ status: "cancelled", outcome: "stopped", outcomeDetail: "Stopped by user" });
     expect(w.store.get(root.id)).toMatchObject({ status: "cancelled", outcome: "stopped" });
-    expect(w.runner.runs[0]!.signal.aborted).toBe(false);
+    expect(w.runner.runs[0]!.signal.aborted).toBe(true);
+    expect(w.runner.reports.map(r => r.a.id)).toEqual([root.id, running.id, queued.id]);
+    expect(w.store.inbox({ threadId: "chief-chat" })).toEqual([]);
+    expect(w.store.events(running.id).some(e => e.kind === "woken")).toBe(false);
+    expect(w.store.get(otherRoot.id)).toMatchObject({ status: "running" });
+    expect(w.store.get(other.id)).toMatchObject({ status: "running" });
+    expect(w.runner.runs[1]!.signal.aborted).toBe(false);
     await w.runner.release(running.id, { kind: "completed", text: "finished anyway" });
-    expect(w.store.get(running.id)).toMatchObject({ status: "completed", result: "finished anyway" });
-    expect(w.runner.reports.map(r => r.a.id)).toEqual([queued.id, root.id, running.id]);
+    expect(w.store.get(running.id)).toMatchObject({ status: "cancelled", result: "Stopped by user" });
     w.runtime.tick();
     expect(w.store.get(root.id)?.status).toBe("cancelled");
-    expect(w.runner.runs).toHaveLength(1);
+    expect(w.runner.runs).toHaveLength(2);
     expect(w.runtime.stopRequester({ threadId: "chief-chat" })).toEqual([]);
+    invariants(w);
+  });
+
+  it("leaves an independent one-way notice running after its completed request's conversation is stopped", () => {
+    const w = world(() => "hold");
+    const root = w.runtime.begin(beginReq());
+    const notice = ok(w.runtime.enqueue(toBot("ops", root.id, "FYI", { mode: "notify" })));
+    w.runtime.tick();
+    const signal = w.runner.runs[0]!.signal;
+    w.runtime.end(root.id, { ok: true, text: "notified" });
+    expect(w.store.get(root.id)?.status).toBe("completed");
+    expect(w.store.get(notice.id)?.status).toBe("running");
+    expect(w.runtime.stopRequester({ threadId: "chief-chat" })).toEqual([]);
+    expect(w.store.get(notice.id)?.status).toBe("running");
+    expect(signal.aborted).toBe(false);
     invariants(w);
   });
 

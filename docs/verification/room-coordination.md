@@ -351,8 +351,8 @@ the tools can be called straight from the prompt.
 Unit checks cover bounded depth/fan-out, idempotent retry, original request
 retention, automatic return, cancellation, restart recovery (one rerun in
 place, a second cut ending it, the requester told, budgets restarted at boot,
-nothing dispatched while shutting down), and the scoped stop: unstarted work cancelled, a running teammate left with its
-process, its result still reported, and no resume of the stopped conversation.
+nothing dispatched while shutting down), and the scoped stop: the requester's whole active tree cancelled, including a
+running teammate turn, with work outside it preserved, every cancellation reported, and no resume of the stopped conversation.
 Turn-correlation checks cover completion before the provider's dispatch ACK,
 late completion after Stop and a replacement turn, cross-thread isolation, and
 bounded single-use early receipts. Coordination uses the exact provider turn's
@@ -405,11 +405,10 @@ the runtime's depth limit bounds the tree. A teammate's hand-off to a bot
 runs in that bot's work thread for the sender, never in a conversation a
 coordination lives in, so it cancels no coordination there. Finish together
 remains separate too. Cancelling a request
-stops the descendants it is still waiting on, except a teammate whose turn had
-already started when the person stopped the conversation above it: that process
-is left alone and reports its result. A restart runs each teammate turn it
-cut again once, in place and told to check what it already did, and tells its
-requester (see the top of this page).
+stops the request and all of its active descendants, including a teammate whose
+turn had already started. Work outside that tree is left alone. A restart runs
+each teammate turn it cut again once, in place and told to check what it already
+did, and tells its requester (see the top of this page).
 Limits (docs/runtime-contract.md §6; `DEFAULT_LIMITS` in `server/runtime/types.ts`
 and the coordinator's overrides): depth 4; per root, 24 requests, 48 executions
 and 48 wakes since its last durable progress; a queued assignment that never

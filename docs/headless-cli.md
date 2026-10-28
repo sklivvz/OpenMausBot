@@ -111,11 +111,10 @@ conversation and when the job began (`since`), so a later `openmausbot wait
   empty, and that is checked before anything is sent; `--force` writes into a
   folder that already has files.
 
-A teammate the bot sent a one-way notice to, or one still working after the
-bot was stopped, does not hold the job open: nobody is waiting on it. A
-message no turn ran for at all (a room set to answer mentions, sent a message
-that names nobody; a queued message removed before its turn) is not a job
-done: `run` ends with `state: "idle"` and exit 1.
+A teammate the bot sent a one-way notice to does not hold the job open: nobody
+is waiting on it. A message no turn ran for at all (a room set to answer mentions,
+sent a message that names nobody; a queued message removed before its turn) is not
+a job done: `run` ends with `state: "idle"` and exit 1.
 
 With `--json` the result carries the job's `state` (`completed`, `idle`,
 `needs-input`, `failed`, `stalled` or `timed-out`), which the exit code
@@ -135,11 +134,9 @@ and `wait` keep asking for the same job until their time runs out; a refusal
 (an expired token) ends them with exit 5 at once.
 
 Stopping a job (`interrupt --tree`, `--on-input stop`, `--on-timeout stop`)
-presses Stop in its conversation, then in each teammate's own conversation
-that still holds part of it: a turn still running, waiting on its own
-teammates, parked on an answer, or about to run again. Work that never
-started is dropped by the first Stop, and its teammate's conversation is left
-alone.
+presses Stop in its conversation, which cancels the request's whole active tree;
+`--tree` also presses Stop in each teammate's own conversation for work the first
+Stop could not reach. Work outside the stopped tree is left alone.
 
 The waiting is done by the server: each request is held until the job
 changes, so a long wait costs one request at a time, not a poll loop. The
