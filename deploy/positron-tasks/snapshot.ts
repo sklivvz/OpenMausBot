@@ -51,8 +51,10 @@ export function taskUrl(taskId: string, webOrigin = TASKS_WEB_ORIGIN): string {
   return new URL(`/tasks/${encodeURIComponent(taskId)}`, webOrigin).href;
 }
 
+const callerBotId = () => process.argv.findLast(arg => arg.startsWith("--positron-caller-bot="))?.slice("--positron-caller-bot=".length) ?? process.env.OMB_BOT_ID;
+
 /** Each bot reads Positron Tasks only with its own credential: `positron-tasks-<bot name slug>` for the bot running this process. */
-export function callerServer(botId = process.env.OMB_BOT_ID, botsFile = BOTS_FILE): string {
+export function callerServer(botId = callerBotId(), botsFile = BOTS_FILE): string {
   need(typeof botId === 'string' && botId.length > 0, 'Positron Tasks read refused: no calling bot (OMB_BOT_ID)');
   const raw = JSON.parse(fs.readFileSync(botsFile, 'utf8'));
   const bot = (Array.isArray(raw) ? raw : raw.bots ?? []).find((b: any) => b?.id === botId);
@@ -67,7 +69,7 @@ export function authorizationFrom(config: any, { server = callerServer(), origin
   need(new URL(entry.url).origin === new URL(origin).origin, `Positron Tasks credential ${server} belongs to another origin`);
   const shared = entry === config?.mcpServers?.['positron-tasks'];
   const authorization = shared
-    ? readPositronTasksCredential(process.env.OMB_BOT_ID, entry.url, process.env.OMB_POSITRON_CREDENTIALS_DIR ?? path.join(os.homedir(), '.openmausbot', 'positron-tasks-credentials'))
+    ? readPositronTasksCredential(callerBotId(), entry.url, process.env.OMB_POSITRON_CREDENTIALS_DIR ?? path.join(os.homedir(), '.openmausbot', 'positron-tasks-credentials'))
     : entry.headers?.Authorization ?? entry.headers?.authorization;
   need(typeof authorization === 'string' && /^Bearer \S{16,4096}$/.test(authorization), `Positron Tasks credential ${server} is invalid`);
   return authorization;

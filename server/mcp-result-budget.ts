@@ -27,7 +27,7 @@ export function attachCustomMcp(
   if (turn) {
     custom = Object.fromEntries(Object.entries(custom).map(([name, server]) =>
       [name, (name === "work-review" || name === "execution-tools") && "command" in server
-        ? { ...server, env: { ...server.env, OMB_BOT_ID: turn.botId } } : server]));
+        ? { ...server, args: [...server.args, `--positron-caller-bot=${turn.botId}`] } : server]));
   }
   if (!Object.keys(custom).length) return;
   integrations.custom = turn ? brokerRemoteMcp(custom, turn) : custom;

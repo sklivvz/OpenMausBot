@@ -22,17 +22,21 @@ test('a read with no calling bot or an unknown bot is refused', () => {
 
 test('shared registration reads only the calling bot credential file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-shared-'));
-  const oldId = process.env.OMB_BOT_ID, oldDir = process.env.OMB_POSITRON_CREDENTIALS_DIR;
+  const oldId = process.env.OMB_BOT_ID, oldArgv = [...process.argv], oldDir = process.env.OMB_POSITRON_CREDENTIALS_DIR;
   try {
     process.env.OMB_BOT_ID = 'b1'; process.env.OMB_POSITRON_CREDENTIALS_DIR = dir;
     fs.writeFileSync(path.join(dir, 'b1.json'), JSON.stringify({ botId: 'b1', url: 'http://positron-mcp:8080/mcp', authorization: 'Bearer fixture-b1-token-123456' }), { mode: 0o600 });
     const config = { mcpServers: { 'positron-tasks': { enabled: true, url: 'http://positron-mcp:8080/mcp' } } };
     assert.equal(authorizationFrom(config, { server: 'positron-tasks-alice' }), 'Bearer fixture-b1-token-123456');
     assert.equal(authorizationFrom(config, { server: '' }), 'Bearer fixture-b1-token-123456');
-    process.env.OMB_BOT_ID = 'b2';
+    process.argv.push('--positron-caller-bot=b2', '--positron-caller-bot=b1');
+    assert.equal(authorizationFrom(config, { server: '' }), 'Bearer fixture-b1-token-123456');
+    process.argv = oldArgv.slice();
+    process.argv.push('--positron-caller-bot=b2');
     assert.throws(() => authorizationFrom(config, { server: 'positron-tasks-alice' }), /invalid/);
   } finally {
     if (oldId === undefined) delete process.env.OMB_BOT_ID; else process.env.OMB_BOT_ID = oldId;
+    process.argv = oldArgv;
     if (oldDir === undefined) delete process.env.OMB_POSITRON_CREDENTIALS_DIR; else process.env.OMB_POSITRON_CREDENTIALS_DIR = oldDir;
     fs.rmSync(dir, { recursive: true, force: true });
   }
