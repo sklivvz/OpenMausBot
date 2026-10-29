@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProviderInstance, RuntimeEvent } from "../contracts.ts";
 import { DATA_DIR, NATIVE_DIR } from "../config.ts";
+import { attachCustomMcp } from "../mcp-result-budget.ts";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-auth.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
 import { CodexDriver, codexNativeIncomingLogMessage, codexUpdateCommand } from "./codex.ts";
@@ -1508,6 +1509,21 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       await instance.adapter.respondToRequest("t-own-call", opened.requestId!, { behavior: "deny" });
       await recorder.until((event) => event.type === "turn.completed");
     });
+  });
+
+  it("starts Codex with bot-scoped work-review and execution-tools", async () => {
+    const dump = join(scratch, "bot-scoped-helpers.json");
+    process.env.FAKE_CODEX_DUMP = dump;
+    await create();
+    const integrations: Parameters<typeof attachCustomMcp>[0] = {};
+    attachCustomMcp(integrations, {
+      "work-review": { command: "fixture", args: [], env: {} },
+      "execution-tools": { command: "fixture", args: [], env: {} },
+    }, { mcpServers: {} } as Parameters<typeof attachCustomMcp>[2], { botId: "fixture-bot", threadId: "fixture-thread" });
+    await expect(instance.adapter.sendTurn({ threadId: "fixture-thread", text: "go", integrations })).resolves.toBeDefined();
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv.some((arg: string) => arg.includes("--positron-caller-bot=fixture-bot"))).toBe(true);
   });
 
   it("does not let a custom MCP server capture a built-in capability variable", async () => {

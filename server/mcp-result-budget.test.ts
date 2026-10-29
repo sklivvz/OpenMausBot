@@ -44,7 +44,7 @@ it("binds the calling bot to the local Positron queue helpers", () => {
     "execution-tools": { command: "fixture", args: [], env: {} },
     unrelated: { command: "fixture", args: [], env: {} },
   }, config, { botId: "bot-a", threadId: "thread-a" });
-  expect(integrations.custom?.["work-review"]).toMatchObject({ env: { OMB_BOT_ID: "bot-a" } });
-  expect(integrations.custom?.["execution-tools"]).toMatchObject({ env: { OMB_BOT_ID: "bot-a" } });
+  expect(integrations.custom?.["work-review"]).toMatchObject({ args: ["--positron-caller-bot=bot-a"] });
+  expect(integrations.custom?.["execution-tools"]).toMatchObject({ args: ["--positron-caller-bot=bot-a"] });
   expect(integrations.custom?.unrelated).toMatchObject({ env: {} });
 });
