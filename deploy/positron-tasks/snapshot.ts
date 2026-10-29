@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { readPositronTasksCredential } from '../../server/positron-tasks-credential-file.ts';
 
 export const TASKS_ORIGIN = 'http://positron-mcp:8080';
 export const TASKS_CONFIG_FILE = path.join(os.homedir(), '.openmausbot', 'config.json');
@@ -61,10 +62,13 @@ export function callerServer(botId = process.env.OMB_BOT_ID, botsFile = BOTS_FIL
 
 /** The token is sent only to the origin its own MCP registration names. */
 export function authorizationFrom(config: any, { server = callerServer(), origin = TASKS_ORIGIN } = {}): string {
-  const entry = config?.mcpServers?.[server];
+  const entry = config?.mcpServers?.[server] ?? config?.mcpServers?.['positron-tasks'];
   need(entry && entry.enabled !== false && typeof entry.url === 'string', `Positron Tasks credential ${server} is not configured`);
   need(new URL(entry.url).origin === new URL(origin).origin, `Positron Tasks credential ${server} belongs to another origin`);
-  const authorization = entry.headers?.Authorization ?? entry.headers?.authorization;
+  const shared = entry === config?.mcpServers?.['positron-tasks'];
+  const authorization = shared
+    ? readPositronTasksCredential(process.env.OMB_BOT_ID, entry.url, process.env.OMB_POSITRON_CREDENTIALS_DIR ?? path.join(os.homedir(), '.openmausbot', 'positron-tasks-credentials'))
+    : entry.headers?.Authorization ?? entry.headers?.authorization;
   need(typeof authorization === 'string' && /^Bearer \S{16,4096}$/.test(authorization), `Positron Tasks credential ${server} is invalid`);
   return authorization;
 }

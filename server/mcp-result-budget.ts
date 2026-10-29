@@ -2,6 +2,7 @@ import { brokerRemoteMcp, type BrokerTurn } from "./bot-box/broker-mcp.ts";
 import type { AppConfig } from "./config.ts";
 import type { McpServerSpec, SendTurnInput } from "./contracts.ts";
 import { parseStoredMcpServer } from "./mcp-registry.ts";
+import { resolvePositronTasksMcp } from "./positron-tasks-credentials.ts";
 
 export function customMcpResultBudgets(cfg: AppConfig, names: readonly string[]): Record<string, number> {
   const out: Record<string, number> = {};
@@ -22,6 +23,7 @@ export function attachCustomMcp(
   /** The turn, so a URL server's secret headers stay with the credential broker on a boxed Cloud home (server/bot-box). */
   turn?: BrokerTurn,
 ): void {
+  custom = resolvePositronTasksMcp(custom, turn?.botId);
   if (!Object.keys(custom).length) return;
   integrations.custom = turn ? brokerRemoteMcp(custom, turn) : custom;
   const budgets = customMcpResultBudgets(cfg, Object.keys(custom));
