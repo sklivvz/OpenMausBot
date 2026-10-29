@@ -28,6 +28,7 @@ test('shared registration reads only the calling bot credential file', () => {
     fs.writeFileSync(path.join(dir, 'b1.json'), JSON.stringify({ botId: 'b1', url: 'http://positron-mcp:8080/mcp', authorization: 'Bearer fixture-b1-token-123456' }), { mode: 0o600 });
     const config = { mcpServers: { 'positron-tasks': { enabled: true, url: 'http://positron-mcp:8080/mcp' } } };
     assert.equal(authorizationFrom(config, { server: 'positron-tasks-alice' }), 'Bearer fixture-b1-token-123456');
+    assert.equal(authorizationFrom(config, { server: '' }), 'Bearer fixture-b1-token-123456');
     process.env.OMB_BOT_ID = 'b2';
     assert.throws(() => authorizationFrom(config, { server: 'positron-tasks-alice' }), /invalid/);
   } finally {
