@@ -24,6 +24,11 @@ export function attachCustomMcp(
   turn?: BrokerTurn,
 ): void {
   custom = resolvePositronTasksMcp(custom, turn?.botId);
+  if (turn) {
+    custom = Object.fromEntries(Object.entries(custom).map(([name, server]) =>
+      [name, (name === "work-review" || name === "execution-tools") && "command" in server
+        ? { ...server, env: { ...server.env, OMB_BOT_ID: turn.botId } } : server]));
+  }
   if (!Object.keys(custom).length) return;
   integrations.custom = turn ? brokerRemoteMcp(custom, turn) : custom;
   const budgets = customMcpResultBudgets(cfg, Object.keys(custom));
