@@ -327,7 +327,7 @@ function isHermesReasoningReplay(chunk: string, streamed: string): boolean {
     && /\n\n[ \t]*$/.test(replay.slice(0, -reply.length));
 }
 
-/** dsh 0.2.1 answers session/resume for a session live in the same process with invalid params,
+/** dsh 0.2.0-rc.2 answers session/resume for a session live in the same process with invalid params,
  *  unlike the usual already-active refusal code. The child must be replaced before resuming. */
 function isLiveSessionAlreadyActive(error: unknown, sessionId: string): boolean {
   const refusal = error as { code?: unknown; message?: unknown; data?: { sessionId?: unknown } };
