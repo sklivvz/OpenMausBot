@@ -19,6 +19,7 @@ import { KimiAgentDriver } from "./kimi.ts";
 import { DroidAgentDriver } from "./droid.ts";
 import { CursorAgentDriver } from "./cursor.ts";
 import { QwenAgentDriver } from "./qwen.ts";
+import { DeepSeekAgentDriver } from "./deepseek.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { TurnWatchdog } from "../../turn-watchdog.ts";
 import { startFakeHttpMcp } from "../../testing/fake-http-mcp-server.ts";
@@ -260,6 +261,7 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_USAGE_ROOT;
     delete process.env.FAKE_ACP_LOAD_NULL;
     delete process.env.FAKE_ACP_REJECT_LIVE_LOAD_FILE;
+    delete process.env.FAKE_ACP_REJECT_LIVE_LOAD_ERROR;
     delete process.env.FAKE_ACP_IMAGE_CAPABILITY;
     delete process.env.FAKE_ACP_GROK_VERSION;
     delete process.env.FAKE_ACP_TOOL_MS;
@@ -2983,6 +2985,54 @@ describe("ACP turns (fake CLI)", () => {
       expect(calls.filter((c) => c.method === "initialize")).toHaveLength(2);
       expect(calls.filter((c) => c.method === "session/new")).toHaveLength(1);
       expect(calls.filter((c) => c.method === "session/load")).toHaveLength(2);
+      expect(calls.filter((c) => c.method === "session/prompt")).toHaveLength(2);
+      expect(new Set(calls.map((c) => c.pid)).size).toBe(2);
+    });
+
+    it("recovers DeepSeek's invalid-params already-active resume with one fresh process and the same session", async () => {
+      countFile = join(scratch, "launches");
+      const appendFile = join(scratch, "rpc-all.jsonl");
+      const rejectFile = join(scratch, "reject-live-resume");
+      process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      process.env.FAKE_ACP_RPC_APPEND_FILE = appendFile;
+      process.env.FAKE_ACP_REJECT_LIVE_LOAD_FILE = rejectFile;
+      process.env.FAKE_ACP_REJECT_LIVE_LOAD_ERROR = JSON.stringify({
+        code: -32602,
+        message: "Invalid params: session is already active: fake-acp-session",
+      });
+      await create(DeepSeekAgentDriver);
+      const rpcAll = () =>
+        readFileSync(appendFile, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { pid: number; method: string });
+      const integration = (token: string) => ({
+        command: process.execPath,
+        args: [FAKE_CLI],
+        env: { OMB_COMMS_TOKEN: token },
+      });
+      const first = await instance.adapter.sendTurn({
+        threadId: "t-deepseek-live-resume",
+        text: "Remember ALPHA",
+        integrations: { agents: integration("token-one") },
+      });
+      expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === first.turnId)).toMatchObject({ ok: true });
+
+      writeFileSync(rejectFile, "1");
+      const second = await instance.adapter.sendTurn({
+        threadId: "t-deepseek-live-resume",
+        text: "What did I ask you to remember?",
+        resumeCursor: "fake-acp-session",
+        integrations: { agents: integration("token-two") },
+      });
+      expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === second.turnId)).toMatchObject({ ok: true });
+      expect(recorder.events.find((e) => e.type === "runtime.error" && e.turnId === second.turnId)).toBeUndefined();
+      const started = recorder.events.find((e) => e.type === "session.started" && e.turnId === second.turnId);
+      expect(started).toMatchObject({ sessionId: "fake-acp-session" });
+      expect(started).not.toHaveProperty("rebuilt");
+
+      expect(launches()).toBe(2);
+      const calls = rpcAll();
+      expect(calls.filter((c) => c.method === "initialize")).toHaveLength(2);
+      expect(calls.filter((c) => c.method === "session/new")).toHaveLength(1);
+      expect(calls.filter((c) => c.method === "session/resume")).toHaveLength(2);
       expect(calls.filter((c) => c.method === "session/prompt")).toHaveLength(2);
       expect(new Set(calls.map((c) => c.pid)).size).toBe(2);
     });

@@ -327,6 +327,16 @@ function isHermesReasoningReplay(chunk: string, streamed: string): boolean {
     && /\n\n[ \t]*$/.test(replay.slice(0, -reply.length));
 }
 
+/** dsh 0.2.1 answers session/resume for a session live in the same process with invalid params,
+ *  unlike the usual already-active refusal code. The child must be replaced before resuming. */
+function isLiveSessionAlreadyActive(error: unknown, sessionId: string): boolean {
+  const refusal = error as { code?: unknown; message?: unknown; data?: { sessionId?: unknown } };
+  if (refusal?.code !== -32602
+      || typeof refusal.message !== "string"
+      || !/session is already active/i.test(refusal.message)) return false;
+  return refusal.message.includes(sessionId) || refusal.data?.sessionId === sessionId;
+}
+
 let unkeyedToolSeq = 0;
 /** A synthetic id for a `tool_call` without `toolCallId`, paired FIFO with the first terminal update. */
 function nextUnkeyedToolId(current: AcpTurn): string {
@@ -1348,8 +1358,9 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   const data = (error as any)?.data;
                   const missingSession = data && typeof data === "object" && !Array.isArray(data)
                     && data.sessionId === cursor && Object.keys(data).length === 1;
+                  const alreadyActive = liveSessionId === cursor && isLiveSessionAlreadyActive(error, cursor);
                   if (classification === "invalid_credentials" || classification === "inactive_subscription"
-                      || ((error as any)?.code === -32602 && !missingSession)) throw error;
+                      || ((error as any)?.code === -32602 && !missingSession && !alreadyActive)) throw error;
                 }
               }
               if (loaded) break;
