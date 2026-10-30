@@ -952,6 +952,7 @@ describe("server-owned browser MCP runtime", () => {
       await vi.waitFor(() => expect(daemon.calls()).toEqual(["hang"]));
       // maxPending is 1: reaching the engine here would reject "Too many pending".
       await expect(value.agentRpc("s", daemon.spec, "tools/list", {})).resolves.toEqual(listed);
+      await expect(value.agentRpc("s", daemon.spec, "tools/list", {}, () => { throw new Error("access revoked"); })).rejects.toThrow("access revoked");
       await observed;
       expect(daemon.calls()).toEqual(["hang"]);
     } finally {
