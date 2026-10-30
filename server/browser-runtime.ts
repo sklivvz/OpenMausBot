@@ -466,6 +466,14 @@ export class BrowserRuntime {
       }
       params = { name: "agent_browser_eval", arguments: { script: SELVER_CART_SNAPSHOT } };
     }
+    // agent-browser 0.37.0 serializes every command per session. A new MCP session's tools/list must not
+    // queue behind a tool call: the list cannot change while the browser is busy, and a slow call would
+    // otherwise spend the engine's whole startup timeout before session/new can answer.
+    if (method === "tools/list") {
+      const list = this.toolLists.get(session);
+      const gate = this.gate(session);
+      if (list !== undefined && (gate.agents > 0 || gate.closing || gate.uncertain)) return list;
+    }
     // Counted in the same event-loop turn, so no idle close can start under a call.
     for (let closing = this.gates.get(session)?.idleClose; closing; closing = this.gates.get(session)?.idleClose) await closing;
     const gate = this.gate(session);

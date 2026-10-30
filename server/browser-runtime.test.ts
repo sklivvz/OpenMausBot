@@ -942,14 +942,21 @@ describe("server-owned browser MCP runtime", () => {
     expect(value.canControl("s", "owner")).toBe(true);
   });
 
-  it("bounds concurrent requests without queuing more work behind a hung action", async () => {
+  it("answers tools/list from the last list while an action holds the browser, without queuing behind it", async () => {
     const value = runtime({ maxPending: 1, requestTimeoutMs: 250 });
-    await value.agentRpc("s", spec(), "tools/list", {});
-    const pending = value.agentRpc("s", spec(), "tools/call", { name: "hang" });
-    const observed = expect(pending).resolves.toMatchObject({ isError: true });
-    await new Promise((resolve) => setTimeout(resolve, 20)); // the hang reaches the engine
-    await expect(value.agentRpc("s", spec(), "tools/list", {})).rejects.toThrow(/Too many pending/);
-    await observed;
+    const daemon = daemonSpec();
+    try {
+      const listed = await value.agentRpc("s", daemon.spec, "tools/list", {});
+      const pending = value.agentRpc("s", daemon.spec, "tools/call", { name: "hang" });
+      const observed = expect(pending).resolves.toMatchObject({ isError: true });
+      await vi.waitFor(() => expect(daemon.calls()).toEqual(["hang"]));
+      // maxPending is 1: reaching the engine here would reject "Too many pending".
+      await expect(value.agentRpc("s", daemon.spec, "tools/list", {})).resolves.toEqual(listed);
+      await observed;
+      expect(daemon.calls()).toEqual(["hang"]);
+    } finally {
+      daemon.cleanup();
+    }
   });
 
   it("evicts idle transports without dropping a human hold", async () => {
