@@ -472,7 +472,10 @@ export class BrowserRuntime {
     if (method === "tools/list") {
       const list = this.toolLists.get(session);
       const gate = this.gate(session);
-      if (list !== undefined && (gate.agents > 0 || gate.closing || gate.uncertain)) return list;
+      if (list !== undefined && (gate.agents > 0 || gate.closing || gate.uncertain)) {
+        beforeDispatch?.();
+        return list;
+      }
     }
     // Counted in the same event-loop turn, so no idle close can start under a call.
     for (let closing = this.gates.get(session)?.idleClose; closing; closing = this.gates.get(session)?.idleClose) await closing;
