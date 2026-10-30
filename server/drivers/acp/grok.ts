@@ -271,6 +271,8 @@ export function grokInheritedProfile(cli: string, env: Record<string, string | u
     for (const line of text.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith("#"))) {
       const header = /^\[([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\]\s*(?:#.*)?$/.exec(line);
       if (header) { section = header[1]!; if (section.startsWith("agent.")) return unsupported(); continue; }
+      // Grok writes installed marketplace sources as an array of tables; those entries carry no agent restrictions.
+      if (/^\[\[marketplace\.sources\]\]\s*(?:#.*)?$/.test(line)) { section = "marketplace.sources"; continue; }
       const assignment = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
       if (!assignment || /'''|"""/.test(assignment[2]!) || (!section && assignment[1] === "agent")) return unsupported();
       if (section !== "agent") continue;

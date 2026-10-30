@@ -71,6 +71,30 @@ it("reads the actual configured Grok profile and refuses unknown profile sources
   expect(() => grokInheritedProfile("grok", { HOME: home, GROK_AGENT: "unverified" }, home)).toThrow(/existing agent profile/);
 });
 
+it("accepts the standard Grok marketplace array table before the cli and agent sections", () => {
+  const home = mkdtempSync(join(tmpdir(), "omb-grok-marketplace-")); directories.push(home);
+  const directory = join(home, ".grok"); mkdirSync(directory);
+  const path = join(home, "profile.md");
+  writeFileSync(path, '---\nname: reader\ndescription: Existing profile\ninjectDefaultTools: false\ntools: [read_file]\ndisallowedTools: [write]\n---\nKeep the owner instructions.\n');
+  writeFileSync(join(directory, "config.toml"), `[[marketplace.sources]]\nname = "fixture"\nurl = "https://example.test/marketplace"\n[cli]\nauto_update = false\n[agent]\nname = "grok-build"\ndefinition = ${JSON.stringify(path)}\n`);
+  const scoped = grokToolScopeProfile({ allow: ["native:read_file", "native:write"] }, init, grokInheritedProfile("grok", { HOME: home }, home));
+  expect(scoped.toolConfig.tools.map((tool) => tool.name_override)).toEqual(["read_file"]);
+  expect(scoped.promptBody).toContain("Keep the owner instructions.");
+  expect(scoped.disallowedTools).toContain("write");
+});
+
+it("keeps refusing agent profiles and agent array tables after a marketplace array table", () => {
+  const home = mkdtempSync(join(tmpdir(), "omb-grok-marketplace-agent-")); directories.push(home);
+  const directory = join(home, ".grok"); mkdirSync(directory);
+  const path = join(home, "profile.md");
+  writeFileSync(path, '---\nname: reader\ndescription: Existing profile\ntools: [read_file]\n---\n');
+  const config = (agent: string) => `[[marketplace.sources]]\nname = "fixture"\n[cli]\nauto_update = false\n${agent}`;
+  writeFileSync(join(directory, "config.toml"), config(`[agent]\nname = "attacker"\ndefinition = ${JSON.stringify(path)}\n`));
+  expect(() => grokInheritedProfile("grok", { HOME: home }, home)).toThrow(/cannot be safely intersected/);
+  writeFileSync(join(directory, "config.toml"), config(`[[agent]]\nname = "grok-build"\ndefinition = ${JSON.stringify(path)}\n`));
+  expect(() => grokInheritedProfile("grok", { HOME: home }, home)).toThrow(/cannot be safely intersected/);
+});
+
 it("requires explicit Grok MCP helper permissions for a selected remote tool", () => {
   expect(() => grokToolScopeProfile({ allow: ["mcp:mail:read_notes"] }, init, undefined, true)).toThrow(/native:search_tool.*native:use_tool/);
   const profile = grokToolScopeProfile({ allow: ["native:search_tool", "native:use_tool", "mcp:mail:read_notes"] }, init, undefined, true);
