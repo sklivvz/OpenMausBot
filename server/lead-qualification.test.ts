@@ -41,8 +41,27 @@ describe("lead qualification", () => {
       await vi.advanceTimersByTimeAsync(15_000);
       expect((await pending).decision).toBe("needs_review");
       expect(ask).toHaveBeenCalledTimes(2);
-      expect(log).toHaveBeenCalledWith(expect.objectContaining({ decision: "needs_review", match: expect.objectContaining({ ok: false, reason: "cancelled" }) }));
+      expect(log).toHaveBeenCalledWith(expect.objectContaining({ decision: "needs_review", failure: "timeout" }));
     } finally { vi.useRealTimers(); }
+  });
+  it("returns and logs at the shared deadline even when the second backend ignores abort", async () => {
+    vi.useFakeTimers();
+    try {
+      const ask = vi.fn().mockImplementationOnce(() => new Promise((resolve) => setTimeout(() => resolve(answer("sufficiency", "sufficient")), 10_000))).mockImplementationOnce(() => new Promise(() => {}));
+      const log = vi.fn();
+      const pending = qualifyLead(input, decider(ask), log);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(ask).toHaveBeenCalledTimes(2);
+      expect(ask.mock.calls[1]![3].timeoutMs).toBeLessThanOrEqual(5_000);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect((await pending).decision).toBe("needs_review");
+      expect(log).toHaveBeenCalledWith(expect.objectContaining({ decision: "needs_review", failure: "timeout", match: null }));
+    } finally { vi.useRealTimers(); }
+  });
+  it("rejects oversized evidence before calling the decision model", async () => {
+    const ask = vi.fn();
+    await expect(qualifyLead({ ...input, evidence: "é".repeat(13_000) }, decider(ask), vi.fn())).rejects.toThrow("input limits");
+    expect(ask).not.toHaveBeenCalled();
   });
   it("writes an inspectable private append-only decision log", async () => {
     const root = await mkdtemp(join(tmpdir(), "lead-log-"));
@@ -52,6 +71,15 @@ describe("lead qualification", () => {
       const path = join(root, "lead-qualification", "decisions.jsonl");
       expect((await readFile(path, "utf8")).trim().split("\n").map((line) => JSON.parse(line))).toEqual([{ decision: "no" }, { decision: "yes" }]);
       expect((await stat(path)).mode & 0o777).toBe(0o600);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+  it("keeps concurrent audit rows intact", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lead-concurrent-"));
+    try {
+      const rows = Array.from({ length: 50 }, (_, id) => ({ id, evidence: String(id).repeat(10_000) }));
+      await Promise.all(rows.map((row) => appendLeadDecision(root, row)));
+      const lines = (await readFile(join(root, "lead-qualification", "decisions.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+      expect(lines).toEqual(rows);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

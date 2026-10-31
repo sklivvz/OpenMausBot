@@ -7,7 +7,7 @@ import { extname } from "node:path";
 
 import type { Decider } from "../decider/index.ts";
 import { botFolder } from "../bot-folder.ts";
-import { appendLeadDecision, qualifyLead } from "../lead-qualification.ts";
+import { appendLeadDecision, qualifyLead, validLeadQualificationInput } from "../lead-qualification.ts";
 import { relayAccepts } from "../decider/relay.ts";
 import type { DeciderAnswer, DeciderFailure, DeciderProvider, DeciderQuestion } from "../decider/types.ts";
 import { EXTRACT_LIMITS, extractRequestProblem } from "../extractor/contract.ts";
@@ -123,6 +123,7 @@ export function createHelperToolRoutes(deps: HelperToolDeps) {
     if (ctx.path === QUALIFY_LEAD) {
       const lead_id = text(body.lead_id), evidence = text(body.evidence), icp = text(body.icp), icp_version = text(body.icp_version);
       if (!lead_id || !evidence || !icp || !icp_version) return void ctx.json(ctx.res, 400, { error: "Provide lead_id, source evidence, ICP and ICP version." });
+      if (!validLeadQualificationInput({ lead_id, evidence, icp, icp_version })) return void ctx.json(ctx.res, 400, { error: "Lead evidence and ICP exceed the decision model's input limits. Reduce the evidence to relevant sourced facts." });
       try {
         const result = await qualifyLead({ lead_id, evidence, icp, icp_version }, deps.decider, (row) => deps.leadLog ? deps.leadLog(ctx.botId, row) : appendLeadDecision(botFolder(ctx.botId), row));
         return void ctx.json(ctx.res, 200, { text: JSON.stringify(result) });

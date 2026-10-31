@@ -60,6 +60,11 @@ describe("qualify_lead", () => {
     expect(status).toBe(503);
     expect(payload?.text).toBeUndefined();
   });
+  it("rejects oversized evidence as a bad request without invoking Jev", async () => {
+    const { status, ask } = await call("/api/internal/helpers/qualify-lead", { lead_id: "crm-1", evidence: "é".repeat(13_000), icp: "ICP", icp_version: "v1" });
+    expect(status).toBe(400);
+    expect(ask).not.toHaveBeenCalled();
+  });
 });
 
 describe("decide", () => {
