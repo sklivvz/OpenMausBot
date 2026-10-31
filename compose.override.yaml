@@ -27,6 +27,7 @@ services:
       - "127.0.0.1:8090:80"
       - "[::1]:8090:80"
   omb:
+    image: ${OMB_APP_IMAGE:-${OMB_LOCAL_IMAGE:-openmausbot-local:latest}}
     security_opt:
       - seccomp=./deploy/local/seccomp/codex-nested.json
     volumes:
