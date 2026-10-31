@@ -103,6 +103,21 @@ const refusalOf = (answer: Answer): string => {
   return textOf(answer);
 };
 
+it("exposes lead qualification through the bot's MCP and fails closed when Jev is unavailable", async () => {
+  await withFixture(async ({ control, launched }) => {
+    const { bot } = await control(["new-bot", "--name", "Qualification fixture"]);
+    await control(["send", "--bot", bot.id, "--text", "Stay active."]);
+    const turn = await launched();
+    await withServer(turn.mcpConfig.mcpServers.agents!, async (ask) => {
+      expect(namesOf(await ask("tools/list"))).toContain("qualify_lead");
+      const answer = await call(ask, "qualify_lead", { lead_id: "fixture-1", evidence: "source: fixture; 30 developers", icp: "25–250 developers", icp_version: "fixture-v1" });
+      expect(answer.error).toBeUndefined();
+      expect(answer.result?.isError).not.toBe(true);
+      expect(JSON.parse(textOf(answer))).toMatchObject({ decision: "needs_review", sufficiency: { ok: false } });
+    });
+  });
+}, 120_000);
+
 it("keeps a turn on the whole catalog until the switch is on, then mounts the bridge and says so, in a chat and in a room", async () => {
   await withFixture(async ({ api, control, launched }) => {
     const { bot } = await control(["new-bot", "--name", "Bridge fixture"]);

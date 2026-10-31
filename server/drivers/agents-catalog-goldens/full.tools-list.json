@@ -1237,6 +1237,38 @@
       }
     },
     {
+      "name": "qualify_lead",
+      "description": "Ask Jev whether sourced evidence is sufficient, then whether a lead matches the supplied ICP. Records decisions for review. Needs research or review when evidence or certainty is insufficient; it never changes CRM records.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "lead_id": {
+            "type": "string",
+            "description": "Stable CRM lead identifier."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Observed lead facts and their source references."
+          },
+          "icp": {
+            "type": "string",
+            "description": "Exact applicable ideal customer profile."
+          },
+          "icp_version": {
+            "type": "string",
+            "description": "ICP document reference and version."
+          }
+        },
+        "required": [
+          "lead_id",
+          "evidence",
+          "icp",
+          "icp_version"
+        ]
+      }
+    },
+    {
       "name": "decide",
       "description": "Ask a decision model typed questions about some state; it answers with probabilities and cannot act.",
       "inputSchema": {

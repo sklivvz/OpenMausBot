@@ -3,7 +3,7 @@
 import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
 import type { Json } from "./agents-client.ts";
 
-const HELPER_TOOL_ROUTES: Readonly<Record<string, string>> = { decide: "helpers/decide", extract: "helpers/extract" };
+const HELPER_TOOL_ROUTES: Readonly<Record<string, string>> = { decide: "helpers/decide", extract: "helpers/extract", qualify_lead: "helpers/qualify-lead" };
 export const HELPER_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(HELPER_TOOL_ROUTES));
 
 export async function callHelperTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
@@ -12,6 +12,20 @@ export async function callHelperTool(name: string, args: Json, context: ToolCall
 }
 
 export const HELPER_TOOL_DEFINITIONS = [
+  {
+    name: "qualify_lead",
+    description: "Ask Jev whether sourced evidence is sufficient, then whether a lead matches the supplied ICP. Records decisions for review. Needs research or review when evidence or certainty is insufficient; it never changes CRM records.",
+    inputSchema: {
+      type: "object", additionalProperties: false,
+      properties: {
+        lead_id: { type: "string", description: "Stable CRM lead identifier." },
+        evidence: { type: "string", description: "Observed lead facts and their source references." },
+        icp: { type: "string", description: "Exact applicable ideal customer profile." },
+        icp_version: { type: "string", description: "ICP document reference and version." },
+      },
+      required: ["lead_id", "evidence", "icp", "icp_version"],
+    },
+  },
   {
     name: "decide",
     description: "Ask a decision model typed questions about some state; it answers with probabilities and cannot act.",

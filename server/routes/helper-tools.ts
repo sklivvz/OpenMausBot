@@ -6,6 +6,8 @@ import { readFile, stat } from "node:fs/promises";
 import { extname } from "node:path";
 
 import type { Decider } from "../decider/index.ts";
+import { botFolder } from "../bot-folder.ts";
+import { appendLeadDecision, qualifyLead } from "../lead-qualification.ts";
 import { relayAccepts } from "../decider/relay.ts";
 import type { DeciderAnswer, DeciderFailure, DeciderProvider, DeciderQuestion } from "../decider/types.ts";
 import { EXTRACT_LIMITS, extractRequestProblem } from "../extractor/contract.ts";
@@ -18,6 +20,7 @@ import { PASS } from "./table.ts";
 export interface HelperToolDeps {
   decider: Pick<Decider, "ask">;
   extractor: Pick<Extractor, "extract">;
+  leadLog?: (botId: string, row: unknown) => Promise<void>;
 }
 
 export interface HelperToolContext {
@@ -31,6 +34,7 @@ export interface HelperToolContext {
 }
 
 const DECIDE = "/api/internal/helpers/decide";
+const QUALIFY_LEAD = "/api/internal/helpers/qualify-lead";
 const EXTRACT = "/api/internal/helpers/extract";
 export const HELPER_TOOL_TIMEOUT_MS = 20_000;
 const IMAGE_TYPES: Record<string, ExtractImage["mime"]> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
@@ -113,9 +117,19 @@ async function readInput(body: Record<string, unknown>, folders: BotFolders): Pr
 
 export function createHelperToolRoutes(deps: HelperToolDeps) {
   return async (ctx: HelperToolContext): Promise<typeof PASS | void> => {
-    if (ctx.method !== "POST" || (ctx.path !== DECIDE && ctx.path !== EXTRACT)) return PASS;
+    if (ctx.method !== "POST" || (ctx.path !== DECIDE && ctx.path !== EXTRACT && ctx.path !== QUALIFY_LEAD)) return PASS;
     const body = await ctx.readBody();
     if (!isRecord(body)) return void ctx.json(ctx.res, 400, { error: "Send a JSON object." });
+    if (ctx.path === QUALIFY_LEAD) {
+      const lead_id = text(body.lead_id), evidence = text(body.evidence), icp = text(body.icp), icp_version = text(body.icp_version);
+      if (!lead_id || !evidence || !icp || !icp_version) return void ctx.json(ctx.res, 400, { error: "Provide lead_id, source evidence, ICP and ICP version." });
+      try {
+        const result = await qualifyLead({ lead_id, evidence, icp, icp_version }, deps.decider, (row) => deps.leadLog ? deps.leadLog(ctx.botId, row) : appendLeadDecision(botFolder(ctx.botId), row));
+        return void ctx.json(ctx.res, 200, { text: JSON.stringify(result) });
+      } catch {
+        return void ctx.json(ctx.res, 503, { error: "The qualification decision or its audit log could not be completed." });
+      }
+    }
     if (ctx.path === DECIDE) {
       const questions = botQuestions(body.questions);
       if (typeof questions === "string") return void ctx.json(ctx.res, 400, { error: questions });

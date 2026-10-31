@@ -23,10 +23,10 @@ writeFileSync(join(elsewhere, "secret.txt"), "not yours");
 type Ask = Decider["ask"];
 type Extract = Extractor["extract"];
 
-async function call(path: string, body: unknown, deps: { ask?: Ask; extract?: Extract } = {}) {
+async function call(path: string, body: unknown, deps: { ask?: Ask; extract?: Extract; leadLog?: (botId: string, row: unknown) => Promise<void> } = {}) {
   const ask = vi.fn<Ask>(deps.ask ?? (async () => ({ ok: false, reason: "disabled" } as never)));
   const extract = vi.fn<Extract>(deps.extract ?? (async () => ({ ok: false, reason: "disabled" })));
-  const route = createHelperToolRoutes({ decider: { ask: ask as unknown as Ask }, extractor: { extract } });
+  const route = createHelperToolRoutes({ decider: { ask: ask as unknown as Ask }, extractor: { extract }, leadLog: deps.leadLog });
   const json = vi.fn();
   const res = {} as never;
   const outcome = await route({ method: "POST", path, res, json, botId: "bot-1", readBody: async () => body, folders: async () => ({ roots: [work], vmWorkspace: null }) });
@@ -38,6 +38,29 @@ const QUESTIONS = {
   team: { type: "choice", instructions: "Which team?", options: { billing: "Money", technical: "Outages" } },
   urgent: { type: "yesno", instructions: "Is it urgent?" },
 };
+
+describe("qualify_lead", () => {
+  it("uses both Jev decisions and logs the supplied facts under the authenticated bot", async () => {
+    let stage = 0;
+    const ask = vi.fn(async () => {
+      const key = stage++ ? "match" : "sufficiency";
+      const choice = key === "match" ? "yes" : "sufficient";
+      return { ok: true, provider: "jev", latencyMs: 1, answers: { [key]: { type: "choice", choice, pTop: 0.9, margin: 0.8, probabilities: { [choice]: 0.9 } } } };
+    }) as unknown as Ask;
+    const leadLog = vi.fn(async () => {});
+    const { status, payload } = await call("/api/internal/helpers/qualify-lead", { lead_id: "crm-1", evidence: "A cited source", icp: "ICP", icp_version: "v1" }, { ask, leadLog });
+    expect(status).toBe(200);
+    expect(JSON.parse(payload!.text!).decision).toBe("yes");
+    expect(leadLog).toHaveBeenCalledWith("bot-1", expect.objectContaining({ decision: "yes", input: expect.objectContaining({ evidence: "A cited source", icp_version: "v1" }) }));
+    expect(ask).toHaveBeenCalledTimes(2);
+  });
+  it("does not emit a verdict when the audit log fails", async () => {
+    const leadLog = vi.fn(async () => { throw new Error("disk full"); });
+    const { status, payload } = await call("/api/internal/helpers/qualify-lead", { lead_id: "crm-1", evidence: "A cited source", icp: "ICP", icp_version: "v1" }, { leadLog });
+    expect(status).toBe(503);
+    expect(payload?.text).toBeUndefined();
+  });
+});
 
 describe("decide", () => {
   it("says plainly that it is not set up, and how to set it up", async () => {
