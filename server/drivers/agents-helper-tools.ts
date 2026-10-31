@@ -3,7 +3,7 @@
 import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
 import type { Json } from "./agents-client.ts";
 
-const HELPER_TOOL_ROUTES: Readonly<Record<string, string>> = { decide: "helpers/decide", extract: "helpers/extract", qualify_lead: "helpers/qualify-lead" };
+const HELPER_TOOL_ROUTES: Readonly<Record<string, string>> = { decide: "helpers/decide", extract: "helpers/extract", qualify_lead: "helpers/qualify-lead", record_lead_qualification: "helpers/record-lead-qualification" };
 export const HELPER_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(HELPER_TOOL_ROUTES));
 
 export async function callHelperTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
@@ -12,6 +12,14 @@ export async function callHelperTool(name: string, args: Json, context: ToolCall
 }
 
 export const HELPER_TOOL_DEFINITIONS = [
+  {
+    name: "record_lead_qualification",
+    description: "Record a logged Jev decision on its Sales Pipeline entry. Yes moves Lead to Qualified; No keeps stage. Configured bot only.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      decision_id: { type: "string" },
+      entry_id: { type: "string" },
+    }, required: ["decision_id", "entry_id"] },
+  },
   {
     name: "qualify_lead",
     description: "Ask Jev whether sourced evidence is sufficient, then whether a lead matches the supplied ICP. Records decisions for review. Needs research or review when evidence or certainty is insufficient; it never changes CRM records.",

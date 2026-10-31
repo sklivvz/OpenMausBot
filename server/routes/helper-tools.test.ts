@@ -163,3 +163,14 @@ describe("extract", () => {
     expect((await call("/api/internal/x/search", {})).outcome).toBe(PASS);
   });
 });
+
+describe('record_lead_qualification authorization', () => {
+  it('refuses an unconfigured or different bot before calling a connector', async () => {
+    const transport = vi.fn(async () => { throw new Error('must not call'); });
+    const route = createHelperToolRoutes({ decider: { ask: vi.fn() as never }, extractor: { extract: vi.fn() as never }, qualificationWriter: { botId: 'allowed', listId: '22222222-2222-4222-8222-222222222222', transport } });
+    const json = vi.fn();
+    await route({ method: 'POST', path: '/api/internal/helpers/record-lead-qualification', res: {} as never, json, botId: 'other', readBody: async () => ({ decision_id:'44444444-4444-4444-8444-444444444444', entry_id:'33333333-3333-4333-8333-333333333333' }), folders: async () => ({ roots: [work], vmWorkspace: null }), active: () => true });
+    expect(json.mock.calls[0]?.[1]).toBe(403);
+    expect(transport).not.toHaveBeenCalled();
+  });
+});

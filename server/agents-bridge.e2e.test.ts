@@ -110,6 +110,10 @@ it("exposes lead qualification through the bot's MCP and fails closed when Jev i
     const turn = await launched();
     await withServer(turn.mcpConfig.mcpServers.agents!, async (ask) => {
       expect(namesOf(await ask("tools/list"))).toContain("qualify_lead");
+      expect(namesOf(await ask("tools/list"))).toContain("record_lead_qualification");
+      const denied = await call(ask, "record_lead_qualification", { decision_id: "11111111-1111-4111-8111-111111111111", entry_id: "22222222-2222-4222-8222-222222222222" });
+      expect(denied.result?.isError).toBe(true);
+      expect(textOf(denied)).toContain("not enabled for this bot");
       const answer = await call(ask, "qualify_lead", { lead_id: "fixture-1", evidence: "source: fixture; 30 developers", icp: "25–250 developers", icp_version: "fixture-v1" });
       expect(answer.error).toBeUndefined();
       expect(answer.result?.isError).not.toBe(true);

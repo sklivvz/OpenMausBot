@@ -1237,6 +1237,26 @@
       }
     },
     {
+      "name": "record_lead_qualification",
+      "description": "Record a logged Jev decision on its Sales Pipeline entry. Yes moves Lead to Qualified; No keeps stage. Configured bot only.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "decision_id": {
+            "type": "string"
+          },
+          "entry_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "entry_id"
+        ]
+      }
+    },
+    {
       "name": "qualify_lead",
       "description": "Ask Jev whether sourced evidence is sufficient, then whether a lead matches the supplied ICP. Records decisions for review. Needs research or review when evidence or certainty is insufficient; it never changes CRM records.",
       "inputSchema": {

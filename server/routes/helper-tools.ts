@@ -8,6 +8,7 @@ import { extname } from "node:path";
 import type { Decider } from "../decider/index.ts";
 import { botFolder } from "../bot-folder.ts";
 import { appendLeadDecision, qualifyLead, validLeadQualificationInput } from "../lead-qualification.ts";
+import { recordQualification, type QualificationTransport } from "../qualification-writer.ts";
 import { relayAccepts } from "../decider/relay.ts";
 import type { DeciderAnswer, DeciderFailure, DeciderProvider, DeciderQuestion } from "../decider/types.ts";
 import { EXTRACT_LIMITS, extractRequestProblem } from "../extractor/contract.ts";
@@ -21,6 +22,7 @@ export interface HelperToolDeps {
   decider: Pick<Decider, "ask">;
   extractor: Pick<Extractor, "extract">;
   leadLog?: (botId: string, row: unknown) => Promise<void>;
+  qualificationWriter?: { botId: string; listId: string; transport: (authorized: () => boolean) => Promise<QualificationTransport>; folder?: (botId: string) => string };
 }
 
 export interface HelperToolContext {
@@ -31,10 +33,12 @@ export interface HelperToolContext {
   botId: string;
   readBody: () => Promise<unknown>;
   folders: BotFolders;
+  active?: () => boolean;
 }
 
 const DECIDE = "/api/internal/helpers/decide";
 const QUALIFY_LEAD = "/api/internal/helpers/qualify-lead";
+const RECORD_QUALIFICATION = "/api/internal/helpers/record-lead-qualification";
 const EXTRACT = "/api/internal/helpers/extract";
 export const HELPER_TOOL_TIMEOUT_MS = 20_000;
 const IMAGE_TYPES: Record<string, ExtractImage["mime"]> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
@@ -117,9 +121,21 @@ async function readInput(body: Record<string, unknown>, folders: BotFolders): Pr
 
 export function createHelperToolRoutes(deps: HelperToolDeps) {
   return async (ctx: HelperToolContext): Promise<typeof PASS | void> => {
-    if (ctx.method !== "POST" || (ctx.path !== DECIDE && ctx.path !== EXTRACT && ctx.path !== QUALIFY_LEAD)) return PASS;
+    if (ctx.method !== "POST" || (ctx.path !== DECIDE && ctx.path !== EXTRACT && ctx.path !== QUALIFY_LEAD && ctx.path !== RECORD_QUALIFICATION)) return PASS;
     const body = await ctx.readBody();
     if (!isRecord(body)) return void ctx.json(ctx.res, 400, { error: "Send a JSON object." });
+    if (ctx.path === RECORD_QUALIFICATION) {
+      const configured = deps.qualificationWriter;
+      if (!configured || configured.botId !== ctx.botId || !ctx.active) return void ctx.json(ctx.res, 403, { error: "Qualification recording is not enabled for this bot." });
+      if (Object.keys(body).some((key) => !["decision_id", "entry_id"].includes(key)) || typeof body.decision_id !== "string" || typeof body.entry_id !== "string") return void ctx.json(ctx.res, 400, { error: "Provide decision_id and entry_id." });
+      try {
+        const transport = await configured.transport(ctx.active);
+        const result = await recordQualification({ decisionId: body.decision_id, entryId: body.entry_id }, { botFolder: configured.folder?.(ctx.botId) ?? botFolder(ctx.botId), listId: configured.listId, transport, authorized: ctx.active });
+        return void ctx.json(ctx.res, 200, { text: JSON.stringify(result) });
+      } catch (error) {
+        return void ctx.json(ctx.res, 409, { error: error instanceof Error ? error.message : "Qualification could not be recorded safely." });
+      }
+    }
     if (ctx.path === QUALIFY_LEAD) {
       const lead_id = text(body.lead_id), evidence = text(body.evidence), icp = text(body.icp), icp_version = text(body.icp_version);
       if (!lead_id || !evidence || !icp || !icp_version) return void ctx.json(ctx.res, 400, { error: "Provide lead_id, source evidence, ICP and ICP version." });
