@@ -75,6 +75,7 @@ Use only mapped, tested commands:
 - [Live launch ownership and scheduled continuation](launch-ownership-20261023.md)
 - [Continuous team objective portfolios](objective-portfolios-20261023.md)
 - [Sales pipeline conductor](sales-pipeline.md)
+- [Sales pipeline live deployment, 1 November 2026](sales-pipeline-live-20261101.md)
 - [Chief access to additional departments](team-access.md)
 - [Engines and Doctor](engines.md)
 - [Cline engine and native loopback qualification](cline.md)
