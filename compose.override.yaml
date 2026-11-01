@@ -24,7 +24,7 @@ services:
       service: attention-scan
   sales-pipeline:
     extends:
-      file: deploy/sales-pipeline/compose.sales-pipeline.yaml
+      file: compose.sales-pipeline.yaml
       service: sales-pipeline
   caddy:
     ports: !override
