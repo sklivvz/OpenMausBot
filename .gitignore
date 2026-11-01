@@ -49,6 +49,7 @@ deploy/podman/.env.*
 /deploy/local/newsletter-template-prepare
 
 /deploy/objectives/controller.mjs
+/deploy/sales-pipeline/pipeline.mjs
 
 /deploy/local/keila-drafts-mcp.cjs
 /deploy/local/review-packet-mcp.cjs

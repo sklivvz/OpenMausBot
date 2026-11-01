@@ -22,10 +22,15 @@ services:
     extends:
       file: compose.attention.yaml
       service: attention-scan
+  sales-pipeline:
+    extends:
+      file: deploy/sales-pipeline/compose.sales-pipeline.yaml
+      service: sales-pipeline
   caddy:
     ports: !override
       - "127.0.0.1:8090:80"
       - "[::1]:8090:80"
+      - "127.0.0.1:8797:8797"
   omb:
     image: ${OMB_APP_IMAGE:-${OMB_LOCAL_IMAGE:-openmausbot-local:latest}}
     security_opt:
@@ -43,3 +48,4 @@ services:
       OMB_COMPOSIO_BROKER_TOKEN: ${OMB_COMPOSIO_BROKER_TOKEN:-}
 volumes:
   objective-state:
+  sales-pipeline-state:
