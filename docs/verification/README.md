@@ -74,6 +74,7 @@ Use only mapped, tested commands:
 - [Leadership contributions and independent observation](agentic-minimal-20261023.md)
 - [Live launch ownership and scheduled continuation](launch-ownership-20261023.md)
 - [Continuous team objective portfolios](objective-portfolios-20261023.md)
+- [Sales pipeline conductor](sales-pipeline.md)
 - [Chief access to additional departments](team-access.md)
 - [Engines and Doctor](engines.md)
 - [Cline engine and native loopback qualification](cline.md)
