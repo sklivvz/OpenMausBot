@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export type QualificationRecord = { id: string; decision: string; input: { lead_id: string }; sufficiency?: { ok?: boolean; provider?: string }; match?: { ok?: boolean; provider?: string } };
+export type QualificationRecord = { id: string; decision: string; input: { lead_id: string }; sufficiency?: { ok?: boolean; provider?: string }; match?: { ok?: boolean; provider?: string }; gate?: { provider?: string; ok?: boolean } };
+/** A decision is complete when Jev answered both questions or the sales pipeline's structured company gate decided it. */
+const completeDecision = (r: QualificationRecord): boolean => (r.sufficiency?.ok === true && r.sufficiency.provider === "jev" && r.match?.ok === true && r.match.provider === "jev") || (r.gate?.ok === true && r.gate.provider === "icp_profile");
 export type Entry = { parent_record_id: string; parent_object: string; id: { entry_id: string; list_id: string }; entry_values: Record<string, unknown> };
 export interface QualificationTransport {
   entry(list: string, entryId: string): Promise<Entry>;
@@ -29,7 +31,7 @@ export async function latestLeadDecision(logPath: string, decisionId: string): P
   const requested = rows.find((r) => r.id === decisionId);
   if (!requested || !uuid.test(requested.input?.lead_id ?? "")) throw new Error("Decision not found.");
   if (rows.filter((r) => r.input?.lead_id === requested.input.lead_id).at(-1)?.id !== decisionId) throw new Error("Decision was superseded; use the latest decision.");
-  if (!["yes", "no"].includes(requested.decision) || requested.sufficiency?.ok !== true || requested.sufficiency.provider !== "jev" || requested.match?.ok !== true || requested.match.provider !== "jev") throw new Error("A completed Jev yes/no decision is required.");
+  if (!["yes", "no"].includes(requested.decision) || !completeDecision(requested)) throw new Error("A completed Jev or company gate yes/no decision is required.");
   return requested;
 }
 
