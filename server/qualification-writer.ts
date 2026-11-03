@@ -53,7 +53,6 @@ export async function recordQualification(input: { decisionId: string; entryId: 
       await deps.transport.patch(deps.listId, input.entryId, values);
     };
     if (decision.decision === "no") {
-      if (stage !== "Lead") throw new Error("A qualified-stage deal requires review before a negative decision.");
       if (current !== "No") {
         await guardedPatch({ icp_match: "No" });
       }
